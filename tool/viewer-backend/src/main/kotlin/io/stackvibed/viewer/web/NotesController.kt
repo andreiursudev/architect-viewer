@@ -20,5 +20,6 @@ class NotesController(private val workspace: WorkspaceStore) {
 
     @PutMapping("/api/notes/{targetId}", consumes = ["text/markdown"])
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun put(@PathVariable targetId: String, @RequestBody markdown: String) = workspace.writeNote(targetId, markdown)
+    fun put(@PathVariable targetId: String, @RequestBody(required = false) markdown: String?) =
+        workspace.writeNote(targetId, markdown.orEmpty()) // an empty body clears the note
 }

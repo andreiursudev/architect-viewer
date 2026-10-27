@@ -1,6 +1,7 @@
 package io.stackvibed.viewer.web
 
 import io.stackvibed.viewer.Fixtures
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -116,6 +117,34 @@ class ApiTest {
             content { contentTypeCompatibleWith("text/markdown") }
             content { string("# Orders\n\nowned by team a") }
         }
+    }
+
+    @Test
+    fun `a note can be cleared with an empty body`() {
+        mvc.put("/api/notes/orders-service") {
+            contentType = MediaType.valueOf("text/markdown")
+            content = "to be removed"
+        }.andExpect { status { isNoContent() } }
+
+        mvc.put("/api/notes/orders-service") {
+            contentType = MediaType.valueOf("text/markdown")
+        }.andExpect { status { isNoContent() } }
+
+        mvc.get("/api/notes/orders-service").andExpect {
+            status { isOk() }
+            content { string("") }
+        }
+    }
+
+    @Test
+    fun `notes keep non-ascii text`() {
+        mvc.put("/api/notes/billing-service") {
+            contentType = MediaType.valueOf("text/markdown;charset=UTF-8")
+            content = "caf\u00e9 \u2713".toByteArray(Charsets.UTF_8)
+        }.andExpect { status { isNoContent() } }
+
+        val body = mvc.get("/api/notes/billing-service").andExpect { status { isOk() } }.andReturn().response
+        String(body.contentAsByteArray, Charsets.UTF_8) shouldBe "caf\u00e9 \u2713"
     }
 
     @Test
