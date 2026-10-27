@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router';
+import { ErrorBanner } from './ErrorBanner';
 import { PrimaryBoard } from './board/PrimaryBoard';
 import { SidePanel } from './panel/SidePanel';
 import { useWorkspace } from './api/queries';
@@ -8,6 +9,7 @@ export function App() {
   return (
     <div className="app">
       <Header />
+      <ErrorBanner />
       <Routes>
         <Route path="/" element={<BoardPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

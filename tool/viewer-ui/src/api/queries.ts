@@ -36,6 +36,7 @@ export function useLayout(board: string) {
 export function useSaveLayout(board: string) {
   const client = useQueryClient();
   return useMutation({
+    meta: { action: 'Saving the board layout' },
     mutationFn: async (layout: BoardLayout) => {
       await putJson(`/api/boards/${board}/layout`, layout);
       return layout;
@@ -48,6 +49,7 @@ export function useSaveLayout(board: string) {
 export function useAcceptComponent() {
   const client = useQueryClient();
   return useMutation({
+    meta: { action: 'Accepting the component' },
     mutationFn: (component: BoardComponent) => {
       const def: ComponentDefinition = {
         id: component.id,
@@ -65,6 +67,7 @@ export function useAcceptComponent() {
 export function useSetConnectionState() {
   const client = useQueryClient();
   return useMutation({
+    meta: { action: 'Updating the connection' },
     mutationFn: ({ connection, state }: { connection: BoardConnection; state: ConnectionState }) => {
       const def: ConnectionDefinition = {
         from: connection.from,
@@ -87,6 +90,7 @@ export function useNote(targetId: string) {
 export function useSaveNote(targetId: string) {
   const client = useQueryClient();
   return useMutation({
+    meta: { inline: true }, // the notes editor shows its own error
     mutationFn: async (markdown: string) => {
       await putMarkdown(`/api/notes/${targetId}`, markdown);
       return markdown;

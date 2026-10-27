@@ -1,29 +1,34 @@
-import { useState } from 'react';
 import Markdown from 'react-markdown';
 import { useNote, useSaveNote } from '../api/queries';
+import { useUiStore } from '../store/uiStore';
 
 /** The Markdown note of a component or connection: rendered by default, a textarea while editing. Render it with `key={targetId}`. */
 export function NotesPanel({ targetId }: { targetId: string }) {
   const note = useNote(targetId);
   const save = useSaveNote(targetId);
-  const [draft, setDraft] = useState<string | null>(null);
+  // The draft lives in the store, not here, so deselecting (or any re-render of the panel) cannot lose typed text.
+  const draft = useUiStore((s) => s.noteDrafts[targetId] ?? null);
+  const setDraft = useUiStore((s) => s.setNoteDraft);
   const editing = draft !== null;
   const text = note.data ?? '';
 
   const startEditing = () => {
     save.reset();
-    setDraft(text);
+    setDraft(targetId, text);
   };
 
   const submit = () => {
     if (draft === null) return;
-    save.mutate(draft, { onSuccess: () => setDraft(null) });
+    save.mutate(draft, { onSuccess: () => setDraft(targetId, null) });
   };
 
   return (
     <section className="notes" aria-label="Notes">
       <header className="panel-section-header">
-        <h3>Notes</h3>
+        <div className="notes-title">
+          <h3>Notes</h3>
+          {editing && draft !== text && <span className="draft-hint">unsaved</span>}
+        </div>
         {!editing && note.isSuccess && (
           <button type="button" className="btn btn-quiet" onClick={startEditing}>
             Edit
@@ -51,7 +56,7 @@ export function NotesPanel({ targetId }: { targetId: string }) {
           <textarea
             aria-label="Note"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setDraft(targetId, e.target.value)}
             rows={10}
             spellCheck={false}
             placeholder="Write Markdown…"
@@ -61,7 +66,7 @@ export function NotesPanel({ targetId }: { targetId: string }) {
             <button type="button" className="btn btn-primary" onClick={submit} disabled={save.isPending}>
               Save
             </button>
-            <button type="button" className="btn" onClick={() => setDraft(null)} disabled={save.isPending}>
+            <button type="button" className="btn" onClick={() => setDraft(targetId, null)} disabled={save.isPending}>
               Cancel
             </button>
           </div>
