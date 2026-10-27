@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- macOS **and** Windows: no shell-only build steps, no `:` or other Windows-illegal characters in any file or folder name the tool writes; paths via `java.nio.file.Path` / `path.join`, never string concatenation with `/`.
+- **macOS only for now; Windows is deferred (spec D26)** — no Windows CI, launcher or tests. Stay portable at no extra cost: no shell-only build steps (the `stack-viewer` sh launcher is the one exception), no `:` or other characters Windows forbids in any file or folder name the tool writes, paths via `java.nio.file.Path` / `path.join`, never string concatenation with `/`.
 - Java toolchain 25 for all modules; **`agent-contract` and `agent-extension` compile with `--release 17`** and are **plain Java** (no Kotlin stdlib inside the agent).
 - Pin every dependency in `tool/gradle/libs.versions.toml` (and `sandbox/gradle/libs.versions.toml`) to the latest stable version available at Task 1; no dynamic versions. Group id `io.stackvibed`, version `0.1.0-SNAPSHOT`. Base package `io.stackvibed`.
 - The viewer never imports OTel types; only `reporter` and `agent-*` know OTel (anti-goal §4).
@@ -24,7 +24,7 @@
 
 ## Review Focus
 
-1. **Windows-illegal names** — a DB named `orders` on `postgresql` or a service name with dots/uppercase must still produce valid slug ids (`postgresql-orders`, `orders-service`); pinned in Task 1 (`ComponentIdsTest`).
+1. **Unsafe file names (portability)** — a DB named `orders` on `postgresql` or a service name with dots/uppercase must still produce valid slug ids (`postgresql-orders`, `orders-service`); pinned in Task 1 (`ComponentIdsTest`).
 2. **Large or non-JSON bodies** — a 5 MB response or a `text/plain` body must not break the request or the export; the agent caps body strings at 262 144 chars and sets the `*_truncated` flag; pinned in Task 2 (`largeBodyIsTruncated`, `plainTextBodyIsCaptured`).
 3. **Hand-edited, malformed workspace YAML** — one broken `components/x.yaml` must not take the viewer down; it is reported in `WorkspaceView.problems` and the rest loads; pinned in Task 7 (`malformedFileIsReportedNotFatal`).
 4. **Concurrent span batches for the same run** — two services/threads exporting at once must not interleave partial lines in `events.jsonl`; pinned in Task 6 (`concurrentAppendsProduceWholeLines`).
@@ -35,7 +35,7 @@
 ## File Structure
 
 ```
-.github/workflows/tool.yml              # matrix ubuntu/macos/windows: ./gradlew -p tool build + UI e2e
+.github/workflows/tool.yml              # matrix ubuntu/macos: tool/gradlew -p tool build + UI e2e
 .github/workflows/sandbox.yml           # ubuntu: publish tool, build reporter image, sandbox acceptance
 .gitignore
 tool/
@@ -79,7 +79,7 @@ sandbox/
   - `io.stackvibed.model.view`: `BoardComponent(id, type, displayName, discovered: Boolean, hasNotes: Boolean)`, `BoardConnection(id, from, to, kind, label: String?, state: ConnectionState, unverified: Boolean)`, `ScenarioSummary(id, description: String?, latestRunId: String?, runCount: Int)`, `WorkspaceProblem(file: String, message: String)`, `WorkspaceView(project: ProjectInfo, components, connections, scenarios, problems)`, `FlowStep(stepId: String, parentStepId: String?, from: String, to: String, connectionId: String, kind: ConnectionKind, label: String, startEpochNanos: Long, durationNanos: Long, status: Int?, event: RecordingEvent)`, `Flow(runId: String, scenarioId: String?, steps: List<FlowStep>)`.
   - Gradle task `:model:generateSchema` writes `tool/model/build/schema/model.schema.json` (victools jsonschema-generator + Jackson module) covering all of the above.
 
-- [ ] **Step 1: Bootstrap the build.** If `gradle` is not on PATH, install it once (`brew install gradle`) only to run `gradle wrapper --gradle-version <latest 9.x>` in `tool/`. Create convention plugins: `stack.kotlin-library` (Kotlin JVM, toolchain 25, JUnit Platform, Kotest assertions, MockK), `stack.java-agent-lib` (java-library, `options.release = 17`), `stack.spring-boot-app` (kotlin-library + Spring Boot 4 + kotlin-spring). `.gitignore`: `build/`, `.gradle/`, `node_modules/`, `dist/`, `**/recordings/`, `.idea/`. `.github/workflows/tool.yml`: matrix `[ubuntu-latest, macos-latest, windows-latest]`, temurin 25, node 22, run `./gradlew -p tool build`.
+- [ ] **Step 1: Bootstrap the build.** If `gradle` is not on PATH, install it once (`brew install gradle`) only to run `gradle wrapper --gradle-version <latest 9.x>` in `tool/`. Create convention plugins: `stack.kotlin-library` (Kotlin JVM, toolchain 25, JUnit Platform, Kotest assertions, MockK), `stack.java-agent-lib` (java-library, `options.release = 17`), `stack.spring-boot-app` (kotlin-library + Spring Boot 4 + kotlin-spring). `.gitignore`: `build/`, `.gradle/`, `node_modules/`, `dist/`, `**/recordings/`, `.idea/`. `.github/workflows/tool.yml`: matrix `[ubuntu-latest, macos-latest]`, temurin 25, node 22, run `./gradlew -p tool build`.
 
 - [ ] **Step 2: Write failing tests**
 
@@ -92,7 +92,7 @@ class ComponentIdsTest {
         ComponentIds.database("postgresql", "orders") shouldBe "postgresql-orders"
         ComponentIds.database("h2", null) shouldBe "h2"
     }
-    @Test fun `slug strips windows illegal characters`() {
+    @Test fun `slug strips characters unsafe in file names`() {
         ComponentIds.slug("db:orders/main?") shouldBe "db-orders-main"
     }
 }
@@ -309,7 +309,7 @@ class SchemaSnapshotTest {
 @Test fun `concurrentAppendsProduceWholeLines`()        // 8 threads × 200 appends to one run → 1600 lines, each parses as RecordingEvent
 @Test fun `restartReusesExistingRunFolder`()            // new RecordingStore on same root; append same runId → same folder, line count grows
 @Test fun `unassigned goes to its own folder without manifest`()
-@Test fun `folder names contain no windows illegal characters`()  // runId "a:b/c" → name matches ^[A-Za-z0-9_-]+$
+@Test fun `folder names contain no unsafe characters`()  // runId "a:b/c" → name matches ^[A-Za-z0-9_-]+$
 
 // ReporterGoldenTest (@SpringBootTest, fixed Clock bean, temp recordings dir)
 @Test fun `create-order fixture produces golden recording`() {
@@ -539,33 +539,33 @@ test('clicking a message shows its payload', async ({ page }) => { /* open seque
 
 ---
 
-### Task 12: Viewer distribution — launchers
+### Task 12: Viewer distribution — launcher
 
 **Files:**
-- Create: `tool/viewer-backend/src/dist/stack-viewer` (POSIX sh, executable), `tool/viewer-backend/src/dist/stack-viewer.cmd`
+- Create: `tool/viewer-backend/src/dist/stack-viewer` (POSIX sh, executable). No `.cmd` launcher — Windows deferred (D26).
 - Modify: `tool/viewer-backend/build.gradle.kts` — `viewerDist` (Sync bootJar + `src/dist` → `build/stack-viewer/`), `ViewerApplication` logs `Stack viewer started on http://localhost:<port>` and exits when `stack.viewer.exit-after-startup=true`
 - Test: `tool/viewer-backend/src/test/kotlin/io/stackvibed/viewer/LauncherScriptTest.kt`
 
 **Interfaces:**
-- Produces: `build/stack-viewer/{stack-viewer.jar,stack-viewer,stack-viewer.cmd}`; usage `stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]`. Scripts resolve the jar relative to their own location, pass all args through, require `java` on PATH (or `JAVA_HOME`), and print a clear error when Java < 25.
+- Produces: `build/stack-viewer/{stack-viewer.jar,stack-viewer}`; usage `stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]`. The script resolves the jar relative to its own location, passes all args through, require `java` on PATH (or `JAVA_HOME`), and print a clear error when Java < 25.
 
 - [ ] **Step 1: Write failing test**
 
 ```kotlin
-@Test fun `launcher starts the viewer on this OS`() {
-    val script = if (isWindows) "stack-viewer.cmd" else "stack-viewer"
+@Test fun `launcher starts the viewer`() {
+    val script = "stack-viewer"
     val workspace = createTempDirectory("ws with space")  // path containing a space
     val result = run(distDir.resolve(script), "--workspace=$workspace", "--server.port=0", "--stack.viewer.exit-after-startup=true")
     result.exitCode shouldBe 0
     result.output shouldContain "Stack viewer started on http://localhost:"
 }
 ```
-`test` task dependsOn `viewerDist`; runs on all three CI OSes.
+`test` task dependsOn `viewerDist`; runs on Linux and macOS CI.
 
 - [ ] **Step 2: Run** `./gradlew -p tool :viewer-backend:test --tests '*Launcher*'` — Expected: FAIL.
-- [ ] **Step 3: Implement** the scripts and `viewerDist`.
+- [ ] **Step 3: Implement** the script and `viewerDist`.
 - [ ] **Step 4: Run** `./gradlew -p tool build` — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(viewer): launcher scripts for macOS and Windows`
+- [ ] **Step 5: Commit** `feat(viewer): stack-viewer launcher script`
 
 ---
 
@@ -616,4 +616,4 @@ class StepOneAcceptanceTest {
 - [ ] **Step 3: Implement** `orders-service`, Dockerfile (`eclipse-temurin:25-jre`), compose file, `stackAgent` task, scenarios, workspace, README, workflow.
 - [ ] **Step 4: Run** `./gradlew -p sandbox stackAgent acceptanceTest` — Expected: PASS. Then run manually: `docker compose up -d --build`, `./gradlew -p sandbox e2eTest`, `tool/viewer-backend/build/stack-viewer/stack-viewer --workspace=sandbox/stack --recordings=sandbox/recordings`, open the printed URL.
 - [ ] **Step 5: Commit** `feat(sandbox): orders-service with Postgres, tagged e2e scenarios and step-1 acceptance test`
-- [ ] **Step 6: Owner validation.** Hand over to the owner to check the board, highlight and sequence view look as desired, and do the Windows milestone check (D25).
+- [ ] **Step 6: Owner validation.** Hand over to the owner to check the board, highlight and sequence view look as desired.
