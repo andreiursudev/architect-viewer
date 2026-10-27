@@ -62,6 +62,7 @@ opentelemetry-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", v
 # Spring Boot app modules (versions managed by the Spring Boot BOM)
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 h2 = { module = "com.h2database:h2" }
 

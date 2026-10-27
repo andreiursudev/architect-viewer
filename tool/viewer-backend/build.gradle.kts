@@ -12,9 +12,13 @@ dependencies {
     implementation(project(":model"))
 
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation(libs.spring.boot.starter.webmvc.test)
     testImplementation(libs.spring.modulith.starter.test)
     testImplementation(libs.archunit)
 }
 
 // A fixed file name keeps the launcher independent of the project version.
 tasks.bootJar { archiveFileName = "stack-viewer.jar" }
+
+// The JVM prints a class-data-sharing warning when a Spring Boot test attaches its agent; sharing is only a startup optimisation.
+tasks.test { jvmArgs("-Xshare:off") }

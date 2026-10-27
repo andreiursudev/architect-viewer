@@ -1,0 +1,2 @@
+# Root .gitignore ignores every recordings/ folder (captured runs). Source packages and test fixtures of that name are code.
+!viewer-backend/src/**/recordings/

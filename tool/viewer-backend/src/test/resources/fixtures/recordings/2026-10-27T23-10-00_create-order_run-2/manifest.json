@@ -1,0 +1,1 @@
+{"schemaVersion":1,"runId":"run-2","scenarioId":"create-order","kind":"e2e","startedAt":"2026-10-27T23:10:00Z","lastEventAt":"2026-10-27T23:10:00Z","stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["orders-service"]}

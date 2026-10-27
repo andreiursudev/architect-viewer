@@ -13,7 +13,7 @@ class ModularityTest {
     }
 
     @Test
-    fun `workspace is detected as a module`() {
-        modules.getModuleByName("workspace").isPresent shouldBe true
+    fun `all modules are detected`() {
+        modules.stream().map<String> { it.identifier.toString() }.toList().toSet() shouldBe setOf("workspace", "recordings", "topology", "web")
     }
 }
