@@ -5,7 +5,9 @@ package io.stackvibed.agent.contract;
  *
  * <p>Header maps are JSON objects of lower-cased header name to the list of values; parameter lists
  * are JSON arrays of strings. Bodies are JSON (or the raw text for character bodies), cut to {@link
- * #MAX_BODY_CHARS} characters with the matching {@code *_truncated} flag set.
+ * #MAX_BODY_CHARS} characters with the matching {@code *_truncated} flag set. Bodies that are never
+ * read for capture are recorded as placeholders: {@code <binary N bytes>}, {@code <stream>}, {@code
+ * <reader>}, {@code <resource>}.
  */
 public final class StackAttributes {
 

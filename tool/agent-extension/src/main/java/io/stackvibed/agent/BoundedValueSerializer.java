@@ -1,5 +1,7 @@
 package io.stackvibed.agent;
 
+import java.io.InputStream;
+import java.io.Reader;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -13,6 +15,8 @@ import java.util.Map;
  * fidelity: cycles, deep nesting and inaccessible objects degrade to short placeholder strings.
  */
 public final class BoundedValueSerializer {
+
+    private static final String INPUT_STREAM_SOURCE = "org.springframework.core.io.InputStreamSource";
 
     private final int maxDepth;
     private final int maxCollection;
@@ -30,6 +34,41 @@ public final class BoundedValueSerializer {
         BoundedValueSerializer serializer = new BoundedValueSerializer(maxDepth, maxCollection, maxString);
         serializer.write(value, 0);
         return serializer.out.toString();
+    }
+
+    /**
+     * A placeholder for values whose content must not be read to render them (doing so could load a
+     * whole file into memory or consume/leak a stream), or {@code null} for ordinary values. Spring's
+     * {@code InputStreamSource} (e.g. {@code Resource}) is matched by name so no Spring type is loaded.
+     */
+    public static String placeholder(Object value) {
+        if (value instanceof byte[] bytes) {
+            return "<binary " + bytes.length + " bytes>";
+        }
+        if (value instanceof InputStream) {
+            return "<stream>";
+        }
+        if (value instanceof Reader) {
+            return "<reader>";
+        }
+        if (value != null && implementsByName(value.getClass(), INPUT_STREAM_SOURCE)) {
+            return "<resource>";
+        }
+        return null;
+    }
+
+    private static boolean implementsByName(Class<?> type, String name) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            if (current.getName().equals(name)) {
+                return true;
+            }
+            for (Class<?> implemented : current.getInterfaces()) {
+                if (implementsByName(implemented, name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Appends {@code value} as a JSON string literal. */
@@ -68,8 +107,17 @@ public final class BoundedValueSerializer {
             number(number);
         } else if (value instanceof Character || value instanceof Enum<?>) {
             string(value instanceof Enum<?> e ? e.name() : value.toString());
+        } else {
+            reference(value, depth);
+        }
+    }
+
+    private void reference(Object value, int depth) {
+        String opaque = placeholder(value);
+        if (opaque != null) {
+            string(opaque);
         } else if (depth >= maxDepth) {
-            placeholder(value);
+            depthPlaceholder(value);
         } else if (inProgress.put(value, Boolean.TRUE) != null) {
             string("<cycle>");
         } else {
@@ -174,7 +222,7 @@ public final class BoundedValueSerializer {
         }
     }
 
-    private void placeholder(Object value) {
+    private void depthPlaceholder(Object value) {
         string("<" + value.getClass().getSimpleName() + ">");
     }
 

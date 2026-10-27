@@ -49,7 +49,8 @@ public final class BodyCapture {
     }
 
     /**
-     * The body as JSON: character bodies as-is, otherwise via the application's Jackson mapper, falling
+     * The body as JSON: character bodies as-is, binary/stream/resource bodies as a placeholder (they are
+     * never read), otherwise via the application's Jackson mapper, falling
      * back to {@link BoundedValueSerializer}. May exceed {@link StackAttributes#MAX_BODY_CHARS} by at
      * most one character when produced by the mapper (to signal truncation); character bodies are
      * returned whole.
@@ -57,6 +58,10 @@ public final class BodyCapture {
     public static String toJson(Object value, List<?> converters) {
         if (value instanceof CharSequence text) {
             return text.toString();
+        }
+        String placeholder = BoundedValueSerializer.placeholder(value);
+        if (placeholder != null) {
+            return placeholder;
         }
         Object mapper = jsonMapper(converters);
         if (mapper != null) {

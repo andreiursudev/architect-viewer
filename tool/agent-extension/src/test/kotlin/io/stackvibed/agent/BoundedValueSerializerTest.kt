@@ -42,9 +42,28 @@ class BoundedValueSerializerTest {
     }
 
     @Test
+    fun opaqueValuesArePlaceholdersAndNeverRead() {
+        BoundedValueSerializer.placeholder(byteArrayOf(1, 2, 3)) shouldBe "<binary 3 bytes>"
+        BoundedValueSerializer.placeholder(UnreadableStream()) shouldBe "<stream>"
+        BoundedValueSerializer.placeholder(java.io.StringReader("x")) shouldBe "<reader>"
+        BoundedValueSerializer.placeholder(FakeResource()) shouldBe "<resource>"
+        BoundedValueSerializer.placeholder("text") shouldBe null
+        json(listOf(byteArrayOf(1, 2), UnreadableStream())) shouldBe """["<binary 2 bytes>","<stream>"]"""
+    }
+
+    @Test
     fun platformTypesUseToString() {
         json(java.util.UUID(0, 1)) shouldBe "\"00000000-0000-0000-0000-000000000001\""
     }
 
     private class Node(val name: String, val next: Node?)
+
+    private class UnreadableStream : java.io.InputStream() {
+        override fun read(): Int = throw AssertionError("capture must not read the stream")
+    }
+
+    /** Implements Spring's InputStreamSource indirectly, through a sub-interface (see test stub). */
+    private class FakeResource : org.springframework.core.io.Resource {
+        override fun getInputStream(): java.io.InputStream = throw AssertionError("capture must not open the resource")
+    }
 }

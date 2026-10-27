@@ -94,6 +94,14 @@ class HttpCaptureAgentTest {
     }
 
     @Test
+    fun resourceBodyIsRecordedAsPlaceholder() {
+        val call = get("/file")
+        call.status shouldBe 200
+        call.body shouldBe "file-content"
+        serverSpan(call).attr(StackAttributes.HTTP_RESPONSE_BODY) shouldBe "<resource>"
+    }
+
+    @Test
     fun notFoundStillRecordsStatusAndBody() {
         val call = get("/items/does-not-exist")
         call.status shouldBe 404

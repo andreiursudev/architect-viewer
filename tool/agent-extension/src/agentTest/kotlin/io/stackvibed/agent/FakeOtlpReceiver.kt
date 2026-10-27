@@ -48,7 +48,10 @@ class FakeOtlpReceiver : AutoCloseable {
         }
     }
 
-    fun awaitSpan(timeout: Duration = 20.seconds, predicate: (Span) -> Boolean): Span {
+    /** Waits [DEFAULT_TIMEOUT]; this overload keeps the trailing-lambda form `awaitSpan { ... }`. */
+    fun awaitSpan(predicate: (Span) -> Boolean): Span = awaitSpan(predicate, DEFAULT_TIMEOUT)
+
+    fun awaitSpan(predicate: (Span) -> Boolean, timeout: Duration): Span {
         val deadline = TimeSource.Monotonic.markNow() + timeout
         lock.withLock {
             while (true) {
@@ -64,6 +67,10 @@ class FakeOtlpReceiver : AutoCloseable {
 
     override fun close() {
         server.stop(0)
+    }
+
+    companion object {
+        val DEFAULT_TIMEOUT: Duration = 20.seconds
     }
 }
 
