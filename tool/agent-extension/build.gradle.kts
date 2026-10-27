@@ -21,6 +21,10 @@ dependencies {
     compileOnly(libs.bytebuddy)
     compileOnly(libs.jakarta.servlet.api)
 
+    // Unit tests load helpers that reference instrumentation-api types (e.g. VirtualField).
+    testImplementation(platform(libs.opentelemetry.instrumentation.bom.alpha))
+    testImplementation(libs.opentelemetry.instrumentation.api)
+
     otelAgent(libs.opentelemetry.javaagent)
     fixtureApp(project(":agent-fixture-app", "fixtureJar"))
 
