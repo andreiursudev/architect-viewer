@@ -9,6 +9,8 @@ export const NODE_HEIGHT = 68;
 
 export const EDGE_COLOR = '#64748b';
 export const DISCOVERED_EDGE_COLOR = '#d97706';
+/** The highlighted path of a selected run. */
+export const PATH_COLOR = '#1d4ed8';
 export const UNVERIFIED_DASH = '7 5';
 
 export function edgeColor(connection: BoardConnection): string {

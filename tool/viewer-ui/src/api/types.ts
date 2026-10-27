@@ -9,6 +9,7 @@ export type ScenarioSummary = WorkspaceView['scenarios'][number];
 export type BoardLayout = ModelSchema['boardLayout'];
 export type Viewport = NonNullable<BoardLayout['viewport']>;
 export type Flow = ModelSchema['flow'];
+export type FlowStep = Flow['steps'][number];
 export type RecordingManifest = ModelSchema['recordingManifest'];
 export type ComponentDefinition = ModelSchema['componentDefinition'];
 export type ConnectionDefinition = ModelSchema['connectionDefinition'];

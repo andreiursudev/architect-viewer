@@ -10,14 +10,15 @@ import {
   type Viewport as FlowViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLayout, useSaveLayout, useWorkspace } from '../api/queries';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFlow, useLayout, useSaveLayout, useWorkspace } from '../api/queries';
 import type { BoardLayout } from '../api/types';
 import { useUiStore } from '../store/uiStore';
 import { autoLayout } from './autoLayout';
 import { ComponentNode } from './ComponentNode';
 import { ConnectionEdge } from './ConnectionEdge';
-import { toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
+import { HighlightContext, highlightFor } from './highlight';
+import { PATH_COLOR, toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
 
 const BOARD = 'primary';
 const SAVE_DELAY_MS = 500;
@@ -40,12 +41,38 @@ function Board() {
   const flow = useReactFlow<ComponentNodeType, ConnectionEdgeType>();
   const selectComponent = useUiStore((s) => s.selectComponent);
   const selectConnection = useUiStore((s) => s.selectConnection);
+  const runId = useUiStore((s) => s.selectedRunId);
+  const runFlow = useFlow(runId);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ConnectionEdgeType>([]);
   const [ready, setReady] = useState(false);
 
   const view = workspace.data;
+
+  // The path of the selected run; nothing is highlighted while its flow is loading or when it failed to load.
+  const highlight = useMemo(() => (runId && runFlow.data ? highlightFor(runFlow.data) : null), [runId, runFlow.data]);
+  // Path edges are drawn above the dimmed ones and their arrowheads take the path colour.
+  const shownEdges = useMemo(
+    () =>
+      highlight
+        ? edges.map((e) =>
+            highlight.edgeIds.has(e.id)
+              ? {
+                  ...e,
+                  zIndex: 10,
+                  markerEnd: typeof e.markerEnd === 'object' ? { ...e.markerEnd, color: PATH_COLOR } : e.markerEnd,
+                }
+              : e,
+          )
+        : edges,
+    [edges, highlight],
+  );
+  const hiddenHops = useMemo(() => {
+    if (!highlight) return 0;
+    const drawn = new Set(edges.map((e) => e.id));
+    return [...highlight.edgeIds].filter((id) => !drawn.has(id)).length;
+  }, [edges, highlight]);
   const layoutLoaded = !layoutQuery.isPending;
   const layout = layoutQuery.data ?? null;
 
@@ -115,35 +142,42 @@ function Board() {
   const savedViewport: FlowViewport | undefined = layout?.viewport ?? undefined;
 
   return (
-    <ReactFlow<ComponentNodeType, ConnectionEdgeType>
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeClick={(_, node) => selectComponent(node.id)}
-      onEdgeClick={(_, edge) => selectConnection(edge.id)}
-      onPaneClick={() => selectComponent(null)}
-      onNodeDragStart={(_, node) => selectComponent(node.id)}
-      onNodeDragStop={() => persist()}
-      onMoveEnd={(event) => event && persist()} // a null event is a programmatic move such as fitView
-      defaultViewport={savedViewport}
-      fitView={!savedViewport}
-      fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
-      minZoom={0.2}
-      maxZoom={2}
-      nodesConnectable={false}
-      deleteKeyCode={null}
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background gap={20} size={1.2} />
-      <Controls showInteractive={false} />
-      <Panel position="bottom-center" className="legend">
-        <span className="legend-item"><i className="legend-line" /> verified</span>
-        <span className="legend-item"><i className="legend-line is-dashed" /> unverified</span>
-        <span className="legend-item"><i className="legend-line is-discovered" /> discovered</span>
-      </Panel>
-    </ReactFlow>
+    <HighlightContext.Provider value={highlight}>
+      <ReactFlow<ComponentNodeType, ConnectionEdgeType>
+        nodes={nodes}
+        edges={shownEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={(_, node) => selectComponent(node.id)}
+        onEdgeClick={(_, edge) => selectConnection(edge.id)}
+        onPaneClick={() => selectComponent(null)}
+        onNodeDragStart={(_, node) => selectComponent(node.id)}
+        onNodeDragStop={() => persist()}
+        onMoveEnd={(event) => event && persist()} // a null event is a programmatic move such as fitView
+        defaultViewport={savedViewport}
+        fitView={!savedViewport}
+        fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
+        minZoom={0.2}
+        maxZoom={2}
+        nodesConnectable={false}
+        deleteKeyCode={null}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background gap={20} size={1.2} />
+        <Controls showInteractive={false} />
+        <Panel position="bottom-center" className="legend">
+          <span className="legend-item"><i className="legend-line" /> verified</span>
+          <span className="legend-item"><i className="legend-line is-dashed" /> unverified</span>
+          <span className="legend-item"><i className="legend-line is-discovered" /> discovered</span>
+        </Panel>
+        {hiddenHops > 0 && (
+          <Panel position="top-center" className="path-note">
+            {hiddenHops === 1 ? '1 hop of this run is' : `${hiddenHops} hops of this run are`} not on the board (hidden connection or unknown component).
+          </Panel>
+        )}
+      </ReactFlow>
+    </HighlightContext.Provider>
   );
 }

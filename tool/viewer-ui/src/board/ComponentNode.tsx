@@ -1,13 +1,16 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUiStore } from '../store/uiStore';
+import { useHighlight } from './highlight';
 import { TypeIcon, NoteIcon } from './icons';
 import type { ComponentNode as ComponentNodeType } from './toFlowElements';
 
 export function ComponentNode({ id, data }: NodeProps<ComponentNodeType>) {
   const selected = useUiStore((s) => s.selectedComponentId === id);
+  const highlight = useHighlight();
   const classes = ['component-node', `type-${data.type}`];
   if (data.discovered) classes.push('is-discovered');
   if (selected) classes.push('is-selected');
+  if (highlight) classes.push(highlight.nodeIds.has(id) ? 'on-path' : 'is-dimmed');
 
   return (
     <div className={classes.join(' ')} title={data.id}>

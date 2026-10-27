@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { ErrorBanner } from './ErrorBanner';
 import { PrimaryBoard } from './board/PrimaryBoard';
 import { SidePanel } from './panel/SidePanel';
+import { ScenarioPicker } from './scenarios/ScenarioPicker';
 import { useWorkspace } from './api/queries';
 
 /** The shell every page shares: a header with the project name and the page below it. New pages are new routes here. */
@@ -32,8 +33,11 @@ function Header() {
 function BoardPage() {
   return (
     <main className="board-page">
-      <div className="board-canvas">
-        <PrimaryBoard />
+      <div className="board-main">
+        <ScenarioPicker />
+        <div className="board-canvas">
+          <PrimaryBoard />
+        </div>
       </div>
       <SidePanel />
     </main>

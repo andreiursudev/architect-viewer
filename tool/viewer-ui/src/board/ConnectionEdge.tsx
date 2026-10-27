@@ -1,7 +1,9 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 import { useSetConnectionState } from '../api/queries';
 import { useUiStore } from '../store/uiStore';
-import { edgeColor, type ConnectionEdgeType } from './toFlowElements';
+import { HopDetails } from './HopDetails';
+import { useHighlight } from './highlight';
+import { edgeColor, PATH_COLOR, type ConnectionEdgeType } from './toFlowElements';
 
 export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   const { id, data, style, markerEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
@@ -10,6 +12,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   const hover = useUiStore((s) => s.hoverConnection);
   const select = useUiStore((s) => s.selectConnection);
   const setState = useSetConnectionState();
+  const highlight = useHighlight();
 
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
@@ -27,6 +30,10 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   if (discovered) classes.push('is-discovered');
   if (data.unverified) classes.push('is-unverified');
   if (selected) classes.push('is-selected');
+  const steps = highlight?.stepsByEdge.get(id);
+  const order = highlight?.orderByEdge.get(id);
+  if (highlight) classes.push(steps ? 'on-path' : 'is-dimmed');
+  if (steps && hovered) classes.push('is-hovered');
 
   return (
     <>
@@ -35,10 +42,11 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
         path={path}
         markerEnd={markerEnd}
         interactionWidth={24}
+        className={highlight ? (steps ? 'path-edge' : 'dimmed-edge') : undefined}
         style={{
           ...style,
-          stroke: edgeColor(data),
-          strokeWidth: hovered || selected ? 3 : 2,
+          stroke: steps ? PATH_COLOR : edgeColor(data),
+          strokeWidth: steps ? (hovered ? 5 : 4) : hovered || selected ? 3 : 2,
         }}
       />
       <EdgeLabelRenderer>
@@ -49,6 +57,12 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
           onMouseLeave={() => hover(null)}
         >
           <div className="edge-row">
+            {order !== undefined && steps && (
+              <span className="step-badge" title={`Step ${order} of the run`}>
+                {order}
+                {steps.length > 1 && <small>×{steps.length}</small>}
+              </span>
+            )}
             <button type="button" className="edge-label" onClick={() => select(id)} title={data.id}>
               <span className="edge-kind">{data.kind}</span>
               {text && <span>{text}</span>}
@@ -56,6 +70,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
             {data.unverified && <span className="badge badge-unverified">unverified</span>}
             {discovered && <span className="badge badge-discovered">discovered</span>}
           </div>
+          {steps && hovered && <HopDetails steps={steps} />}
           {discovered && (
             <div className="edge-row">
               <button

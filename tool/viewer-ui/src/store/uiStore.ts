@@ -4,6 +4,8 @@ import { create } from 'zustand';
 export interface UiState {
   selectedComponentId: string | null;
   selectedConnectionId: string | null;
+  /** The scenario the run picker is showing; [selectedRunId] is the run whose path is highlighted on the board. */
+  selectedScenarioId: string | null;
   selectedRunId: string | null;
   hoveredConnectionId: string | null;
   /** Unsaved note drafts by target id: they survive deselecting and reselecting, so a stray click loses nothing. */
@@ -12,6 +14,7 @@ export interface UiState {
   errors: { id: number; message: string }[];
   selectComponent: (id: string | null) => void;
   selectConnection: (id: string | null) => void;
+  selectScenario: (scenarioId: string | null, runId: string | null) => void;
   selectRun: (id: string | null) => void;
   hoverConnection: (id: string | null) => void;
   setNoteDraft: (targetId: string, draft: string | null) => void;
@@ -24,6 +27,7 @@ let nextErrorId = 1;
 export const useUiStore = create<UiState>((set) => ({
   selectedComponentId: null,
   selectedConnectionId: null,
+  selectedScenarioId: null,
   selectedRunId: null,
   hoveredConnectionId: null,
   noteDrafts: {},
@@ -31,6 +35,7 @@ export const useUiStore = create<UiState>((set) => ({
   // a component and a connection are never selected together: the side panel shows one of them
   selectComponent: (id) => set({ selectedComponentId: id, selectedConnectionId: null }),
   selectConnection: (id) => set({ selectedConnectionId: id, selectedComponentId: null }),
+  selectScenario: (scenarioId, runId) => set({ selectedScenarioId: scenarioId, selectedRunId: runId }),
   selectRun: (id) => set({ selectedRunId: id }),
   hoverConnection: (id) => set({ hoveredConnectionId: id }),
   setNoteDraft: (targetId, draft) =>
