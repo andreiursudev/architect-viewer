@@ -79,8 +79,8 @@ The tool is built **incrementally against a sample system** (the sandbox) that g
 | D22 | **First step scope** — see §11. |
 | D23 | **No redaction of recorded traffic.** Local stacks only carry test data; the credentials anti-goal covers only the tool's own credentials. |
 | D24 | **Connections are workspace files** (`connections/<from>--<to>.yaml`: kind, label, state, notes). **Evidence = latest recording per scenario + all reference recordings**; older recordings stay viewable but don't shape topology. States: `discovered` (in evidence, not accepted), `accepted`, `manual` (user-drawn, no evidence required), `hidden` (in evidence, suppressed on the board). The board flags **both** mismatches: evidence without an accepted connection → "discovered" badge; accepted connection without current evidence → dashed "unverified". |
-| D25 | **CI:** GitHub Actions on Linux and macOS runs the full `tool/` build — unit, agent (forked JVM), reporter golden files, viewer backend, Playwright UI — on every push. Sandbox compose acceptance test runs on Linux in CI (GitHub macOS runners have no Docker) and on macOS locally. Requires adding a GitHub remote. *(Revised 2026-10-27: Windows runners and manual Windows checks removed — see D26.)* |
-| D26 | **Windows deferred.** No Windows development, CI, launcher or manual checks for now; the owner will want to run the tool on Windows at some point. Until then, keep it portable at no extra cost: file paths via `java.nio.file.Path` / `path.join`; ids and folder names the tool writes are slugs without characters Windows forbids (`:`, `\`, `/`, `?`, `*`, `"`, `<`, `>`, `|`); no POSIX-only assumptions in Java/Kotlin/TS code; build logic in Gradle, not shell. Adding Windows later = Windows CI runner, a `.cmd` launcher, and a manual docker-compose check. |
+| D25 | **Local verification only, macOS.** No CI and nothing pushed to GitHub for now. The full `tool/` build — unit, agent (forked JVM), reporter golden files, viewer backend, Playwright UI — runs locally with `tool/gradlew -p tool build`; the sandbox acceptance test runs locally against Docker Desktop. *(Revised 2026-10-27: GitHub Actions CI removed; adding it later needs a GitHub remote.)* |
+| D26 | **Windows deferred.** Development targets **macOS only**: no Windows development, launcher or checks for now; the owner will want to run the tool on Windows at some point. Until then, keep it portable at no extra cost: file paths via `java.nio.file.Path` / `path.join`; ids and folder names the tool writes are slugs without characters Windows forbids (`:`, `\`, `/`, `?`, `*`, `"`, `<`, `>`, `|`); no POSIX-only assumptions in Java/Kotlin/TS code; build logic in Gradle, not shell. Adding Windows later = a `.cmd` launcher, running the build and a docker-compose check on Windows (and a Windows CI runner if CI exists by then). |
 
 ## 7. Architecture
 
@@ -184,7 +184,7 @@ Level 2 + component view; Kafka, WireMock, second service; layers; test recordin
 - UI: Vitest + React Testing Library; Playwright e2e against fixture workspaces/recordings.
 - Sandbox acceptance: compose up → run e2e with agent → assert recording describes the expected flow.
 - Contract: JSON-schema snapshot of `model`; any change is deliberate and bumps `schemaVersion`.
-- CI: see D25. Windows: deferred (D26).
+- Verification: local only on macOS (D25). Windows: deferred (D26).
 
 ## 13. Builder's calls (made by Claude, owner to check)
 

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **macOS only for now; Windows is deferred (spec D26)** — no Windows CI, launcher or tests. Stay portable at no extra cost: no shell-only build steps (the `stack-viewer` sh launcher is the one exception), no `:` or other characters Windows forbids in any file or folder name the tool writes, paths via `java.nio.file.Path` / `path.join`, never string concatenation with `/`.
+- **macOS only; Windows is deferred (spec D26)** — no Windows launcher or tests. **No CI and nothing pushed to GitHub (spec D25)**: all verification is local on macOS. Stay portable at no extra cost: no shell-only build steps (the `stack-viewer` sh launcher is the one exception), no `:` or other characters Windows forbids in any file or folder name the tool writes, paths via `java.nio.file.Path` / `path.join`, never string concatenation with `/`.
 - Java toolchain 25 for all modules; **`agent-contract` and `agent-extension` compile with `--release 17`** and are **plain Java** (no Kotlin stdlib inside the agent).
 - Pin every dependency in `tool/gradle/libs.versions.toml` (and `sandbox/gradle/libs.versions.toml`) to the latest stable version available at Task 1; no dynamic versions. Group id `io.stackvibed`, version `0.1.0-SNAPSHOT`. Base package `io.stackvibed`.
 - The viewer never imports OTel types; only `reporter` and `agent-*` know OTel (anti-goal §4).
@@ -35,8 +35,6 @@
 ## File Structure
 
 ```
-.github/workflows/tool.yml              # matrix ubuntu/macos: tool/gradlew -p tool build + UI e2e
-.github/workflows/sandbox.yml           # ubuntu: publish tool, build reporter image, sandbox acceptance
 .gitignore
 tool/
   settings.gradle.kts  gradle/libs.versions.toml  gradlew(.bat)  gradle/wrapper/
@@ -62,7 +60,7 @@ sandbox/
 ### Task 1: Tool build skeleton + `model`
 
 **Files:**
-- Create: `.gitignore`, `.github/workflows/tool.yml`, `tool/settings.gradle.kts`, `tool/gradle/libs.versions.toml`, `tool/build-logic/**`, wrapper files
+- Create: `.gitignore`, `tool/settings.gradle.kts`, `tool/gradle/libs.versions.toml`, `tool/build-logic/**`, wrapper files
 - Create: `tool/model/build.gradle.kts`, `tool/model/src/main/kotlin/io/stackvibed/model/{Events.kt,Manifest.kt,ComponentIds.kt}`, `.../model/workspace/WorkspaceDefinitions.kt`, `.../model/view/Views.kt`, `tool/model/src/main/kotlin/io/stackvibed/model/schema/SchemaGenerator.kt`
 - Test: `tool/model/src/test/kotlin/io/stackvibed/model/{EventJsonTest.kt,ComponentIdsTest.kt,SchemaSnapshotTest.kt}`, `tool/model/src/test/resources/schema-snapshot/model.schema.json`
 
@@ -79,7 +77,7 @@ sandbox/
   - `io.stackvibed.model.view`: `BoardComponent(id, type, displayName, discovered: Boolean, hasNotes: Boolean)`, `BoardConnection(id, from, to, kind, label: String?, state: ConnectionState, unverified: Boolean)`, `ScenarioSummary(id, description: String?, latestRunId: String?, runCount: Int)`, `WorkspaceProblem(file: String, message: String)`, `WorkspaceView(project: ProjectInfo, components, connections, scenarios, problems)`, `FlowStep(stepId: String, parentStepId: String?, from: String, to: String, connectionId: String, kind: ConnectionKind, label: String, startEpochNanos: Long, durationNanos: Long, status: Int?, event: RecordingEvent)`, `Flow(runId: String, scenarioId: String?, steps: List<FlowStep>)`.
   - Gradle task `:model:generateSchema` writes `tool/model/build/schema/model.schema.json` (victools jsonschema-generator + Jackson module) covering all of the above.
 
-- [ ] **Step 1: Bootstrap the build.** If `gradle` is not on PATH, install it once (`brew install gradle`) only to run `gradle wrapper --gradle-version <latest 9.x>` in `tool/`. Create convention plugins: `stack.kotlin-library` (Kotlin JVM, toolchain 25, JUnit Platform, Kotest assertions, MockK), `stack.java-agent-lib` (java-library, `options.release = 17`), `stack.spring-boot-app` (kotlin-library + Spring Boot 4 + kotlin-spring). `.gitignore`: `build/`, `.gradle/`, `node_modules/`, `dist/`, `**/recordings/`, `.idea/`. `.github/workflows/tool.yml`: matrix `[ubuntu-latest, macos-latest]`, temurin 25, node 22, run `./gradlew -p tool build`.
+- [ ] **Step 1: Bootstrap the build.** If `gradle` is not on PATH, install it once (`brew install gradle`) only to run `gradle wrapper --gradle-version <latest 9.x>` in `tool/`. Create convention plugins: `stack.kotlin-library` (Kotlin JVM, toolchain 25, JUnit Platform, Kotest assertions, MockK), `stack.java-agent-lib` (java-library, `options.release = 17`), `stack.spring-boot-app` (kotlin-library + Spring Boot 4 + kotlin-spring). `.gitignore`: `build/`, `.gradle/`, `node_modules/`, `dist/`, `**/recordings/`, `.idea/`.
 
 - [ ] **Step 2: Write failing tests**
 
@@ -533,7 +531,7 @@ test('clicking a message shows its payload', async ({ page }) => { /* open seque
 ```
 
 - [ ] **Step 2: Run** `./gradlew -p tool :viewer-ui:npmTest :viewer-ui:e2eTest` — Expected: FAIL.
-- [ ] **Step 3: Implement.** Add `npx playwright install --with-deps chromium` to `tool.yml` before the build.
+- [ ] **Step 3: Implement.** Add a Gradle task `:viewer-ui:playwrightInstall` (`npx playwright install chromium`) that `e2eTest` depends on.
 - [ ] **Step 4: Run** `./gradlew -p tool check` — Expected: PASS.
 - [ ] **Step 5: Commit** `feat(viewer-ui): sequence view with message details and Playwright e2e`
 
@@ -560,7 +558,7 @@ test('clicking a message shows its payload', async ({ page }) => { /* open seque
     result.output shouldContain "Stack viewer started on http://localhost:"
 }
 ```
-`test` task dependsOn `viewerDist`; runs on Linux and macOS CI.
+`test` task dependsOn `viewerDist`.
 
 - [ ] **Step 2: Run** `./gradlew -p tool :viewer-backend:test --tests '*Launcher*'` — Expected: FAIL.
 - [ ] **Step 3: Implement** the script and `viewerDist`.
@@ -576,7 +574,6 @@ test('clicking a message shows its payload', async ({ page }) => { /* open seque
 - Create: `sandbox/services/orders-service/{build.gradle.kts,Dockerfile}`, `src/main/kotlin/io/stackvibed/sandbox/orders/{OrdersApplication.kt,OrdersController.kt,OrderRepository.kt,Order.kt}`, `src/main/resources/{application.yaml,db/migration/V1__orders.sql}`
 - Create: `sandbox/e2e-tests/build.gradle.kts`, `src/main/kotlin/io/stackvibed/sandbox/e2e/OrdersScenarios.kt`, `src/test/kotlin/.../OrdersE2ETest.kt`, `src/acceptanceTest/kotlin/.../StepOneAcceptanceTest.kt`
 - Create: `sandbox/stack/{workspace.yaml,scenarios/create-order.yaml,scenarios/get-order.yaml}`
-- Create: `.github/workflows/sandbox.yml`
 
 **Interfaces:**
 - Consumes: `io.stackvibed:stack-agent-extension`, `io.stackvibed:stack-test-harness` from mavenLocal; image `stackvibed/reporter:0.1.0-SNAPSHOT`; model JSON format (acceptance test parses `events.jsonl` with Jackson, no dependency on tool internals beyond the published `stack-model` artifact).
@@ -588,7 +585,6 @@ test('clicking a message shows its payload', async ({ page }) => { /* open seque
   - `OrdersE2ETest`: `@StackScenario("create-order")` and `@StackScenario("get-order")` tests against `http://localhost:8080` (task `e2eTest`, not part of `build`).
   - `workspace.yaml`: `project: { name: orders-sandbox }`.
   - README: run steps (publish tool, build image, `stackAgent`, `docker compose up -d --build`, `./gradlew e2eTest`, start viewer with `--workspace=sandbox/stack --recordings=sandbox/recordings`) and the IntelliJ run configuration (same `JAVA_TOOL_OPTIONS`, endpoint `http://localhost:4318`).
-  - `sandbox.yml` (ubuntu-latest): `./gradlew -p tool publishToMavenLocal :reporter:dockerImage`, then `./gradlew -p sandbox stackAgent acceptanceTest`.
 
 - [ ] **Step 1: Write the failing acceptance test**
 
@@ -613,7 +609,7 @@ class StepOneAcceptanceTest {
 ```
 
 - [ ] **Step 2: Run** `./gradlew -p sandbox stackAgent acceptanceTest` — Expected: FAIL (service does not exist yet / compose fails).
-- [ ] **Step 3: Implement** `orders-service`, Dockerfile (`eclipse-temurin:25-jre`), compose file, `stackAgent` task, scenarios, workspace, README, workflow.
+- [ ] **Step 3: Implement** `orders-service`, Dockerfile (`eclipse-temurin:25-jre`), compose file, `stackAgent` task, scenarios, workspace, README.
 - [ ] **Step 4: Run** `./gradlew -p sandbox stackAgent acceptanceTest` — Expected: PASS. Then run manually: `docker compose up -d --build`, `./gradlew -p sandbox e2eTest`, `tool/viewer-backend/build/stack-viewer/stack-viewer --workspace=sandbox/stack --recordings=sandbox/recordings`, open the printed URL.
 - [ ] **Step 5: Commit** `feat(sandbox): orders-service with Postgres, tagged e2e scenarios and step-1 acceptance test`
 - [ ] **Step 6: Owner validation.** Hand over to the owner to check the board, highlight and sequence view look as desired.
