@@ -20,6 +20,9 @@ rest-assured = "6.3.0"
 # Viewer backend: 2.1.x is the Spring Boot 4.1 line (2.2 is still RC)
 spring-modulith = "2.1.2"
 archunit = "1.5.1"
+# Viewer UI: Gradle runs npm with a downloaded Node; 22.x is the LTS line the UI toolchain (Vite 8, Vitest 5) supports
+node-gradle = "7.1.0"
+nodejs = "22.23.4"
 
 [libraries]
 # Build-logic plugin artifacts
@@ -76,3 +79,4 @@ archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" 
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 
 [plugins]
+node-gradle = { id = "com.github.node-gradle.node", version.ref = "node-gradle" }

@@ -22,3 +22,9 @@ tasks.bootJar { archiveFileName = "stack-viewer.jar" }
 
 // The JVM prints a class-data-sharing warning when a Spring Boot test attaches its agent; sharing is only a startup optimisation.
 tasks.test { jvmArgs("-Xshare:off") }
+
+// The built UI is served from the jar's classpath (Spring Boot's static resources).
+tasks.processResources {
+    dependsOn(":viewer-ui:npmBuild")
+    from(project(":viewer-ui").layout.projectDirectory.dir("dist")) { into("static") }
+}
