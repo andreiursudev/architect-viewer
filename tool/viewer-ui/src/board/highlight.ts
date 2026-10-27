@@ -1,5 +1,7 @@
+import type { Edge } from '@xyflow/react';
 import { createContext, useContext } from 'react';
 import type { Flow, FlowStep } from '../api/types';
+import { PATH_COLOR } from './toFlowElements';
 
 /** What a recorded run touches: the components and connections of its path, and what happened on each connection. */
 export interface Highlight {
@@ -32,6 +34,27 @@ export function highlightFor(flow: Flow): Highlight {
     }
   }
   return { nodeIds, edgeIds, stepsByEdge, orderByEdge };
+}
+
+/** Path edges are drawn above the dimmed ones and their arrowheads take the path colour; the others stay as they are. */
+export function emphasizePath<E extends Edge>(edges: E[], highlight: Highlight | null): E[] {
+  if (!highlight) return edges;
+  return edges.map((e) =>
+    highlight.edgeIds.has(e.id)
+      ? {
+          ...e,
+          zIndex: 10,
+          markerEnd: typeof e.markerEnd === 'object' ? { ...e.markerEnd, color: PATH_COLOR } : e.markerEnd,
+        }
+      : e,
+  );
+}
+
+/** How many hops of the run have no edge on the board (a hidden connection, or a component that is not listed). */
+export function hopsOffBoard(highlight: Highlight | null, drawnEdgeIds: Iterable<string>): number {
+  if (!highlight) return 0;
+  const drawn = new Set(drawnEdgeIds);
+  return [...highlight.edgeIds].filter((id) => !drawn.has(id)).length;
 }
 
 /** The highlighted path of the selected run; `null` while no run is selected (nothing is dimmed then). */

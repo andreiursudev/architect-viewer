@@ -17,8 +17,8 @@ import { useUiStore } from '../store/uiStore';
 import { autoLayout } from './autoLayout';
 import { ComponentNode } from './ComponentNode';
 import { ConnectionEdge } from './ConnectionEdge';
-import { HighlightContext, highlightFor } from './highlight';
-import { PATH_COLOR, toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
+import { emphasizePath, HighlightContext, highlightFor, hopsOffBoard } from './highlight';
+import { toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
 
 const BOARD = 'primary';
 const SAVE_DELAY_MS = 500;
@@ -52,27 +52,8 @@ function Board() {
 
   // The path of the selected run; nothing is highlighted while its flow is loading or when it failed to load.
   const highlight = useMemo(() => (runId && runFlow.data ? highlightFor(runFlow.data) : null), [runId, runFlow.data]);
-  // Path edges are drawn above the dimmed ones and their arrowheads take the path colour.
-  const shownEdges = useMemo(
-    () =>
-      highlight
-        ? edges.map((e) =>
-            highlight.edgeIds.has(e.id)
-              ? {
-                  ...e,
-                  zIndex: 10,
-                  markerEnd: typeof e.markerEnd === 'object' ? { ...e.markerEnd, color: PATH_COLOR } : e.markerEnd,
-                }
-              : e,
-          )
-        : edges,
-    [edges, highlight],
-  );
-  const hiddenHops = useMemo(() => {
-    if (!highlight) return 0;
-    const drawn = new Set(edges.map((e) => e.id));
-    return [...highlight.edgeIds].filter((id) => !drawn.has(id)).length;
-  }, [edges, highlight]);
+  const shownEdges = useMemo(() => emphasizePath(edges, highlight), [edges, highlight]);
+  const hiddenHops = useMemo(() => hopsOffBoard(highlight, edges.map((e) => e.id)), [edges, highlight]);
   const layoutLoaded = !layoutQuery.isPending;
   const layout = layoutQuery.data ?? null;
 
