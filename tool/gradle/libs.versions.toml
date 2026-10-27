@@ -16,6 +16,7 @@ opentelemetry-proto = "1.11.1-alpha"
 # compileOnly: the agent provides ByteBuddy at runtime; pinned to the version opentelemetry-javaagent 2.33.1 bundles
 bytebuddy = "1.18.14"
 jakarta-servlet = "6.1.0"
+rest-assured = "6.3.0"
 
 [libraries]
 # Build-logic plugin artifacts
@@ -32,6 +33,8 @@ jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin",
 # Test
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
@@ -56,5 +59,8 @@ opentelemetry-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", v
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 h2 = { module = "com.h2database:h2" }
+
+# Test harness (RestAssured is compileOnly: the consuming e2e build brings its own)
+rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 
 [plugins]
