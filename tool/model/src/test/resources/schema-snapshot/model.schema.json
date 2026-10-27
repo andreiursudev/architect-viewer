@@ -1,0 +1,492 @@
+{
+  "$defs" : {
+    "ComponentType" : {
+      "enum" : [ "service", "database", "client" ],
+      "type" : "string"
+    },
+    "ConnectionKind" : {
+      "enum" : [ "http", "db" ],
+      "type" : "string"
+    },
+    "ConnectionState" : {
+      "enum" : [ "discovered", "accepted", "manual", "hidden" ],
+      "type" : "string"
+    },
+    "DbClientEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "dbName" : {
+          "type" : [ "string", "null" ]
+        },
+        "dbSystem" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "parameters" : {
+          "items" : {
+            "type" : [ "string", "null" ]
+          },
+          "type" : "array"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "rowCount" : {
+          "format" : "int64",
+          "type" : [ "integer", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "statement" : {
+          "type" : "string"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "db.client"
+        }
+      },
+      "required" : [ "component", "dbSystem", "durationNanos", "eventId", "parameters", "runId", "schemaVersion", "spanId", "startEpochNanos", "statement", "traceId", "type" ],
+      "type" : "object"
+    },
+    "HttpServerEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "method" : {
+          "type" : "string"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "requestBody" : {
+          "type" : [ "string", "null" ]
+        },
+        "requestBodyTruncated" : {
+          "type" : "boolean"
+        },
+        "requestHeaders" : {
+          "$ref" : "#/$defs/Map(String,List(String))"
+        },
+        "responseBody" : {
+          "type" : [ "string", "null" ]
+        },
+        "responseBodyTruncated" : {
+          "type" : "boolean"
+        },
+        "responseHeaders" : {
+          "$ref" : "#/$defs/Map(String,List(String))"
+        },
+        "route" : {
+          "type" : [ "string", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "status" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "http.server"
+        }
+      },
+      "required" : [ "component", "durationNanos", "eventId", "method", "path", "requestBodyTruncated", "requestHeaders", "responseBodyTruncated", "responseHeaders", "runId", "schemaVersion", "spanId", "startEpochNanos", "status", "traceId", "type" ],
+      "type" : "object"
+    },
+    "Map(String,List(String))" : {
+      "additionalProperties" : {
+        "items" : {
+          "type" : "string"
+        },
+        "type" : "array"
+      },
+      "type" : "object"
+    },
+    "NodePosition" : {
+      "properties" : {
+        "x" : {
+          "format" : "double",
+          "type" : "number"
+        },
+        "y" : {
+          "format" : "double",
+          "type" : "number"
+        }
+      },
+      "required" : [ "x", "y" ],
+      "type" : "object"
+    },
+    "ProjectInfo" : {
+      "properties" : {
+        "name" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "name" ],
+      "type" : "object"
+    }
+  },
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "properties" : {
+    "boardLayout" : {
+      "properties" : {
+        "nodes" : {
+          "additionalProperties" : {
+            "$ref" : "#/$defs/NodePosition"
+          },
+          "type" : "object"
+        },
+        "viewport" : {
+          "properties" : {
+            "x" : {
+              "format" : "double",
+              "type" : "number"
+            },
+            "y" : {
+              "format" : "double",
+              "type" : "number"
+            },
+            "zoom" : {
+              "format" : "double",
+              "type" : "number"
+            }
+          },
+          "required" : [ "x", "y", "zoom" ],
+          "type" : [ "object", "null" ]
+        }
+      },
+      "required" : [ "nodes" ],
+      "type" : "object"
+    },
+    "componentDefinition" : {
+      "properties" : {
+        "displayName" : {
+          "type" : "string"
+        },
+        "id" : {
+          "type" : "string"
+        },
+        "tags" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "type" : {
+          "$ref" : "#/$defs/ComponentType"
+        }
+      },
+      "required" : [ "displayName", "id", "tags", "type" ],
+      "type" : "object"
+    },
+    "connectionDefinition" : {
+      "properties" : {
+        "from" : {
+          "type" : "string"
+        },
+        "kind" : {
+          "$ref" : "#/$defs/ConnectionKind"
+        },
+        "label" : {
+          "type" : [ "string", "null" ]
+        },
+        "notes" : {
+          "type" : [ "string", "null" ]
+        },
+        "state" : {
+          "$ref" : "#/$defs/ConnectionState"
+        },
+        "to" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "from", "kind", "state", "to" ],
+      "type" : "object"
+    },
+    "flow" : {
+      "properties" : {
+        "runId" : {
+          "type" : "string"
+        },
+        "scenarioId" : {
+          "type" : [ "string", "null" ]
+        },
+        "steps" : {
+          "items" : {
+            "properties" : {
+              "connectionId" : {
+                "type" : "string"
+              },
+              "durationNanos" : {
+                "format" : "int64",
+                "type" : "integer"
+              },
+              "event" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/HttpServerEvent"
+                }, {
+                  "$ref" : "#/$defs/DbClientEvent"
+                } ]
+              },
+              "from" : {
+                "type" : "string"
+              },
+              "kind" : {
+                "$ref" : "#/$defs/ConnectionKind"
+              },
+              "label" : {
+                "type" : "string"
+              },
+              "parentStepId" : {
+                "type" : [ "string", "null" ]
+              },
+              "startEpochNanos" : {
+                "format" : "int64",
+                "type" : "integer"
+              },
+              "status" : {
+                "format" : "int32",
+                "type" : [ "integer", "null" ]
+              },
+              "stepId" : {
+                "type" : "string"
+              },
+              "to" : {
+                "type" : "string"
+              }
+            },
+            "required" : [ "connectionId", "durationNanos", "event", "from", "kind", "label", "startEpochNanos", "stepId", "to" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "runId", "steps" ],
+      "type" : "object"
+    },
+    "recordingEvent" : {
+      "anyOf" : [ {
+        "$ref" : "#/$defs/HttpServerEvent"
+      }, {
+        "$ref" : "#/$defs/DbClientEvent"
+      } ]
+    },
+    "recordingManifest" : {
+      "properties" : {
+        "componentsSeen" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "kind" : {
+          "enum" : [ "e2e", "manual", "test" ],
+          "type" : "string"
+        },
+        "lastEventAt" : {
+          "format" : "date-time",
+          "type" : [ "string", "null" ]
+        },
+        "reporterVersion" : {
+          "type" : "string"
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "scenarioId" : {
+          "type" : [ "string", "null" ]
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "startedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "stoppedAt" : {
+          "format" : "date-time",
+          "type" : [ "string", "null" ]
+        }
+      },
+      "required" : [ "componentsSeen", "kind", "reporterVersion", "runId", "schemaVersion", "startedAt" ],
+      "type" : "object"
+    },
+    "scenarioDefinition" : {
+      "properties" : {
+        "description" : {
+          "type" : [ "string", "null" ]
+        },
+        "id" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "id" ],
+      "type" : "object"
+    },
+    "workspaceConfig" : {
+      "properties" : {
+        "aliases" : {
+          "additionalProperties" : {
+            "type" : "string"
+          },
+          "type" : "object"
+        },
+        "project" : {
+          "$ref" : "#/$defs/ProjectInfo"
+        }
+      },
+      "required" : [ "aliases", "project" ],
+      "type" : "object"
+    },
+    "workspaceView" : {
+      "properties" : {
+        "components" : {
+          "items" : {
+            "properties" : {
+              "discovered" : {
+                "type" : "boolean"
+              },
+              "displayName" : {
+                "type" : "string"
+              },
+              "hasNotes" : {
+                "type" : "boolean"
+              },
+              "id" : {
+                "type" : "string"
+              },
+              "type" : {
+                "$ref" : "#/$defs/ComponentType"
+              }
+            },
+            "required" : [ "discovered", "displayName", "hasNotes", "id", "type" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "connections" : {
+          "items" : {
+            "properties" : {
+              "from" : {
+                "type" : "string"
+              },
+              "id" : {
+                "type" : "string"
+              },
+              "kind" : {
+                "$ref" : "#/$defs/ConnectionKind"
+              },
+              "label" : {
+                "type" : [ "string", "null" ]
+              },
+              "state" : {
+                "$ref" : "#/$defs/ConnectionState"
+              },
+              "to" : {
+                "type" : "string"
+              },
+              "unverified" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "from", "id", "kind", "state", "to", "unverified" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "problems" : {
+          "items" : {
+            "properties" : {
+              "file" : {
+                "type" : "string"
+              },
+              "message" : {
+                "type" : "string"
+              }
+            },
+            "required" : [ "file", "message" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "project" : {
+          "$ref" : "#/$defs/ProjectInfo"
+        },
+        "scenarios" : {
+          "items" : {
+            "properties" : {
+              "description" : {
+                "type" : [ "string", "null" ]
+              },
+              "id" : {
+                "type" : "string"
+              },
+              "latestRunId" : {
+                "type" : [ "string", "null" ]
+              },
+              "runCount" : {
+                "format" : "int32",
+                "type" : "integer"
+              }
+            },
+            "required" : [ "id", "runCount" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "components", "connections", "problems", "project", "scenarios" ],
+      "type" : "object"
+    }
+  },
+  "required" : [ "boardLayout", "componentDefinition", "connectionDefinition", "flow", "recordingEvent", "recordingManifest", "scenarioDefinition", "workspaceConfig", "workspaceView" ],
+  "type" : "object"
+}
