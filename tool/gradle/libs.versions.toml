@@ -8,12 +8,21 @@ kotest = "6.2.6"
 mockk = "1.14.11"
 victools = "5.0.0"
 slf4j = "2.0.20"
+shadow = "9.6.1"
+# OpenTelemetry Java agent and the extension API that matches it
+opentelemetry-javaagent = "2.33.1"
+opentelemetry-instrumentation-alpha = "2.33.1-alpha"
+opentelemetry-proto = "1.11.1-alpha"
+# compileOnly: the agent provides ByteBuddy at runtime; pinned to the version opentelemetry-javaagent 2.33.1 bundles
+bytebuddy = "1.18.14"
+jakarta-servlet = "6.1.0"
 
 [libraries]
 # Build-logic plugin artifacts
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-allopen = { module = "org.jetbrains.kotlin:kotlin-allopen", version.ref = "kotlin" }
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+shadow-gradle-plugin = { module = "com.gradleup.shadow:shadow-gradle-plugin", version.ref = "shadow" }
 
 # Jackson 3: databind lives in tools.jackson, annotations stay in com.fasterxml.jackson.core
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson-annotations" }
@@ -32,5 +41,20 @@ kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref =
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 victools-generator = { module = "com.github.victools:jsonschema-generator", version.ref = "victools" }
 victools-module-jackson = { module = "com.github.victools:jsonschema-module-jackson", version.ref = "victools" }
+
+# Agent extension (compileOnly: provided by the OpenTelemetry Java agent / the instrumented app at runtime)
+opentelemetry-instrumentation-bom-alpha = { module = "io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom-alpha", version.ref = "opentelemetry-instrumentation-alpha" }
+opentelemetry-javaagent-extension-api = { module = "io.opentelemetry.javaagent:opentelemetry-javaagent-extension-api" }
+opentelemetry-instrumentation-api = { module = "io.opentelemetry.instrumentation:opentelemetry-instrumentation-api" }
+opentelemetry-sdk-extension-autoconfigure-spi = { module = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure-spi" }
+bytebuddy = { module = "net.bytebuddy:byte-buddy-dep", version.ref = "bytebuddy" }
+jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api", version.ref = "jakarta-servlet" }
+opentelemetry-javaagent = { module = "io.opentelemetry.javaagent:opentelemetry-javaagent", version.ref = "opentelemetry-javaagent" }
+opentelemetry-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "opentelemetry-proto" }
+
+# Spring Boot app modules (versions managed by the Spring Boot BOM)
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+h2 = { module = "com.h2database:h2" }
 
 [plugins]

@@ -1,0 +1,2 @@
+io.stackvibed.agent.http.ServletHeadersInstrumentationModule
+io.stackvibed.agent.http.SpringMvcBodyInstrumentationModule

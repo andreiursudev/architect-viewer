@@ -11,3 +11,6 @@ dependencyResolutionManagement {
 rootProject.name = "stack-tool"
 
 include("model")
+include("agent-contract")
+include("agent-extension")
+include("agent-fixture-app")
