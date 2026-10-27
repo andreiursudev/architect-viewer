@@ -17,6 +17,9 @@ opentelemetry-proto = "1.11.1-alpha"
 bytebuddy = "1.18.14"
 jakarta-servlet = "6.1.0"
 rest-assured = "6.3.0"
+# Viewer backend: 2.1.x is the Spring Boot 4.1 line (2.2 is still RC)
+spring-modulith = "2.1.2"
+archunit = "1.5.1"
 
 [libraries]
 # Build-logic plugin artifacts
@@ -28,6 +31,7 @@ shadow-gradle-plugin = { module = "com.gradleup.shadow:shadow-gradle-plugin", ve
 # Jackson 3: databind lives in tools.jackson, annotations stay in com.fasterxml.jackson.core
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson-annotations" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-dataformat-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 
 # Test
@@ -60,6 +64,12 @@ spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-st
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 h2 = { module = "com.h2database:h2" }
+
+# Spring Modulith (BOM-managed) and architecture tests
+spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
+spring-modulith-starter-core = { module = "org.springframework.modulith:spring-modulith-starter-core" }
+spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
+archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
 
 # Test harness (RestAssured is compileOnly: the consuming e2e build brings its own)
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
