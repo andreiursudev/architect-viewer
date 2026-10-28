@@ -1,0 +1,4 @@
+from: orders-service
+to: postgresql-orders
+kind: db
+state: accepted
