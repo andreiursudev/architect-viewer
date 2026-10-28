@@ -17,13 +17,29 @@ class LauncherScriptTest {
     private class Result(val exitCode: Int, val output: String)
 
     private fun run(env: Map<String, String> = emptyMap(), vararg args: String): Result {
+        val log = Files.createTempFile("launcher", ".log")
         val process = ProcessBuilder(listOf(script.toString()) + args)
             .redirectErrorStream(true)
+            .redirectOutput(log.toFile())
             .apply { environment().putAll(env) }
             .start()
-        val output = process.inputStream.bufferedReader().readText()
-        check(process.waitFor(120, TimeUnit.SECONDS)) { "launcher did not exit" }
-        return Result(process.exitValue(), output)
+        try {
+            val finished = process.waitFor(120, TimeUnit.SECONDS)
+            val output = Files.readString(log)
+            check(finished) { "launcher did not exit within 120s; output so far:\n$output" }
+            return Result(process.exitValue(), output)
+        } finally {
+            process.destroyForcibly().waitFor()
+            Files.deleteIfExists(log)
+        }
+    }
+
+    private fun fakeJavaHome(body: String): Path {
+        val home = createTempDirectory("fake java home")
+        val java = Files.createDirectory(home.resolve("bin")).resolve("java")
+        java.writeText("#!/bin/sh\n$body\n")
+        Files.setPosixFilePermissions(java, PosixFilePermissions.fromString("rwxr-xr-x"))
+        return home
     }
 
     @Test
@@ -41,16 +57,13 @@ class LauncherScriptTest {
 
     @Test
     fun `launcher refuses a Java older than 25 with a clear message`() {
-        val fakeHome = createTempDirectory("old java home")
-        val bin = Files.createDirectory(fakeHome.resolve("bin"))
-        val fakeJava = bin.resolve("java")
-        fakeJava.writeText("#!/bin/sh\necho 'openjdk version \"17.0.9\" 2023-10-17' >&2\n")
-        Files.setPosixFilePermissions(fakeJava, PosixFilePermissions.fromString("rwxr-xr-x"))
+        val fakeHome = fakeJavaHome("""echo 'openjdk version "17.0.9" 2023-10-17' >&2""")
 
         val result = run(mapOf("JAVA_HOME" to fakeHome.toString()), "--workspace=$fakeHome")
 
         (result.exitCode != 0) shouldBe true
         result.output shouldContain "Java 25 or newer is required"
+        result.output shouldContain "17.0.9"
     }
 
     @Test
@@ -58,6 +71,25 @@ class LauncherScriptTest {
         val result = run(mapOf("JAVA_HOME" to "/nonexistent/java home"))
 
         (result.exitCode != 0) shouldBe true
-        result.output shouldContain "Java 25 or newer is required"
+        result.output shouldContain "has no bin/java"
+    }
+
+    @Test
+    fun `launcher accepts Java 25 when the JVM prints a Picked up line first`() {
+        val fakeHome = fakeJavaHome(
+            """
+            if [ "${'$'}1" = "-version" ]; then
+              echo 'Picked up JAVA_TOOL_OPTIONS: -Xmx1g' >&2
+              echo 'openjdk version "25.0.1" 2025-10-21' >&2
+              exit 0
+            fi
+            echo "fake java launched: ${'$'}*"
+            """.trimIndent(),
+        )
+
+        val result = run(mapOf("JAVA_HOME" to fakeHome.toString()), "--workspace=$fakeHome")
+
+        result.exitCode shouldBe 0
+        result.output shouldContain "fake java launched: -jar"
     }
 }

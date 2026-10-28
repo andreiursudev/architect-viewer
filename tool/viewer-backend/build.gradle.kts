@@ -34,6 +34,7 @@ tasks.test {
     jvmArgs("-Xshare:off")
     // LauncherScriptTest runs the assembled distribution.
     dependsOn(viewerDist)
+    inputs.files(viewerDist) // re-run the launcher test whenever the distribution changes
     systemProperty("stack.viewer.dist", layout.buildDirectory.dir("stack-viewer").get().asFile.absolutePath)
 }
 
