@@ -3,9 +3,16 @@ package io.stackvibed.sandbox.e2e
 import io.stackvibed.harness.StackScenario
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import java.io.IOException
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
 
 /**
- * The tagged e2e scenarios, run against a stack that is already up (`docker compose up -d --build`, then
+ * The tagged e2e scenarios, run against a stack that is already up (`docker compose up -d --build --wait`, then
  * `sandbox/gradlew -p sandbox e2eTest`). Each test is one recorded run of its scenario.
  */
 class OrdersE2ETest {
@@ -35,7 +42,27 @@ class OrdersE2ETest {
         @JvmStatic
         @BeforeAll
         fun seedOrder() {
+            awaitHealthy()
             seededOrderId = OrdersScenarios(BASE_URL).createOrder()
+        }
+
+        /** A stack started without `--wait` may still be starting orders-service; give it a minute. */
+        private fun awaitHealthy(timeout: Duration = Duration.ofSeconds(60)) {
+            val client = HttpClient.newHttpClient()
+            val request = HttpRequest.newBuilder(URI.create("$BASE_URL/actuator/health")).timeout(Duration.ofSeconds(2)).build()
+            val deadline = Instant.now().plus(timeout)
+            while (true) {
+                val status = try {
+                    client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()
+                } catch (_: IOException) {
+                    null
+                }
+                if (status == 200) return
+                check(Instant.now().isBefore(deadline)) {
+                    "orders-service at $BASE_URL is not healthy after $timeout; is the stack up (docker compose up -d --build --wait)?"
+                }
+                Thread.sleep(500)
+            }
         }
     }
 }

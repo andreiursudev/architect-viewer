@@ -25,16 +25,21 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    tool/gradlew -p tool publishToMavenLocal :reporter:dockerImage :viewer-backend:viewerDist
    ```
 
+   The sandbox runs these built copies, not the tool sources: after any change under `tool/`, run this again (at
+   least `tool/gradlew -p tool :reporter:dockerImage` for a reporter change), then steps 2 and 3, so the stack picks
+   up the new reporter image and agent extension.
+
 2. Put the agent jars in `sandbox/build/stack-agent/` and build the orders-service jar:
 
    ```sh
    sandbox/gradlew -p sandbox stackAgent assemble
    ```
 
-3. Start the stack:
+3. Start the stack. `--wait` returns once orders-service reports healthy (its `/actuator/health`), so the tests
+   below never race its startup:
 
    ```sh
-   (cd sandbox && docker compose up -d --build)
+   (cd sandbox && docker compose up -d --build --wait)
    ```
 
 4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`:
@@ -43,11 +48,11 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    sandbox/gradlew -p sandbox e2eTest
    ```
 
-5. Open the viewer on the workspace and the recordings, then open the URL it prints (`http://localhost:8090`).
-   The viewer's default port is 8080, which orders-service already uses, hence `--server.port`:
+5. Open the viewer on the workspace and the recordings. It opens on http://localhost:8090 (it listens on this
+   machine only):
 
    ```sh
-   tool/viewer-backend/build/stack-viewer/stack-viewer --workspace=sandbox/stack --recordings=sandbox/recordings --server.port=8090
+   tool/viewer-backend/build/stack-viewer/stack-viewer --workspace=sandbox/stack --recordings=sandbox/recordings
    ```
 
 6. Stop the stack when done:
@@ -55,6 +60,11 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    ```sh
    (cd sandbox && docker compose down -v)
    ```
+
+All published ports (8080, 4318, 15432) are bound to `127.0.0.1` only.
+
+The OpenTelemetry agent version in `sandbox/gradle/libs.versions.toml` must equal the one in
+`tool/gradle/libs.versions.toml`: the stack extension uses the agent's internal APIs, so it only works in that version.
 
 Traffic that is not part of a tagged test goes to `recordings/_unassigned`: health checks, plain curl calls, and
 the order that `get-order` reads (the e2e tests create it before any scenario starts, so the `get-order` run holds
@@ -117,11 +127,10 @@ above.
   Only public images are pulled (`postgres:17`, `eclipse-temurin:25-jre`, and Testcontainers' own helpers), so no
   credentials are needed. Pulling them once (`docker pull postgres:17`) is enough; later runs use the local copies.
 - **orders-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
-  is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose up -d --build` again.
-- **`reporter` image not found.** It is built locally only: `tool/gradlew -p tool :reporter:dockerImage`.
+  is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose up -d --build --wait` again.
+- **`reporter` image not found, or the recordings do not reflect a tool change.** The image is built locally only,
+  and only when asked: `tool/gradlew -p tool :reporter:dockerImage`, then `docker compose up -d --build --wait`.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
-  15432 or 8080: `(cd sandbox && docker compose down -v)`. The viewer needs its own port too (`--server.port`).
-- **An empty `SQL` step before a query.** The connection pool validated an idle connection, which the Postgres driver
-  does with an empty query; the agent records it like any other JDBC call.
+  15432 or 8080: `(cd sandbox && docker compose down -v)`. The viewer uses 8090.
 - **A run is missing from the viewer.** Spans are exported in batches (200 ms); a run appears a moment after the
   test finishes. Untagged traffic is in `recordings/_unassigned`.

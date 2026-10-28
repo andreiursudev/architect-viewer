@@ -49,13 +49,16 @@ class StepOneAcceptanceTest {
             (it["requestBody"] as String) shouldContain "c-1"
             (it["responseBody"] as String) shouldContain "CREATED"
         }
-        run.events.single { it["type"] == "db.client" && (it["statement"] as String).startsWith("insert into orders") }
-            .let {
-                it["dbSystem"] shouldBe "postgresql"
-                it["dbName"] shouldBe "orders"
-                (it["parameters"] as List<*>) shouldContain "sku-1"
-                it["rowCount"] shouldBe 1
-            }
+        // Exactly one statement: the reporter drops the empty queries the connection pool validates connections with.
+        val statements = run.events.filter { it["type"] == "db.client" }
+        statements shouldHaveSize 1
+        statements.single().let {
+            (it["statement"] as String) shouldStartWith "insert into orders"
+            it["dbSystem"] shouldBe "postgresql"
+            it["dbName"] shouldBe "orders"
+            (it["parameters"] as List<*>) shouldContain "sku-1"
+            it["rowCount"] shouldBe 1
+        }
     }
 
     @Test
@@ -73,11 +76,9 @@ class StepOneAcceptanceTest {
             it["status"] shouldBe 200
             (it["responseBody"] as String) shouldContain seededOrderId
         }
-        // Only statements count: the connection pool may also validate its connection first, which the Postgres
-        // driver does with an empty query (a db.client event with an empty statement).
-        val selects = run.events.filter { it["type"] == "db.client" && (it["statement"] as String).isNotBlank() }
-        selects shouldHaveSize 1
-        selects.single().let {
+        val statements = run.events.filter { it["type"] == "db.client" }
+        statements shouldHaveSize 1
+        statements.single().let {
             (it["statement"] as String) shouldStartWith "select"
             (it["parameters"] as List<*>) shouldContain seededOrderId
         }

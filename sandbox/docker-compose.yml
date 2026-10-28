@@ -1,9 +1,12 @@
 # The step-1 sandbox stack: orders-service (under the OpenTelemetry agent with the stack extension), its Postgres
 # database, and the stack reporter that writes what the agent exports into ./recordings.
 #
-# Before `docker compose up -d --build` (see README.md):
+# Before `docker compose up -d --build --wait` (see README.md):
 #   tool/gradlew -p tool publishToMavenLocal :reporter:dockerImage
 #   sandbox/gradlew -p sandbox stackAgent assemble
+#
+# Ports are published on 127.0.0.1 only: recorded traffic is not redacted, and nothing here needs to be reachable
+# from other machines.
 services:
   postgres:
     image: postgres:17
@@ -14,7 +17,7 @@ services:
     ports:
       # For orders-service run from the IDE (application.yaml). Not 5432, so a Postgres installed on the host
       # (which usually owns localhost:5432) cannot shadow it.
-      - "15432:5432"
+      - "127.0.0.1:15432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
       interval: 2s
@@ -26,14 +29,14 @@ services:
     # Built locally by `tool/gradlew -p tool :reporter:dockerImage`; it is not on any registry.
     pull_policy: never
     ports:
-      - "4318:4318"
+      - "127.0.0.1:4318:4318"
     volumes:
       - ./recordings:/recordings
 
   orders-service:
     build: ./services/orders-service
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       JAVA_TOOL_OPTIONS: >-
         -javaagent:/stack-agent/opentelemetry-javaagent.jar
@@ -49,3 +52,16 @@ services:
         condition: service_healthy
       reporter:
         condition: service_started
+    # `docker compose up --wait` returns once this passes, so the e2e tests never race the service's startup.
+    # The JRE image has neither curl nor wget, so bash asks the actuator itself. Each probe is a traced request
+    # (it lands in recordings/_unassigned), hence frequent probes only while starting and rare ones after that.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf ''GET /actuator/health HTTP/1.0\r\n\r\n'' >&3 && grep -q ''"status":"UP"'' <&3'
+      interval: 60s
+      timeout: 5s
+      start_period: 120s
+      start_interval: 1s

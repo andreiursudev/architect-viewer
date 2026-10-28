@@ -6,6 +6,8 @@ jackson = "3.2.4"
 junit = "6.1.3"
 kotest = "6.2.6"
 rest-assured = "6.3.0"
+# Must equal opentelemetry-javaagent in tool/gradle/libs.versions.toml: the stack extension is built against that
+# agent and uses its internal (non-public, unstable) APIs, so it only works inside the same agent version.
 opentelemetry-javaagent = "2.33.1"
 # The version the Spring Boot 4.1.2 BOM manages; pinned here because e2e-tests is not a Spring Boot project.
 testcontainers = "2.0.5"
