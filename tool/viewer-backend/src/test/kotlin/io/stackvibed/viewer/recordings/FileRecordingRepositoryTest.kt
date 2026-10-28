@@ -30,7 +30,7 @@ class FileRecordingRepositoryTest {
     fun `reads manifests of all runs`() {
         Fixtures.copyAll(recordings)
 
-        repository().manifests().map { it.runId } shouldContainExactlyInAnyOrder listOf("run-1", "run-2", "run-3")
+        repository().manifests().map { it.runId } shouldContainExactlyInAnyOrder listOf("run-1", "run-2", "run-3", "run-4")
     }
 
     @Test
@@ -102,7 +102,7 @@ class FileRecordingRepositoryTest {
         recordings.resolve("_unassigned").resolve("manifest.json")
             .writeText(recordings.resolve(Fixtures.GET_ORDER_3).resolve("manifest.json").toFile().readText().replace("run-3", "_unassigned"))
 
-        repository().manifests().map { it.runId } shouldContainExactlyInAnyOrder listOf("run-1", "run-2", "run-3")
+        repository().manifests().map { it.runId } shouldContainExactlyInAnyOrder listOf("run-1", "run-2", "run-3", "run-4")
         shouldThrow<NoSuchElementException> { repository().events("_unassigned") }
     }
 

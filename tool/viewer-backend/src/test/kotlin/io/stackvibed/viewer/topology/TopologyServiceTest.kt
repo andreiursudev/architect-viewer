@@ -65,6 +65,41 @@ class TopologyServiceTest {
     }
 
     @Test
+    fun `caller of a service hop is a service`() {
+        Fixtures.copyRun(Fixtures.OUT_OF_STOCK_4, recordingsDir)
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "orders-service" to ComponentType.SERVICE,
+            "inventory-service" to ComponentType.SERVICE,
+            "postgresql-inventory" to ComponentType.DATABASE,
+        )
+        view.connection("orders-service--inventory-service").state shouldBe ConnectionState.DISCOVERED
+        view.connection("orders-service--inventory-service").kind shouldBe ConnectionKind.HTTP
+        view.connection("orders-service--inventory-service").label shouldBe "POST /reservations"
+    }
+
+    @Test
+    fun `callee of an unrecorded host is a service`() {
+        val call = """{"type":"http.client","schemaVersion":2,"eventId":"t-c","runId":"run-9","traceId":"t","spanId":"c","parentSpanId":null,"component":"orders-service","startEpochNanos":1,"durationNanos":1,"method":"POST","url":"http://billing:8082/charges","serverAddress":"billing","serverPort":8082,"status":null,"errorType":"java.net.ConnectException"}"""
+        recordingsDir.resolve("run-9").createDirectories()
+        recordingsDir.resolve("run-9/manifest.json").writeText(
+            """{"schemaVersion":2,"runId":"run-9","scenarioId":"charge","kind":"e2e","startedAt":"2026-10-28T10:00:00Z","lastEventAt":null,"stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["orders-service"]}""",
+        )
+        recordingsDir.resolve("run-9/events.jsonl").writeText(call + "\n")
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "orders-service" to ComponentType.SERVICE,
+            "billing" to ComponentType.SERVICE,
+        )
+        view.connection("orders-service--billing").label shouldBe "POST /charges"
+    }
+
+    @Test
     fun `a discovered http connection is labelled with every route of its evidence, in first-seen order`() {
         Fixtures.copyAll(recordingsDir)
 
@@ -246,6 +281,7 @@ class TopologyServiceTest {
         service().workspaceView().scenarios shouldBe listOf(
             ScenarioSummary("cancel-order", "Cancel it", null, 0),
             ScenarioSummary("create-order", "Create it", "run-2", 2),
+            ScenarioSummary("create-order-out-of-stock", null, "run-4", 1),
             ScenarioSummary("get-order", null, "run-3", 1),
         )
     }

@@ -9,6 +9,9 @@ object Fixtures {
     const val CREATE_ORDER_2 = "2026-10-27T23-10-00_create-order_run-2"
     const val GET_ORDER_3 = "2026-10-27T23-20-00_get-order_run-3"
 
+    /** A schema version 2 run: orders-service calls inventory-service, which answers 409 for `sku-out`. */
+    const val OUT_OF_STOCK_4 = "2026-10-28T09-00-00_create-order-out-of-stock_run-4"
+
     val recordings: Path = Path.of(Fixtures::class.java.getResource("/fixtures/recordings")!!.toURI())
 
     /** Copies one fixture run folder into [targetRoot] (created if needed) and returns the copy. */

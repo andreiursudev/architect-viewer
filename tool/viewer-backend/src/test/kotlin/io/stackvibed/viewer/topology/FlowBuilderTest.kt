@@ -2,7 +2,9 @@ package io.stackvibed.viewer.topology
 
 import io.kotest.matchers.shouldBe
 import io.stackvibed.model.ComponentIds
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.stackvibed.model.DbClientEvent
+import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
@@ -97,6 +99,95 @@ class FlowBuilderTest {
         steps.getValue("inner").parentStepId shouldBe null
     }
 
+    @Test
+    fun `called server is one hop from its caller`() {
+        val orders = http("orders", "orders-service", 0, 1000)
+        val call = client("call", "orders-service", 100, 500, url = "http://inventory-service:8081/reservations", parent = "orders")
+        val inventory = http("inventory", "inventory-service", 150, 400, route = "/reservations", path = "/reservations", parent = "call", method = "POST")
+        val update = db("update", "inventory-service", 200, 100, "update stock set available = available - ? where sku = ?", dbName = "inventory")
+
+        val flow = builder.build(emptyManifest(), listOf(orders, call, inventory, update), emptyMap())
+
+        flow.steps.map { it.connectionId } shouldBe listOf(
+            "e2e-client--orders-service", "orders-service--inventory-service", "inventory-service--postgresql-inventory",
+        )
+        val (ordersStep, hop, dbStep) = flow.steps
+        ordersStep.parentStepId shouldBe null
+        hop.parentStepId shouldBe ordersStep.stepId
+        hop.stepId shouldBe "inventory"
+        hop.kind shouldBe ConnectionKind.HTTP
+        hop.label shouldBe "POST /reservations"
+        hop.event.shouldBeInstanceOf<HttpServerEvent>()
+        dbStep.parentStepId shouldBe hop.stepId
+    }
+
+    @Test
+    fun `unreachable callee is a failed hop to the host`() {
+        val orders = http("orders", "orders-service", 0, 1000)
+        val call = client(
+            "call", "orders-service", 100, 500, url = "http://inventory-service:8081/reservations", parent = "orders",
+            serverAddress = "inventory-service", status = null, errorType = "java.net.ConnectException",
+        )
+
+        val flow = builder.build(emptyManifest(), listOf(orders, call), emptyMap())
+
+        val hop = flow.steps.last()
+        flow.steps.map { it.connectionId } shouldBe listOf("e2e-client--orders-service", "orders-service--inventory-service")
+        hop.status shouldBe null
+        hop.kind shouldBe ConnectionKind.HTTP
+        hop.label shouldBe "POST /reservations"
+        hop.parentStepId shouldBe "orders"
+        hop.event.shouldBeInstanceOf<HttpClientEvent>()
+    }
+
+    @Test
+    fun `host name becomes a slug component`() {
+        val call = client("call", "orders-service", 0, 10, url = "http://Inventory-Service.internal/x", serverAddress = "Inventory-Service.internal")
+
+        builder.build(emptyManifest(), listOf(call), emptyMap()).steps.single().to shouldBe "inventory-service-internal"
+    }
+
+    @Test
+    fun `call without a host goes to unknown-host and an unparsable url is the label as it is`() {
+        val call = client("call", "orders-service", 0, 10, url = "not a url", serverAddress = null)
+
+        val step = builder.build(emptyManifest(), listOf(call), emptyMap()).steps.single()
+
+        step.to shouldBe "unknown-host"
+        step.label shouldBe "POST not a url"
+    }
+
+    @Test
+    fun `aliases apply to both ends of a hop`() {
+        val call = client("call", "orders-service", 100, 500, url = "http://inventory-service:8081/reservations", parent = null)
+        val inventory = http("inventory", "inventory-service", 150, 400, parent = "call")
+
+        val flow = builder.build(emptyManifest(), listOf(call, inventory), mapOf("orders-service" to "orders", "inventory-service" to "stock"))
+
+        flow.steps.single().connectionId shouldBe "orders--stock"
+    }
+
+    @Test
+    fun `version 1 recording still builds a flow`() {
+        val flow = builder.build(manifest, events, emptyMap())
+
+        flow.steps.map { it.connectionId } shouldBe listOf("e2e-client--orders-service", "orders-service--postgresql-orders")
+        flow.steps[1].parentStepId shouldBe flow.steps[0].stepId
+    }
+
+    @Test
+    fun `out of stock fixture run is a hop with a nested database update`() {
+        val manifest = repository.manifests().first { it.runId == "run-4" }
+        val flow = builder.build(manifest, repository.events("run-4"), emptyMap())
+
+        flow.steps.map { it.connectionId } shouldBe listOf(
+            "e2e-client--orders-service", "orders-service--inventory-service", "inventory-service--postgresql-inventory",
+        )
+        flow.steps.map { it.status } shouldBe listOf(409, 409, null)
+        flow.steps[1].parentStepId shouldBe flow.steps[0].stepId
+        flow.steps[2].parentStepId shouldBe flow.steps[1].stepId
+    }
+
     private fun emptyManifest() = RecordingManifest(
         runId = "r", scenarioId = null, kind = RecordingKind.MANUAL, startedAt = Instant.EPOCH,
         lastEventAt = null, stoppedAt = null, reporterVersion = "test", componentsSeen = emptyList(),
@@ -104,17 +195,28 @@ class FlowBuilderTest {
 
     private fun http(
         id: String, component: String, start: Long, duration: Long,
-        route: String? = "/x", path: String = "/x", trace: String = "t1",
+        route: String? = "/x", path: String = "/x", trace: String = "t1", parent: String? = null, method: String = "GET",
     ): RecordingEvent = HttpServerEvent(
-        eventId = id, runId = "r", traceId = trace, spanId = id, parentSpanId = null, component = component,
-        startEpochNanos = start, durationNanos = duration, method = "GET", route = route, path = path, status = 200,
+        eventId = id, runId = "r", traceId = trace, spanId = id, parentSpanId = parent, component = component,
+        startEpochNanos = start, durationNanos = duration, method = method, route = route, path = path, status = 200,
         requestHeaders = emptyMap(), responseHeaders = emptyMap(), requestBody = null, responseBody = null,
     )
 
-    private fun db(id: String, component: String, start: Long, duration: Long, statement: String = "select 1"): RecordingEvent =
+    private fun client(
+        id: String, component: String, start: Long, duration: Long, url: String, parent: String? = null,
+        serverAddress: String? = "inventory-service", status: Int? = 201, errorType: String? = null,
+    ): RecordingEvent = HttpClientEvent(
+        eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = parent, component = component,
+        startEpochNanos = start, durationNanos = duration, method = "POST", url = url, serverAddress = serverAddress,
+        serverPort = null, status = status, errorType = errorType,
+    )
+
+    private fun db(
+        id: String, component: String, start: Long, duration: Long, statement: String = "select 1", dbName: String = "orders",
+    ): RecordingEvent =
         DbClientEvent(
             eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = null, component = component,
-            startEpochNanos = start, durationNanos = duration, dbSystem = "postgresql", dbName = "orders",
+            startEpochNanos = start, durationNanos = duration, dbSystem = "postgresql", dbName = dbName,
             statement = statement, parameters = emptyList(), rowCount = null,
         )
 }

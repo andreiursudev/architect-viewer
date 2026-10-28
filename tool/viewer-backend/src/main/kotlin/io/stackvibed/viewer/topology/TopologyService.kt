@@ -72,12 +72,10 @@ class TopologyService(
     }
 
     private fun observe(step: FlowStep, into: Observed) {
-        val (fromType, toType) = when (step.kind) {
-            ConnectionKind.HTTP -> ComponentType.CLIENT to ComponentType.SERVICE
-            ConnectionKind.DB -> ComponentType.SERVICE to ComponentType.DATABASE
-        }
-        // The e2e client is a client wherever it shows up, and a database is not downgraded to a service.
-        into.componentTypes.putIfAbsent(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else fromType)
+        // Only the e2e client calls from outside; every other caller, of an HTTP hop or a database, is a service.
+        val toType = if (step.kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE
+        // A database is not downgraded to a service.
+        into.componentTypes.putIfAbsent(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else ComponentType.SERVICE)
         into.componentTypes.merge(step.to, toType) { known, new -> if (new == ComponentType.DATABASE) new else known }
         val connection = into.connections.getOrPut(step.connectionId) { ObservedConnection(step.from, step.to, step.kind) }
         // A database call's label is its SQL, which says nothing about the connection as a whole.
