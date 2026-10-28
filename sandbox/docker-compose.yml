@@ -5,6 +5,7 @@
 # Before `docker compose up -d --build --wait` (see README.md):
 #   tool/gradlew -p tool publishToMavenLocal :reporter:dockerImage
 #   sandbox/gradlew -p sandbox stackAgent assemble
+# On Podman, add docker-compose.podman.yml (see README.md, "With Podman").
 #
 # Ports are published on 127.0.0.1 only: recorded traffic is not redacted, and nothing here needs to be reachable
 # from other machines.

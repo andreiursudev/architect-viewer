@@ -25,7 +25,7 @@ The tool is built **incrementally against a sample system** (the sandbox) that g
 7. **Vertical layers** (security, logging, retry, caching, …) highlightable in primary and component views.
 8. **Infrastructure view**: Kubernetes/GKE and managed GCP resources per component.
 9. **Production view**: production logs/metrics/traces matching a scenario, from Datadog.
-10. Runs on **macOS**. Windows support is **deferred** (D26): not developed or tested for now, but the design stays portable so it can be added later.
+10. Runs on **macOS** and **Windows** (D26).
 
 ## 3. Non-goals
 
@@ -45,7 +45,7 @@ The tool is built **incrementally against a sample system** (the sandbox) that g
 
 ## 5. Constraints
 
-- macOS now; Windows later (D26). Docker Desktop available; Java 25 installed locally; Node 22 installed.
+- macOS and Windows (D26). Docker Desktop or Podman available; Java 25 for the viewer (the Gradle builds download one when missing); Node 22 installed.
 - Target systems: Spring Boot (Java/Kotlin) microservices, Kafka, Postgres-like databases, mocked 3rd parties (WireMock-style), deployed on GKE.
 - Local stack runs in docker-compose; services are also run/debugged from IntelliJ.
 - Production observability is **Datadog**. Whether production logs carry trace IDs is **unknown** (to be checked: a "Trace" tab / `dd.trace_id` on a production log).
@@ -72,7 +72,7 @@ The tool is built **incrementally against a sample system** (the sandbox) that g
 | D15 | **Infrastructure view:** Fabric8 Kubernetes client against the user's kubeconfig (contexts, `gke-gcloud-auth-plugin`), with live watches; **Cloud Asset Inventory** via Application Default Credentials for managed GCP resources. Workload ↔ component mapping by `app.kubernetes.io/name`, fallback Deployment name, exceptions as workspace aliases. **Hard read-only** (no write calls in the codebase); Secret values never read, only names/keys. |
 | D16 | **Production view: Datadog adapter first.** Scenario **signature** (entry point, ordered components/topics, route templates) derived from the reference recording → Datadog spans search → logs by trace ID → metrics per service/resource. Fallback when logs lack trace IDs: entry point + time window. Per-scenario saved Datadog queries as overrides. Datadog service names mapped via workspace aliases. Read-only, queried live, never persisted. GCP/LGTM adapters only if ever needed, behind the same port. |
 | D17 | **Datadog credentials from environment variables only:** `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`. Production view disabled when missing. Never logged, never written, only sent to the configured Datadog site. (Recommended, not enforced by the tool: Application key with read-only scopes.) |
-| D18 | **Viewer distribution:** self-contained Spring Boot jar with the React UI bundled, started via the launcher script `stack-viewer` (sh; a Windows `.cmd` launcher comes with D26), e.g. `stack-viewer --workspace ./stack`. Dev mode: `./gradlew :viewer-backend:bootRun` + Vite dev server with hot reload. `jpackage` installer possible later. Reporter runs as a container in the system's docker-compose. |
+| D18 | **Viewer distribution:** self-contained Spring Boot jar with the React UI bundled, started via the launcher script `stack-viewer` (sh, and `stack-viewer.cmd` on Windows; Java from `STACK_VIEWER_JAVA_HOME`, else `JAVA_HOME`, else `PATH`), e.g. `stack-viewer --workspace ./stack`. Dev mode: `./gradlew :viewer-backend:bootRun` + Vite dev server with hot reload. `jpackage` installer possible later. Reporter runs as a container in the system's docker-compose. |
 | D19 | **Workspace:** a `stack/` folder in whichever repo holds the system's docker-compose; viewer takes `--workspace <path>`. Layout below (§8). One file per item. YAML written by the viewer does **not** preserve hand-written comments; prose lives in Markdown notes. |
 | D20 | **Repo layout:** one repo, two independent Gradle builds — `tool/` and `sandbox/`. Sandbox consumes the tool only through published artifacts (`mavenLocal` / composite build for convenience). Kotlin DSL + version catalogs in both. |
 | D21 | **Testing strategy: test-first.** See §12. |
@@ -80,7 +80,7 @@ The tool is built **incrementally against a sample system** (the sandbox) that g
 | D23 | **No redaction of recorded traffic.** Local stacks only carry test data; the credentials anti-goal covers only the tool's own credentials. |
 | D24 | **Connections are workspace files** (`connections/<from>--<to>.yaml`: kind, label, state, notes). **Evidence = latest recording per scenario + all reference recordings**; older recordings stay viewable but don't shape topology. States: `discovered` (in evidence, not accepted), `accepted`, `manual` (user-drawn, no evidence required), `hidden` (in evidence, suppressed on the board). The board flags **both** mismatches: evidence without an accepted connection → "discovered" badge; accepted connection without current evidence → dashed "unverified". |
 | D25 | **Local verification only, macOS.** No CI for now. The full `tool/` build — unit, agent (forked JVM), reporter golden files, viewer backend, Playwright UI — runs locally with `tool/gradlew -p tool build`; the sandbox acceptance test runs locally against Docker Desktop. *(Revised 2026-10-27: GitHub Actions CI removed. Revised 2026-10-28: the repo is now on GitHub as a public repository; still no CI.)* |
-| D26 | **Windows deferred.** Development targets **macOS only**: no Windows development, launcher or checks for now; the owner will want to run the tool on Windows at some point. Until then, keep it portable at no extra cost: file paths via `java.nio.file.Path` / `path.join`; ids and folder names the tool writes are slugs without characters Windows forbids (`:`, `\`, `/`, `?`, `*`, `"`, `<`, `>`, `|`); no POSIX-only assumptions in Java/Kotlin/TS code; build logic in Gradle, not shell. Adding Windows later = a `.cmd` launcher, running the build and a docker-compose check on Windows (and a Windows CI runner if CI exists by then). |
+| D26 | **Windows deferred.** Development targets **macOS only**: no Windows development, launcher or checks for now; the owner will want to run the tool on Windows at some point. Until then, keep it portable at no extra cost: file paths via `java.nio.file.Path` / `path.join`; ids and folder names the tool writes are slugs without characters Windows forbids (`:`, `\`, `/`, `?`, `*`, `"`, `<`, `>`, `|`); no POSIX-only assumptions in Java/Kotlin/TS code; build logic in Gradle, not shell. Adding Windows later = a `.cmd` launcher, running the build and a docker-compose check on Windows (and a Windows CI runner if CI exists by then). *(Revised 2026-10-28: Windows is supported. `.gitattributes` checks text out with LF (CRLF for `.bat`/`.cmd`); the viewer has a `stack-viewer.cmd` launcher; the Gradle builds provision Java 25 themselves (daemon JVM criteria + foojay toolchain resolver); README commands run unchanged in PowerShell; the sandbox runs on Docker Desktop or Podman (`docker-compose.podman.yml`, classic builder). The `tool/` build and the sandbox README steps were run on Windows 11 with Podman; the acceptance test has not been run on Windows or Podman yet.)* |
 
 ## 7. Architecture
 
@@ -208,7 +208,7 @@ Level 2 + component view; Kafka, WireMock (with client-side body capture); layer
 - UI: Vitest + React Testing Library; Playwright e2e against fixture workspaces/recordings.
 - Sandbox acceptance: compose up → run e2e with agent → assert recording describes the expected flow.
 - Contract: JSON-schema snapshot of `model`; any change is deliberate and bumps `schemaVersion`.
-- Verification: local only on macOS (D25). Windows: deferred (D26).
+- Verification: local only (D25), on macOS and Windows (D26).
 
 ## 13. Builder's calls (made by Claude, owner to check)
 

@@ -19,7 +19,14 @@ extension and the test harness come from `mavenLocal`, the reporter from its Doc
 | `stack/` | the committed workspace the viewer opens (`workspace.yaml`, `scenarios/`, and later components, connections, notes) |
 | `recordings/` | what the reporter recorded; gitignored |
 
-All commands below run from the repository root. Requirements: Java 25 and Docker Desktop.
+All commands below run from the repository root, unchanged on macOS, Linux and Windows (PowerShell or Git Bash:
+there `tool/gradlew` runs `gradlew.bat`, and `stack-viewer` runs `stack-viewer.cmd`). Requirements: Docker Desktop or
+Podman (see [With Podman](#with-podman)), and Java 25 for the viewer. The viewer launcher takes Java from
+`STACK_VIEWER_JAVA_HOME` when set, else `JAVA_HOME`, else `java` on `PATH`: to keep another Java as the machine
+default, install Java 25 without adding it to `PATH` and point `STACK_VIEWER_JAVA_HOME` (a user environment variable)
+at it. On Windows, `winget install EclipseAdoptium.Temurin.25.JDK --override "/quiet ADDLOCAL=FeatureMain"` installs
+it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular local JDK: when no Java 25 is installed they download one into `~/.gradle/jdks`
+(`tool/gradle/gradle-daemon-jvm.properties` and the foojay toolchain resolver in the `settings.gradle.kts` files).
 
 ## Run it
 
@@ -43,7 +50,7 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    waits for inventory-service), so the tests below never race their startup:
 
    ```sh
-   (cd sandbox && docker compose up -d --build --wait)
+   docker compose -f sandbox/docker-compose.yml up -d --build --wait
    ```
 
 4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`, and the
@@ -63,7 +70,7 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
 6. Stop the stack when done:
 
    ```sh
-   (cd sandbox && docker compose down -v)
+   docker compose -f sandbox/docker-compose.yml down -v
    ```
 
 All published ports (8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres, 15433
@@ -87,6 +94,34 @@ curl -X POST localhost:8080/orders -H 'Content-Type: application/json' -d '{"cus
 curl -X POST localhost:4318/api/recordings/stop
 ```
 
+In Windows PowerShell, where `curl` is an alias of `Invoke-WebRequest`, the same with `Invoke-RestMethod`:
+
+```powershell
+Invoke-RestMethod -Method Post http://localhost:4318/api/recordings/start -ContentType application/json -Body '{"scenarioId":"create-order"}'
+Invoke-RestMethod -Method Post http://localhost:8080/orders -ContentType application/json -Body '{"customerId":"c-1","sku":"sku-1","quantity":2}'
+Invoke-RestMethod -Method Post http://localhost:4318/api/recordings/stop
+```
+
+## With Podman
+
+The stack also runs on Podman instead of Docker Desktop, through the `docker` CLI and Compose talking to Podman's
+Docker-compatible API (on Windows the `podman machine` forwards it to Docker's default pipe, so no `DOCKER_HOST` is
+needed). Two differences, for the whole session (PowerShell; `export DOCKER_BUILDKIT=0 COMPOSE_BAKE=false` in sh):
+
+```powershell
+$env:DOCKER_BUILDKIT = '0'
+$env:COMPOSE_BAKE = 'false'
+```
+
+- Compose builds the service images with the classic builder, which Podman runs itself. Through BuildKit the images
+  are built in a separate builder container and streamed into Podman, which can hang its API.
+- Add `-f sandbox/docker-compose.podman.yml` to every `docker compose` command, e.g.
+  `docker compose -f sandbox/docker-compose.yml -f sandbox/docker-compose.podman.yml up -d --build --wait`. Compose
+  refuses `healthcheck.start_interval` on Podman, so the override drops it and probes the services every 10s.
+
+`tool/gradlew -p tool :reporter:dockerImage` needs no change: it builds with BuildKit and `--load`, whatever
+`DOCKER_BUILDKIT` says. The acceptance test (Testcontainers) has not been run on Podman.
+
 ## Acceptance test
 
 ```sh
@@ -104,7 +139,7 @@ the IDE under the agent:
 
 ```sh
 sandbox/gradlew -p sandbox stackAgent :services:inventory-service:assemble
-(cd sandbox && docker compose up -d --build --wait postgres inventory-service reporter)
+docker compose -f sandbox/docker-compose.yml up -d --build --wait postgres inventory-service reporter
 ```
 
 Run configuration for `io.stackvibed.sandbox.orders.OrdersApplicationKt` (module `orders-service.main`), environment
@@ -139,16 +174,21 @@ above.
   Only public images are pulled (`postgres:17`, `eclipse-temurin:25-jre`, and Testcontainers' own helpers), so no
   credentials are needed. Pulling them once (`docker pull postgres:17`) is enough; later runs use the local copies.
 - **orders-service or inventory-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
-  is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose up -d --build --wait` again.
+  is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose -f sandbox/docker-compose.yml up -d --build --wait` again.
 - **`reporter` image not found, or the recordings do not reflect a tool change.** The image is built locally only,
-  and only when asked: `tool/gradlew -p tool :reporter:dockerImage`, then `docker compose up -d --build --wait`.
+  and only when asked: `tool/gradlew -p tool :reporter:dockerImage`, then `docker compose -f sandbox/docker-compose.yml up -d --build --wait`.
+- **Podman: `docker compose` or `docker ps` hangs, while `podman ps` still answers.** Podman's Docker-compatible API is
+  stuck, typically on an image streamed in by a BuildKit build. `podman machine stop`, `podman machine start`, and use
+  the classic builder as in [With Podman](#with-podman).
+- **Podman: `can't set healthcheck.start_interval as feature require Docker Engine v25 or later`.** Add
+  `-f sandbox/docker-compose.podman.yml` (see [With Podman](#with-podman)).
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
-  15432, 15433, 8080 or 8081: `(cd sandbox && docker compose down -v)`. The viewer uses 8090 (`--server.port=<n>`
+  15432, 15433, 8080 or 8081: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
   to move it).
 - **`POST /orders` answers `5xx` and the hop to inventory-service is marked failed.** orders-service cannot reach
   inventory-service, so no inventory-service server span is recorded; the orders-service to inventory-service hop
   still shows in the viewer, marked failed, with the error and no status. Start the whole stack
-  (`docker compose up -d --build --wait`), or, with orders-service run from the IDE, inventory-service on
+  (`docker compose -f sandbox/docker-compose.yml up -d --build --wait`), or, with orders-service run from the IDE, inventory-service on
   `localhost:8081`.
 - **A run is missing from the viewer.** Spans are exported in batches (200 ms); a run appears a moment after the
   test finishes. Untagged traffic is in `recordings/_unassigned`.

@@ -20,10 +20,10 @@ dependencies {
 // A fixed file name keeps the launcher independent of the project version.
 tasks.bootJar { archiveFileName = "stack-viewer.jar" }
 
-// The distribution: the boot jar next to the `stack-viewer` launcher (src/dist). Windows is deferred, so only the sh launcher.
+// The distribution: the boot jar next to the launchers (src/dist): `stack-viewer` (sh) and `stack-viewer.cmd` (Windows).
 val viewerDist = tasks.register<Sync>("viewerDist") {
     group = "distribution"
-    description = "Assembles build/stack-viewer: stack-viewer.jar and the stack-viewer launcher script."
+    description = "Assembles build/stack-viewer: stack-viewer.jar and the stack-viewer launchers (sh and cmd)."
     from(tasks.bootJar)
     from("src/dist")
     into(layout.buildDirectory.dir("stack-viewer"))

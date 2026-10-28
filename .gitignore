@@ -2,6 +2,9 @@ build/
 .gradle/
 node_modules/
 dist/
+# The viewer's launchers, not build output.
+!/tool/viewer-backend/src/dist/
 /recordings/
-/sandbox/recordings/
+/sandbox/recordings/*
+!/sandbox/recordings/.gitkeep
 .idea/

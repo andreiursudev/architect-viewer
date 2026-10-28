@@ -1,7 +1,8 @@
 #!/bin/sh
 # Stack viewer launcher (POSIX sh).
 # Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
-# Needs Java 25+ (from $JAVA_HOME/bin/java when JAVA_HOME is set, otherwise `java` on PATH).
+# Needs Java 25+: from $STACK_VIEWER_JAVA_HOME/bin/java when that is set (a Java for the viewer only, leaving JAVA_HOME
+# and PATH to the machine's default Java), else from $JAVA_HOME/bin/java when that is set, otherwise `java` on PATH.
 
 MIN_JAVA=25
 
@@ -14,16 +15,25 @@ esac
 script_dir=$(CDPATH= cd -- "$script_dir" && pwd) || exit 1
 jar="$script_dir/stack-viewer.jar"
 
-if [ -n "${JAVA_HOME:-}" ]; then
-    java_cmd="$JAVA_HOME/bin/java"
+java_home_var=
+if [ -n "${STACK_VIEWER_JAVA_HOME:-}" ]; then
+    java_home_var=STACK_VIEWER_JAVA_HOME
+    java_home=$STACK_VIEWER_JAVA_HOME
+elif [ -n "${JAVA_HOME:-}" ]; then
+    java_home_var=JAVA_HOME
+    java_home=$JAVA_HOME
+fi
+
+if [ -n "$java_home_var" ]; then
+    java_cmd="$java_home/bin/java"
     if [ ! -x "$java_cmd" ]; then
-        echo "stack-viewer: Java $MIN_JAVA or newer is required, but JAVA_HOME ($JAVA_HOME) has no bin/java." >&2
+        echo "stack-viewer: Java $MIN_JAVA or newer is required, but $java_home_var ($java_home) has no bin/java." >&2
         exit 1
     fi
 else
     java_cmd=java
     if ! command -v java >/dev/null 2>&1; then
-        echo "stack-viewer: Java $MIN_JAVA or newer is required, but 'java' was not found on PATH. Install a JDK $MIN_JAVA+ or set JAVA_HOME." >&2
+        echo "stack-viewer: Java $MIN_JAVA or newer is required, but 'java' was not found on PATH. Install a JDK $MIN_JAVA+ and set STACK_VIEWER_JAVA_HOME or JAVA_HOME." >&2
         exit 1
     fi
 fi

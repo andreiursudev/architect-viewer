@@ -1,0 +1,16 @@
+# Override for Podman (its Docker-compatible API), on top of docker-compose.yml:
+#   docker compose -f sandbox/docker-compose.yml -f sandbox/docker-compose.podman.yml up -d --build --wait
+#
+# Compose sets healthcheck.start_interval only on Docker Engine API 1.44+, which Podman does not report, so it is
+# reset here. Without it there is no fast probing while starting: a probe every 10s instead, so `--wait` returns at
+# most ~10s after a service is up. Each probe is a traced request (recordings/_unassigned), hence not more often.
+services:
+  orders-service:
+    healthcheck:
+      start_interval: !reset null
+      interval: 10s
+
+  inventory-service:
+    healthcheck:
+      start_interval: !reset null
+      interval: 10s

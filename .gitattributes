@@ -1,0 +1,9 @@
+# Text files are checked out with LF on every OS: the shell scripts (gradlew, stack-viewer) run in sh, and the golden
+# and snapshot files the tests compare byte for byte stay identical on Windows and macOS.
+* text=auto eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.jar binary

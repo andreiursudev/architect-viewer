@@ -39,5 +39,6 @@ tasks.register<Exec>("dockerImage") {
     inputs.file(layout.projectDirectory.file("Dockerfile"))
     inputs.file(tasks.bootJar.flatMap { it.archiveFile })
     workingDir = projectDir
-    commandLine("docker", "build", "-t", dockerImageTag, ".")
+    // --load: with a buildx builder on the docker-container driver the image would otherwise stay in the build cache.
+    commandLine("docker", "build", "--load", "-t", dockerImageTag, ".")
 }

@@ -2,4 +2,6 @@ build/
 .gradle/
 .kotlin/
 # Written by the reporter (docker-compose.yml volume); never committed.
-/recordings/
+/recordings/*
+# Kept so the reporter's bind mount has a source: Podman, unlike Docker Desktop, does not create a missing one.
+!/recordings/.gitkeep

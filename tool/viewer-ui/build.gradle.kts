@@ -3,6 +3,7 @@ import com.github.gradle.node.npm.task.NpxTask
 
 plugins {
     base
+    `jvm-toolchains`
     alias(libs.plugins.node.gradle)
 }
 
@@ -50,6 +51,9 @@ val e2eTest = tasks.register<NpmTask>("e2eTest") {
     description = "Runs the Playwright end-to-end tests against the built stack-viewer jar."
     dependsOn(tasks.npmInstall, playwrightInstall, ":viewer-backend:bootJar")
     args = listOf("run", "e2e")
+    // The jar needs the Java the tool builds with (stack.kotlin-library), whatever `java` is first on PATH.
+    val viewerJava = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    environment.put("STACK_VIEWER_JAVA", viewerJava.map { it.executablePath.asFile.absolutePath })
     inputs.files("package.json", "package-lock.json", "playwright.config.ts")
     inputs.dir("e2e")
     inputs.dir("src")
