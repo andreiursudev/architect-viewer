@@ -1,0 +1,2 @@
+id: create-order-out-of-stock
+description: A customer orders a sku that is out of stock (POST /orders); inventory-service refuses the reservation (409) and orders-service stores nothing.

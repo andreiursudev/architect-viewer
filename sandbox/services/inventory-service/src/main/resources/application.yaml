@@ -1,0 +1,18 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    # docker-compose.yml overrides this (SPRING_DATASOURCE_URL); localhost:15433 is the compose inventory-db as
+    # seen from the host, for a run from the IDE.
+    url: jdbc:postgresql://localhost:15433/inventory
+    username: inventory
+    password: inventory
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

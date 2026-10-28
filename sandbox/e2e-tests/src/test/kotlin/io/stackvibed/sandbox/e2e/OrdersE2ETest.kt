@@ -25,6 +25,12 @@ class OrdersE2ETest {
     }
 
     @Test
+    @StackScenario("create-order-out-of-stock")
+    fun `create order out of stock`() {
+        scenarios.createOrderOutOfStock()
+    }
+
+    @Test
     @StackScenario("get-order")
     fun `get order`() {
         scenarios.getOrder(seededOrderId)

@@ -1,7 +1,9 @@
 # Sandbox
 
-The sample system the stack tool is built against. Step 1 is `orders-service` (Spring Boot 4, Kotlin, Spring MVC,
-Postgres via `JdbcClient` and Flyway) with two tagged e2e scenarios, `create-order` and `get-order`.
+The sample system the stack tool is built against: `orders-service` (Spring Boot 4, Kotlin, Spring MVC, Postgres via
+`JdbcClient` and Flyway) and, since step 2, `inventory-service` (same stack, its own Postgres), which orders-service
+calls over HTTP to reserve stock before it stores an order. Three tagged e2e scenarios: `create-order`,
+`create-order-out-of-stock` and `get-order`.
 
 The sandbox is a separate Gradle build and uses the tool like any outside project would: the OpenTelemetry agent
 extension and the test harness come from `mavenLocal`, the reporter from its Docker image. It never depends on
@@ -9,9 +11,10 @@ extension and the test harness come from `mavenLocal`, the reporter from its Doc
 
 | Path | What it is |
 |---|---|
-| `services/orders-service` | `POST /orders`, `GET /orders/{id}`; knows nothing about the tool |
-| `e2e-tests` | `OrdersScenarios` (the user journeys), `OrdersE2ETest` (tagged with `@StackScenario`), `StepOneAcceptanceTest` |
-| `docker-compose.yml` | `postgres`, `reporter` (writes `./recordings`), `orders-service` under the agent |
+| `services/orders-service` | `POST /orders` (reserves stock at inventory-service first; `409` when it is short), `GET /orders/{id}`; knows nothing about the tool |
+| `services/inventory-service` | `POST /reservations` (`201`, or `409` when the stock is short); seeded SKUs `sku-1` (plenty) and `sku-out` (none) |
+| `e2e-tests` | `OrdersScenarios` (the user journeys), `OrdersE2ETest` (tagged with `@StackScenario`), `SandboxAcceptanceTest` |
+| `docker-compose.yml` | `postgres`, `inventory-db`, `reporter` (writes `./recordings`), `orders-service` and `inventory-service` under the agent |
 | `stack/` | the committed workspace the viewer opens (`workspace.yaml`, `scenarios/`, and later components, connections, notes) |
 | `recordings/` | what the reporter recorded; gitignored |
 
@@ -29,14 +32,14 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    least `tool/gradlew -p tool :reporter:dockerImage` for a reporter change), then steps 2 and 3, so the stack picks
    up the new reporter image and agent extension.
 
-2. Put the agent jars in `sandbox/build/stack-agent/` and build the orders-service jar:
+2. Put the agent jars in `sandbox/build/stack-agent/` and build the service jars:
 
    ```sh
    sandbox/gradlew -p sandbox stackAgent assemble
    ```
 
-3. Start the stack. `--wait` returns once orders-service reports healthy (its `/actuator/health`), so the tests
-   below never race its startup:
+3. Start the stack. `--wait` returns once both services report healthy (their `/actuator/health`), so the tests
+   below never race their startup:
 
    ```sh
    (cd sandbox && docker compose up -d --build --wait)
@@ -61,7 +64,7 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    (cd sandbox && docker compose down -v)
    ```
 
-All published ports (8080, 4318, 15432) are bound to `127.0.0.1` only.
+All published ports (8080, 8081, 4318, 15432, 15433) are bound to `127.0.0.1` only.
 
 The OpenTelemetry agent version in `sandbox/gradle/libs.versions.toml` must equal the one in
 `tool/gradle/libs.versions.toml`: the stack extension uses the agent's internal APIs, so it only works in that version.
@@ -82,17 +85,18 @@ curl -X POST localhost:4318/api/recordings/stop
 sandbox/gradlew -p sandbox stackAgent acceptanceTest
 ```
 
-It starts its own copy of the stack with Docker Compose (Testcontainers), runs both scenarios, checks the
-recordings the reporter wrote, and tears the stack down. It uses the same fixed ports (4318, 15432, 8080), so stop a
+It starts its own copy of the stack with Docker Compose (Testcontainers), runs all three scenarios, checks the
+recordings the reporter wrote, and tears the stack down. It uses the same fixed ports (4318, 15432, 15433, 8080, 8081), so stop a
 stack started by hand first. Neither `e2eTest` nor `acceptanceTest` is part of `build`.
 
 ## Running orders-service from IntelliJ
 
-Start only the database and the reporter, then run the service from the IDE under the agent:
+Start only the databases, inventory-service (orders-service calls it) and the reporter, then run orders-service from
+the IDE under the agent:
 
 ```sh
 sandbox/gradlew -p sandbox stackAgent
-(cd sandbox && docker compose up -d postgres reporter)
+(cd sandbox && docker compose up -d --build --wait postgres inventory-service reporter)
 ```
 
 Run configuration for `io.stackvibed.sandbox.orders.OrdersApplicationKt` (module `orders-service.main`), environment

@@ -4,6 +4,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldStartWith
 import io.stackvibed.harness.StackContext
 import io.stackvibed.harness.StackScenario
@@ -26,39 +27,64 @@ import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readLines
 
 /**
- * Step 1 acceptance: the whole stack (Postgres, reporter, orders-service under the agent) comes up with Docker
- * Compose, the tagged scenarios run against it, and the reporter's recordings describe the expected flow.
+ * Sandbox acceptance: the whole stack (both services under the agent, their Postgres databases, the reporter) comes
+ * up with Docker Compose, the tagged scenarios run against it, and the reporter's recordings describe the expected
+ * flow across both services.
  */
 @Testcontainers
-class StepOneAcceptanceTest {
+class SandboxAcceptanceTest {
 
     @Test
     @StackScenario("create-order")
-    fun `create order is recorded end to end`() {
+    fun `create order is recorded across both services`() {
         OrdersScenarios(BASE_URL).createOrder()
 
-        val run = awaitRecording(scenario = "create-order", minEvents = 2)
+        val run = awaitRecording(scenario = "create-order", minEvents = 5)
 
         run.manifest["kind"] shouldBe "e2e"
         run.manifest["scenarioId"] shouldBe "create-order"
-        run.events.single { it["type"] == "http.server" }.let {
-            it["component"] shouldBe "orders-service"
-            it["method"] shouldBe "POST"
-            it["route"] shouldBe "/orders"
-            it["status"] shouldBe 201
-            (it["requestBody"] as String) shouldContain "c-1"
-            (it["responseBody"] as String) shouldContain "CREATED"
-        }
-        // Exactly one statement: the reporter drops the empty queries the connection pool validates connections with.
+        (run.manifest["componentsSeen"] as List<*>).toSet() shouldBe setOf("orders-service", "inventory-service")
+        val servers = run.events.filter { it["type"] == "http.server" }
+        servers.map { it["component"] }.toSet() shouldBe setOf("orders-service", "inventory-service")
+        val reserve = servers.single { it["component"] == "inventory-service" }
+        reserve["route"] shouldBe "/reservations"
+        reserve["status"] shouldBe 201
+        (reserve["requestBody"] as String) shouldContain "sku-1"
+        // The call orders-service makes to inventory-service, and the server span on the other side is its child.
+        val client = run.events.single { it["type"] == "http.client" }
+        client["component"] shouldBe "orders-service"
+        client["method"] shouldBe "POST"
+        client["status"] shouldBe 201
+        (client["url"] as String) shouldEndWith "/reservations"
+        reserve["parentSpanId"] shouldBe client["spanId"]
+        // Exactly one statement per database: the reporter drops the empty queries the connection pool validates connections with.
         val statements = run.events.filter { it["type"] == "db.client" }
-        statements shouldHaveSize 1
-        statements.single().let {
+        statements.map { it["dbName"] }.toSet() shouldBe setOf("orders", "inventory")
+        statements.single { it["dbName"] == "orders" }.let {
             (it["statement"] as String) shouldStartWith "insert into orders"
             it["dbSystem"] shouldBe "postgresql"
-            it["dbName"] shouldBe "orders"
             (it["parameters"] as List<*>) shouldContain "sku-1"
             it["rowCount"] shouldBe 1
         }
+        statements.single { it["dbName"] == "inventory" }.let {
+            (it["statement"] as String) shouldStartWith "update stock"
+            it["rowCount"] shouldBe 1
+        }
+    }
+
+    @Test
+    @StackScenario("create-order-out-of-stock")
+    fun `out of stock is recorded as a failed hop and no insert`() {
+        OrdersScenarios(BASE_URL).createOrderOutOfStock()
+
+        val run = awaitRecording(scenario = "create-order-out-of-stock", minEvents = 4)
+
+        run.events.single { it["type"] == "http.server" && it["component"] == "orders-service" }["status"] shouldBe 409
+        run.events.single { it["type"] == "http.client" }["status"] shouldBe 409
+        // Only inventory's update ran (and changed no row); orders-service stored nothing.
+        val statements = run.events.filter { it["type"] == "db.client" }
+        statements.single()["dbName"] shouldBe "inventory"
+        statements.single()["rowCount"] shouldBe 0
     }
 
     @Test
@@ -148,6 +174,7 @@ class StepOneAcceptanceTest {
             // Exposed services are probed through Testcontainers' ambassador; the tests use the fixed host ports.
             .withExposedService("reporter", 4318, Wait.forHttp("/api/recordings/active").forStatusCodeMatching { it < 500 })
             .withExposedService("orders-service", 8080, Wait.forHttp("/actuator/health"))
+            .withExposedService("inventory-service", 8081, Wait.forHttp("/actuator/health"))
             .withStartupTimeout(Duration.ofMinutes(3))
 
         private lateinit var seededOrderId: String

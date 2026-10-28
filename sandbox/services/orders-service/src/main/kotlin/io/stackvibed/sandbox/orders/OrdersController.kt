@@ -16,10 +16,12 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/orders")
-class OrdersController(private val orders: OrderRepository) {
+class OrdersController(private val orders: OrderRepository, private val inventory: InventoryClient) {
 
     @PostMapping
     fun create(@RequestBody newOrder: NewOrder): ResponseEntity<Order> {
+        // Before the insert: an order whose stock cannot be reserved is never stored.
+        inventory.reserve(newOrder.sku, newOrder.quantity)
         val order = Order(
             id = UUID.randomUUID(),
             customerId = newOrder.customerId,

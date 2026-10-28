@@ -1,5 +1,6 @@
-# The step-1 sandbox stack: orders-service (under the OpenTelemetry agent with the stack extension), its Postgres
-# database, and the stack reporter that writes what the agent exports into ./recordings.
+# The sandbox stack: orders-service and inventory-service (both under the OpenTelemetry agent with the stack
+# extension), their Postgres databases, and the stack reporter that writes what the agent exports into ./recordings.
+# orders-service reserves stock at inventory-service (HTTP) before it stores an order.
 #
 # Before `docker compose up -d --build --wait` (see README.md):
 #   tool/gradlew -p tool publishToMavenLocal :reporter:dockerImage
@@ -24,6 +25,21 @@ services:
       timeout: 5s
       retries: 30
 
+  inventory-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+    ports:
+      # For inventory-service run from the IDE (application.yaml); 15433 for the same reason as 15432 above.
+      - "127.0.0.1:15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
   reporter:
     image: stackvibed/reporter:0.1.0-SNAPSHOT
     # Built locally by `tool/gradlew -p tool :reporter:dockerImage`; it is not on any registry.
@@ -44,11 +60,14 @@ services:
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://reporter:4318
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
+      INVENTORY_BASE_URL: http://inventory-service:8081
     volumes:
       # Filled by `sandbox/gradlew -p sandbox stackAgent`.
       - ./build/stack-agent:/stack-agent:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      inventory-service:
         condition: service_healthy
       reporter:
         condition: service_started
@@ -61,6 +80,36 @@ services:
         - bash
         - -c
         - 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf ''GET /actuator/health HTTP/1.0\r\n\r\n'' >&3 && grep -q ''"status":"UP"'' <&3'
+      interval: 60s
+      timeout: 5s
+      start_period: 120s
+      start_interval: 1s
+
+  inventory-service:
+    build: ./services/inventory-service
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -javaagent:/stack-agent/opentelemetry-javaagent.jar
+        -Dotel.javaagent.extensions=/stack-agent/stack-agent-extension.jar
+      OTEL_SERVICE_NAME: inventory-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://reporter:4318
+      SPRING_DATASOURCE_URL: jdbc:postgresql://inventory-db:5432/inventory
+    volumes:
+      - ./build/stack-agent:/stack-agent:ro
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      reporter:
+        condition: service_started
+    # Same probe as orders-service, on 8081.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8081 && printf ''GET /actuator/health HTTP/1.0\r\n\r\n'' >&3 && grep -q ''"status":"UP"'' <&3'
       interval: 60s
       timeout: 5s
       start_period: 120s

@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 rootProject.name = "stack-sandbox"
 
 include("services:orders-service")
+include("services:inventory-service")
 include("e2e-tests")

@@ -8,6 +8,11 @@ spring:
     username: orders
     password: orders
 
+inventory:
+  # docker-compose.yml overrides this (INVENTORY_BASE_URL); localhost:8081 is inventory-service as seen from the
+  # host, for a run from the IDE.
+  base-url: http://localhost:8081
+
 management:
   endpoints:
     web:

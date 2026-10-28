@@ -24,6 +24,16 @@ class OrdersScenarios(private val baseUrl: String) {
             .extract()
             .path("id")
 
+    /** Orders a sku inventory-service has none of: the order is refused (409) and nothing is stored. */
+    fun createOrderOutOfStock() {
+        request()
+            .contentType(ContentType.JSON)
+            .body("""{"customerId":"c-1","sku":"sku-out","quantity":1}""")
+            .post("/orders")
+            .then()
+            .statusCode(409)
+    }
+
     fun getOrder(id: String) {
         request()
             .get("/orders/{id}", id)

@@ -66,6 +66,6 @@ tasks.register<Test>("acceptanceTest") {
     group = "verification"
     testClassesDirs = acceptanceTest.output.classesDirs
     classpath = acceptanceTest.runtimeClasspath
-    // docker-compose.yml builds orders-service from its jar and mounts the agent jars.
-    dependsOn(":services:orders-service:bootJar", ":stackAgent")
+    // docker-compose.yml builds both services from their jars and mounts the agent jars.
+    dependsOn(":services:orders-service:bootJar", ":services:inventory-service:bootJar", ":stackAgent")
 }
