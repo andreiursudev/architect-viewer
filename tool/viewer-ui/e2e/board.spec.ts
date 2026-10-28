@@ -2,14 +2,14 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function pickCreateOrder(page: Page) {
   await page.getByRole('button', { name: /scenario/i }).click();
-  await page.getByRole('option', { name: /create-order/ }).click();
+  await page.getByRole('option', { name: /^create-order(?!-)/ }).click();
 }
 
 test('board shows components and highlights create-order', async ({ page }) => {
   await page.goto('/');
   const nodes = page.locator('.react-flow__node');
-  await expect(nodes).toHaveCount(3);
-  for (const name of ['Orders service', 'e2e-client', 'postgresql-orders']) {
+  await expect(nodes).toHaveCount(5);
+  for (const name of ['Orders service', 'e2e-client', 'postgresql-orders', 'inventory-service', 'postgresql-inventory']) {
     await expect(nodes.filter({ hasText: name })).toBeVisible();
   }
   await expect(page.locator('.path-edge')).toHaveCount(0);

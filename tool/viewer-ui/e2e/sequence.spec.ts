@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('clicking a message shows its payload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /scenario/i }).click();
-  await page.getByRole('option', { name: /create-order/ }).click();
+  await page.getByRole('option', { name: /^create-order(?!-)/ }).click();
   await page.getByRole('button', { name: 'Open sequence' }).click();
 
   const diagram = page.getByRole('group', { name: 'Sequence diagram' });
@@ -33,5 +33,5 @@ test('an unknown run says so and leads back to the board', async ({ page }) => {
   await expect(page.getByText(/could not load the run/i)).toBeVisible();
   await page.getByRole('link', { name: /board/i }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('.react-flow__node')).toHaveCount(3);
+  await expect(page.locator('.react-flow__node')).toHaveCount(5);
 });
