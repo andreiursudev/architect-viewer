@@ -95,7 +95,7 @@ Start only the databases, inventory-service (orders-service calls it) and the re
 the IDE under the agent:
 
 ```sh
-sandbox/gradlew -p sandbox stackAgent
+sandbox/gradlew -p sandbox stackAgent :services:inventory-service:assemble
 (cd sandbox && docker compose up -d --build --wait postgres inventory-service reporter)
 ```
 
