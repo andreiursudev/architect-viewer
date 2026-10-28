@@ -16,10 +16,16 @@ dependencies {
 }
 
 tasks.processResources {
+    // Read at configuration time: the filter runs at execution time, when Task.project is off limits.
+    val version = project.version.toString()
+    inputs.property("version", version)
     filesMatching("application.properties") {
-        filter<ReplaceTokens>("tokens" to mapOf("version" to project.version.toString()))
+        filter<ReplaceTokens>("tokens" to mapOf("version" to version))
     }
 }
+
+// The JVM prints a class-data-sharing warning when a Spring Boot test attaches its agent; sharing is only a startup optimisation.
+tasks.test { jvmArgs("-Xshare:off") }
 
 // A fixed file name keeps the Dockerfile independent of the project version.
 tasks.bootJar { archiveFileName = "reporter.jar" }

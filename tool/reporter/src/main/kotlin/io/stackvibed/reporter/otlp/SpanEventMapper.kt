@@ -24,7 +24,10 @@ fun interface EventDraft {
 
 data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
 
-/** Maps OTLP spans to recording events; spans that are neither an HTTP server nor a DB client span are dropped. */
+/**
+ * Maps OTLP spans to recording events; spans that are neither an HTTP server nor a DB client span are dropped, and so are
+ * DB client spans without a statement.
+ */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
 
@@ -78,6 +81,8 @@ class SpanEventMapper {
 
     private fun dbDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
         val dbSystem = attrs.string("db.system.name") ?: attrs.string("db.system") ?: return null
+        // A blank statement is the connection pool validating an idle connection, not a step of the scenario.
+        val statement = (attrs.string("db.query.text") ?: attrs.string("db.statement"))?.takeIf { it.isNotBlank() } ?: return null
         return EventDraft { runId ->
             DbClientEvent(
                 eventId = eventId(span),
@@ -90,7 +95,7 @@ class SpanEventMapper {
                 durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
                 dbSystem = dbSystem,
                 dbName = attrs.string("db.namespace") ?: attrs.string("db.name"),
-                statement = attrs.string("db.query.text") ?: attrs.string("db.statement") ?: "",
+                statement = statement,
                 parameters = parameters(attrs.string(StackAttributes.DB_PARAMETERS)),
                 rowCount = attrs.long(StackAttributes.DB_ROW_COUNT),
             )

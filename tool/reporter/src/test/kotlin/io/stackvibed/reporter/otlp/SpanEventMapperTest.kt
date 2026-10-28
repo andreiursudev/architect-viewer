@@ -90,6 +90,17 @@ class SpanEventMapperTest {
         events(OtlpFixtures.request("orders-service", listOf(plainServer, plainClient))) shouldBe emptyList()
     }
 
+    @Test fun `db client span with a missing or blank statement is dropped`() {
+        // The connection pool validates idle connections with an empty query; that is not a step of the scenario.
+        val spans = listOf(null, "", "   ").mapIndexed { i, statement ->
+            OtlpFixtures.span("${i + 1}".repeat(16), null, Span.SpanKind.SPAN_KIND_CLIENT, "postgresql", 1, 2)
+                .addAttributes(OtlpFixtures.str("db.system.name", "postgresql"))
+                .apply { if (statement != null) addAttributes(OtlpFixtures.str("db.query.text", statement)) }
+                .build()
+        }
+        events(OtlpFixtures.request("orders-service", spans)) shouldBe emptyList()
+    }
+
     @Test fun `missing headers and parameters map to empty collections and update-less row count to null`() {
         val server = OtlpFixtures.span("1111111111111111", null, Span.SpanKind.SPAN_KIND_SERVER, "GET /ping", 1, 11)
             .addAttributes(OtlpFixtures.str("http.request.method", "GET"))
