@@ -2,8 +2,9 @@
 
 The sample system the stack tool is built against: `orders-service` (Spring Boot 4, Kotlin, Spring MVC, Postgres via
 `JdbcClient` and Flyway) and, since step 2, `inventory-service` (same stack, its own Postgres), which orders-service
-calls over HTTP to reserve stock before it stores an order. Three tagged e2e scenarios: `create-order`,
-`create-order-out-of-stock` and `get-order`.
+calls over HTTP to reserve stock before it stores an order, so orders-service needs inventory-service up (the compose
+stack starts it first). Three tagged e2e scenarios: `create-order`, `create-order-out-of-stock` (the `sku-out` item
+has no stock, inventory-service answers `409` and orders-service stores nothing) and `get-order`.
 
 The sandbox is a separate Gradle build and uses the tool like any outside project would: the OpenTelemetry agent
 extension and the test harness come from `mavenLocal`, the reporter from its Docker image. It never depends on
@@ -14,7 +15,7 @@ extension and the test harness come from `mavenLocal`, the reporter from its Doc
 | `services/orders-service` | `POST /orders` (reserves stock at inventory-service first; `409` when it is short), `GET /orders/{id}`; knows nothing about the tool |
 | `services/inventory-service` | `POST /reservations` (`201`, or `409` when the stock is short); seeded SKUs `sku-1` (plenty) and `sku-out` (none) |
 | `e2e-tests` | `OrdersScenarios` (the user journeys), `OrdersE2ETest` (tagged with `@StackScenario`), `SandboxAcceptanceTest` |
-| `docker-compose.yml` | `postgres`, `inventory-db`, `reporter` (writes `./recordings`), `orders-service` and `inventory-service` under the agent |
+| `docker-compose.yml` | `postgres` (15432), `inventory-db` (15433), `reporter` (4318, writes `./recordings`), `orders-service` (8080) and `inventory-service` (8081) under the agent |
 | `stack/` | the committed workspace the viewer opens (`workspace.yaml`, `scenarios/`, and later components, connections, notes) |
 | `recordings/` | what the reporter recorded; gitignored |
 
@@ -38,14 +39,15 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    sandbox/gradlew -p sandbox stackAgent assemble
    ```
 
-3. Start the stack. `--wait` returns once both services report healthy (their `/actuator/health`), so the tests
-   below never race their startup:
+3. Start the stack. `--wait` returns once both services report healthy (their `/actuator/health`; orders-service
+   waits for inventory-service), so the tests below never race their startup:
 
    ```sh
    (cd sandbox && docker compose up -d --build --wait)
    ```
 
-4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`:
+4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`, and the
+   two orders-service scenarios that reserve stock also record the hop to inventory-service:
 
    ```sh
    sandbox/gradlew -p sandbox e2eTest
@@ -64,7 +66,13 @@ All commands below run from the repository root. Requirements: Java 25 and Docke
    (cd sandbox && docker compose down -v)
    ```
 
-All published ports (8080, 8081, 4318, 15432, 15433) are bound to `127.0.0.1` only.
+All published ports (8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres, 15433
+inventory Postgres) are bound to `127.0.0.1` only.
+
+The viewer discovers `inventory-service`, `postgresql-inventory` and the connections `orders-service` to
+`inventory-service` (`POST /reservations`) and `inventory-service` to `postgresql-inventory` from the recordings;
+accept them in the viewer to add them to `stack/`. In the `create-order-out-of-stock` run the hop to inventory-service
+is the failed one (`409`).
 
 The OpenTelemetry agent version in `sandbox/gradle/libs.versions.toml` must equal the one in
 `tool/gradle/libs.versions.toml`: the stack extension uses the agent's internal APIs, so it only works in that version.
@@ -130,11 +138,15 @@ above.
 
   Only public images are pulled (`postgres:17`, `eclipse-temurin:25-jre`, and Testcontainers' own helpers), so no
   credentials are needed. Pulling them once (`docker pull postgres:17`) is enough; later runs use the local copies.
-- **orders-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
+- **orders-service or inventory-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
   is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose up -d --build --wait` again.
 - **`reporter` image not found, or the recordings do not reflect a tool change.** The image is built locally only,
   and only when asked: `tool/gradlew -p tool :reporter:dockerImage`, then `docker compose up -d --build --wait`.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
-  15432 or 8080: `(cd sandbox && docker compose down -v)`. The viewer uses 8090.
+  15432, 15433, 8080 or 8081: `(cd sandbox && docker compose down -v)`. The viewer uses 8090 (`--server.port=<n>`
+  to move it).
+- **`POST /orders` answers `5xx` and nothing is recorded for inventory-service.** orders-service cannot reach
+  inventory-service: start the whole stack (`docker compose up -d --build --wait`), or, with orders-service run from
+  the IDE, inventory-service on `localhost:8081`.
 - **A run is missing from the viewer.** Spans are exported in batches (200 ms); a run appears a moment after the
   test finishes. Untagged traffic is in `recordings/_unassigned`.
