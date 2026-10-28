@@ -10,7 +10,7 @@ import {
   type Viewport as FlowViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFlow, useLayout, useSaveLayout, useWorkspace } from '../api/queries';
 import type { BoardLayout } from '../api/types';
 import { useUiStore } from '../store/uiStore';
@@ -18,6 +18,7 @@ import { autoLayout } from './autoLayout';
 import { ComponentNode } from './ComponentNode';
 import { ConnectionEdge } from './ConnectionEdge';
 import { emphasizePath, HighlightContext, highlightFor, hopsOffBoard } from './highlight';
+import { useDebouncedSave } from './useDebouncedSave';
 import { toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
 
 const BOARD = 'primary';
@@ -57,27 +58,21 @@ function Board() {
   const layoutLoaded = !layoutQuery.isPending;
   const layout = layoutQuery.data ?? null;
 
-  // Keep the saved positions and the latest mutate function reachable from the debounced writer.
-  const mutateRef = useRef(saveLayout.mutate);
-  mutateRef.current = saveLayout.mutate;
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Saves are debounced; one still pending when the board unmounts (navigating away right after a drag) is flushed.
+  const scheduleSave = useDebouncedSave<BoardLayout>(saveLayout.mutate, SAVE_DELAY_MS);
 
   // [fresh] is the first arrangement, saved before the canvas exists: it has no viewport yet, so the next visit fits the view.
   const persist = useCallback(
     (fresh?: { nodes: BoardLayout['nodes']; viewport: BoardLayout['viewport'] }) => {
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        mutateRef.current(
-          fresh ?? {
-            nodes: Object.fromEntries(flow.getNodes().map((n) => [n.id, { x: n.position.x, y: n.position.y }])),
-            viewport: flow.getViewport(),
-          },
-        );
-      }, SAVE_DELAY_MS);
+      scheduleSave(
+        fresh ?? {
+          nodes: Object.fromEntries(flow.getNodes().map((n) => [n.id, { x: n.position.x, y: n.position.y }])),
+          viewport: flow.getViewport(),
+        },
+      );
     },
-    [flow],
+    [flow, scheduleSave],
   );
-  useEffect(() => () => clearTimeout(timer.current), []);
 
   // (Re)build the elements whenever the workspace changes; positions the user has already moved are kept.
   useEffect(() => {

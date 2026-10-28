@@ -1,4 +1,5 @@
 import com.github.gradle.node.npm.task.NpmTask
+import com.github.gradle.node.npm.task.NpxTask
 
 plugins {
     base
@@ -32,5 +33,28 @@ val npmTest = tasks.register<NpmTask>("npmTest") {
     outputs.upToDateWhen { false }
 }
 
+// Playwright drives its own Chromium; this downloads it once (a no-op when the pinned build is already in the cache).
+val playwrightInstall = tasks.register<NpxTask>("playwrightInstall") {
+    group = "verification"
+    description = "Installs the Chromium build the Playwright e2e tests run in."
+    dependsOn(tasks.npmInstall)
+    command = "playwright"
+    args = listOf("install", "chromium")
+    inputs.file("package-lock.json")
+    outputs.upToDateWhen { false }
+}
+
+// The e2e tests run the real stack-viewer jar (UI bundled) against fixture folders under e2e/fixtures.
+val e2eTest = tasks.register<NpmTask>("e2eTest") {
+    group = "verification"
+    description = "Runs the Playwright end-to-end tests against the built stack-viewer jar."
+    dependsOn(tasks.npmInstall, playwrightInstall, ":viewer-backend:bootJar")
+    args = listOf("run", "e2e")
+    inputs.files("package.json", "package-lock.json", "playwright.config.ts")
+    inputs.dir("e2e")
+    inputs.dir("src")
+    outputs.upToDateWhen { false }
+}
+
 tasks.assemble { dependsOn(npmBuild) }
-tasks.check { dependsOn(npmTest) }
+tasks.check { dependsOn(npmTest, e2eTest) }
