@@ -15,15 +15,22 @@ object OtlpFixtures {
     const val SERVER_SPAN_ID = "b7ad6b7169203331"
     const val INTERNAL_SPAN_ID = "c1d2e3f405162738"
     const val DB_SPAN_ID = "00f067aa0ba902b7"
+    const val CLIENT_SPAN_ID = "a1b2c3d4e5f60718"
+    const val INVENTORY_SERVER_SPAN_ID = "d4c3b2a190817263"
+    const val INVENTORY_DB_SPAN_ID = "5e4d3c2b1a090817"
 
     const val SERVER_START_NANOS = 1_760_000_000_000_000_000L
     const val SERVER_END_NANOS = SERVER_START_NANOS + 42_000_000L
     const val DB_START_NANOS = SERVER_START_NANOS + 10_000_000L
     const val DB_END_NANOS = DB_START_NANOS + 5_000_000L
+    const val CLIENT_START_NANOS = SERVER_START_NANOS + 2_000_000L
+    const val CLIENT_END_NANOS = CLIENT_START_NANOS + 28_000_000L
 
     const val REQUEST_BODY = """{"customerId":"c-1","items":[{"sku":"A-1","quantity":2}]}"""
     const val RESPONSE_BODY = """{"id":1,"status":"CREATED"}"""
     const val INSERT_STATEMENT = "insert into orders (customer_id, status, total, created_at) values (?, ?, ?, ?)"
+    const val RESERVATION_URL = "http://inventory-service:8081/reservations"
+    const val RESERVE_STATEMENT = "update stock set reserved = reserved + ? where sku = ?"
 
     fun createOrderRun(scenario: String = "create-order", run: String = "run-1"): ExportTraceServiceRequest =
         request("orders-service", listOf(serverSpan(scenario, run), internalSpan(scenario, run), dbSpan(scenario, run, oldSemconv = false)))
@@ -31,6 +38,15 @@ object OtlpFixtures {
     /** Same run, but the database span uses the pre-1.33 semantic convention names. */
     fun createOrderRunOldDbSemconv(scenario: String = "create-order", run: String = "run-1"): ExportTraceServiceRequest =
         request("orders-service", listOf(serverSpan(scenario, run), internalSpan(scenario, run), dbSpan(scenario, run, oldSemconv = true)))
+
+    /**
+     * One run seen by two services, delivered as the two OTLP requests each service's agent would send: orders-service
+     * (server span and the client span of its reservation call) and inventory-service (the callee's server span and its update).
+     */
+    fun createOrderReservesRun(scenario: String = "create-order", run: String = "run-2"): List<ExportTraceServiceRequest> = listOf(
+        request("orders-service", listOf(serverSpan(scenario, run), clientSpan(scenario, run))),
+        request("inventory-service", listOf(inventoryServerSpan(scenario, run), inventoryDbSpan(scenario, run))),
+    )
 
     fun request(serviceName: String?, spans: List<Span>): ExportTraceServiceRequest {
         val resource = Resource.newBuilder()
@@ -79,6 +95,38 @@ object OtlpFixtures {
                 }
             }
             .addAttributes(str("stack.db.parameters", """["c-1","CREATED","19.98","2026-10-27T10:00:00Z"]"""))
+            .addAttributes(long("stack.db.row_count", 1))
+            .build()
+
+    /** The reservation call as the agent records it: parent is the orders server span, the callee's server span is its child. */
+    fun clientSpan(scenario: String? = "create-order", run: String? = "run-2"): Span =
+        span(CLIENT_SPAN_ID, parent = SERVER_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = "POST", CLIENT_START_NANOS, CLIENT_END_NANOS)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("http.request.method", "POST"))
+            .addAttributes(str("url.full", RESERVATION_URL))
+            .addAttributes(str("server.address", "inventory-service"))
+            .addAttributes(long("server.port", 8081))
+            .addAttributes(long("http.response.status_code", 201))
+            .build()
+
+    private fun inventoryServerSpan(scenario: String?, run: String?): Span =
+        span(INVENTORY_SERVER_SPAN_ID, parent = CLIENT_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_SERVER, name = "POST /reservations", SERVER_START_NANOS + 4_000_000L, SERVER_START_NANOS + 28_000_000L)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("http.request.method", "POST"))
+            .addAttributes(str("http.route", "/reservations"))
+            .addAttributes(str("url.path", "/reservations"))
+            .addAttributes(long("http.response.status_code", 201))
+            .addAttributes(str("stack.http.request.body", """{"items":[{"sku":"sku-1","quantity":2}]}"""))
+            .addAttributes(str("stack.http.response.body", """{"reserved":true}"""))
+            .build()
+
+    private fun inventoryDbSpan(scenario: String?, run: String?): Span =
+        span(INVENTORY_DB_SPAN_ID, parent = INVENTORY_SERVER_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = "UPDATE stock", SERVER_START_NANOS + 8_000_000L, SERVER_START_NANOS + 12_000_000L)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("db.system.name", "postgresql"))
+            .addAttributes(str("db.namespace", "inventory"))
+            .addAttributes(str("db.query.text", RESERVE_STATEMENT))
+            .addAttributes(str("stack.db.parameters", """["2","sku-1"]"""))
             .addAttributes(long("stack.db.row_count", 1))
             .build()
 

@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.opentelemetry.proto.trace.v1.Span
 import io.stackvibed.model.DbClientEvent
+import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.RecordingEvent
 import org.junit.jupiter.api.Test
@@ -20,6 +21,9 @@ class SpanEventMapperTest {
 
     private fun db(request: io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest) =
         events(request).filterIsInstance<DbClientEvent>().single()
+
+    private fun client(request: io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest) =
+        events(request).filterIsInstance<HttpClientEvent>().single()
 
     @Test fun `server span becomes http event`() {
         val event = http(OtlpFixtures.createOrderRun())
@@ -57,6 +61,36 @@ class SpanEventMapperTest {
         event.durationNanos shouldBe 5_000_000L
     }
 
+    @Test fun `client span becomes http client event`() {
+        val event = client(OtlpFixtures.request("orders-service", listOf(OtlpFixtures.clientSpan())))
+        event.component shouldBe "orders-service"
+        event.method shouldBe "POST"
+        event.url shouldBe OtlpFixtures.RESERVATION_URL
+        event.serverAddress shouldBe "inventory-service"
+        event.serverPort shouldBe 8081
+        event.status shouldBe 201
+        event.errorType shouldBe null
+        event.eventId shouldBe "${OtlpFixtures.TRACE_ID}-${OtlpFixtures.CLIENT_SPAN_ID}"
+        event.spanId shouldBe OtlpFixtures.CLIENT_SPAN_ID
+        event.parentSpanId shouldBe OtlpFixtures.SERVER_SPAN_ID
+        event.runId shouldBe "r"
+        event.startEpochNanos shouldBe OtlpFixtures.CLIENT_START_NANOS
+        event.durationNanos shouldBe 28_000_000L
+    }
+
+    @Test fun `client span without a response has null status and keeps its error type`() {
+        val failed = OtlpFixtures.span("3333333333333333", OtlpFixtures.SERVER_SPAN_ID, Span.SpanKind.SPAN_KIND_CLIENT, "POST", 1, 2)
+            .addAttributes(OtlpFixtures.str("http.request.method", "POST"))
+            .addAttributes(OtlpFixtures.str("url.full", OtlpFixtures.RESERVATION_URL))
+            .addAttributes(OtlpFixtures.str("error.type", "java.net.ConnectException"))
+            .build()
+        val event = client(OtlpFixtures.request("orders-service", listOf(failed)))
+        event.status shouldBe null
+        event.errorType shouldBe "java.net.ConnectException"
+        event.serverAddress shouldBe null
+        event.serverPort shouldBe null
+    }
+
     @Test fun `tags come from stack attributes`() {
         mapper.map(OtlpFixtures.createOrderRun()).map { it.tags }.distinct() shouldBe listOf(SpanTags("create-order", "run-1"))
         mapper.map(OtlpFixtures.createOrderRun("other", "run-9")).map { it.tags }.distinct() shouldBe listOf(SpanTags("other", "run-9"))
@@ -83,10 +117,9 @@ class SpanEventMapperTest {
         mapped.map { it.spanId } shouldBe listOf(OtlpFixtures.SERVER_SPAN_ID, OtlpFixtures.DB_SPAN_ID)
     }
 
-    @Test fun `server span without http method and client span without db system are dropped`() {
+    @Test fun `server span without http method and client span with neither db system nor http method are dropped`() {
         val plainServer = OtlpFixtures.span("1111111111111111", null, Span.SpanKind.SPAN_KIND_SERVER, "x", 1, 2).build()
-        val plainClient = OtlpFixtures.span("2222222222222222", null, Span.SpanKind.SPAN_KIND_CLIENT, "GET", 1, 2)
-            .addAttributes(OtlpFixtures.str("http.request.method", "GET")).build()
+        val plainClient = OtlpFixtures.span("2222222222222222", null, Span.SpanKind.SPAN_KIND_CLIENT, "publish", 1, 2).build()
         events(OtlpFixtures.request("orders-service", listOf(plainServer, plainClient))) shouldBe emptyList()
     }
 

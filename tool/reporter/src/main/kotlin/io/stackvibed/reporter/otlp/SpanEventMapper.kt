@@ -8,6 +8,7 @@ import io.opentelemetry.proto.trace.v1.Span
 import io.stackvibed.agent.contract.StackAttributes
 import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
+import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.RecordingEvent
 import tools.jackson.core.JacksonException
@@ -25,8 +26,8 @@ fun interface EventDraft {
 data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
 
 /**
- * Maps OTLP spans to recording events; spans that are neither an HTTP server nor a DB client span are dropped, and so are
- * DB client spans without a statement.
+ * Maps OTLP spans to recording events: HTTP server spans, DB client spans and HTTP client spans. Every other span is dropped,
+ * and so are DB client spans without a statement.
  */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
@@ -39,7 +40,8 @@ class SpanEventMapper {
                     val attrs = span.attributesList.associate { it.key to it.value }
                     val draft = when (span.kind) {
                         Span.SpanKind.SPAN_KIND_SERVER -> httpDraft(span, attrs, component)
-                        Span.SpanKind.SPAN_KIND_CLIENT -> dbDraft(span, attrs, component)
+                        Span.SpanKind.SPAN_KIND_CLIENT ->
+                            if (isDb(attrs)) dbDraft(span, attrs, component) else clientDraft(span, attrs, component)
                         else -> null
                     } ?: continue
                     add(MappedSpan(SpanTags(attrs.string(StackAttributes.SCENARIO), attrs.string(StackAttributes.RUN)), draft))
@@ -79,8 +81,12 @@ class SpanEventMapper {
         }
     }
 
+    private fun isDb(attrs: Map<String, AnyValue>) = dbSystem(attrs) != null
+
+    private fun dbSystem(attrs: Map<String, AnyValue>) = attrs.string("db.system.name") ?: attrs.string("db.system")
+
     private fun dbDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
-        val dbSystem = attrs.string("db.system.name") ?: attrs.string("db.system") ?: return null
+        val dbSystem = dbSystem(attrs) ?: return null
         // A blank statement is the connection pool validating an idle connection, not a step of the scenario.
         val statement = (attrs.string("db.query.text") ?: attrs.string("db.statement"))?.takeIf { it.isNotBlank() } ?: return null
         return EventDraft { runId ->
@@ -98,6 +104,28 @@ class SpanEventMapper {
                 statement = statement,
                 parameters = parameters(attrs.string(StackAttributes.DB_PARAMETERS)),
                 rowCount = attrs.long(StackAttributes.DB_ROW_COUNT),
+            )
+        }
+    }
+
+    private fun clientDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        val method = attrs.string("http.request.method") ?: return null
+        return EventDraft { runId ->
+            HttpClientEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                method = method,
+                url = attrs.string("url.full") ?: "",
+                serverAddress = attrs.string("server.address"),
+                serverPort = attrs.long("server.port")?.toInt(),
+                status = attrs.long("http.response.status_code")?.toInt(),
+                errorType = attrs.string("error.type"),
             )
         }
     }

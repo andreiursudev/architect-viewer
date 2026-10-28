@@ -89,6 +89,17 @@ class ReporterGoldenTest {
         folder.resolve("manifest.json").readText() shouldBe golden("create-order/manifest.json")
     }
 
+    @Test fun `two services same run share one folder`() {
+        for (request in OtlpFixtures.createOrderReservesRun()) postProtobuf("/v1/traces", request).statusCode() shouldBe 200
+
+        val folder = recordingFolder("_create-order_run-2")
+        // componentsSeen is kept sorted, not in arrival order.
+        reader.readValue<RecordingManifest>(folder.resolve("manifest.json").readText()).componentsSeen shouldBe
+            listOf("inventory-service", "orders-service")
+        folder.resolve("events.jsonl").readText() shouldBe golden("create-order-reserves/events.jsonl")
+        folder.resolve("manifest.json").readText() shouldBe golden("create-order-reserves/manifest.json")
+    }
+
     @Test fun `malformed protobuf is a 400`() {
         val response = http.send(
             HttpRequest.newBuilder(url("/v1/traces")).header("Content-Type", "application/x-protobuf")
