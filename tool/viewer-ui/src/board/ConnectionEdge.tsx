@@ -1,5 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 import { useSetConnectionState } from '../api/queries';
+import { isFailedStep, responseText } from '../status';
 import { useUiStore } from '../store/uiStore';
 import { HopDetails } from './HopDetails';
 import { useHighlight } from './highlight';
@@ -38,6 +39,8 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   if (highlight) classes.push(steps ? 'on-path' : 'is-dimmed');
   if (steps && hovered) classes.push('is-hovered');
   if (highlight?.failedEdgeIds.has(id)) classes.push('is-failed');
+  // The first failed step in run order tells why the chip is red (`409`, `ConnectException`).
+  const failedStep = steps?.find(isFailedStep);
 
   return (
     <>
@@ -71,6 +74,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
               <span className="edge-kind">{data.kind}</span>
               {text && <span>{text}</span>}
             </button>
+            {failedStep && <span className="edge-response">{responseText(failedStep)}</span>}
             {data.unverified && <span className="badge badge-unverified">unverified</span>}
             {discovered && <span className="badge badge-discovered">discovered</span>}
           </div>

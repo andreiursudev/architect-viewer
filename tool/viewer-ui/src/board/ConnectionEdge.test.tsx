@@ -7,7 +7,7 @@ import { expect, test, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient';
 import { ConnectionEdge } from './ConnectionEdge';
 import { highlightFor, HighlightContext } from './highlight';
-import { conn, createOrderFlow } from './testData';
+import { conn, createOrderFlow, unrecordedHostStep } from './testData';
 import type { ConnectionEdgeType } from './toFlowElements';
 
 // The edge label portal only exists inside a mounted canvas; render it in place instead.
@@ -131,9 +131,27 @@ test('a hop that failed on the path is marked on its chip', () => {
   expect(chip()).toHaveClass('is-failed');
 });
 
-test('a hop that succeeded is not marked as failed', () => {
+test('a failed chip shows the response of the first failed step in run order', () => {
+  const [request, insert] = createOrderFlow.steps;
+  const conflict = { ...request, stepId: 'conflict', status: 409, startEpochNanos: request.startEpochNanos + 100_000_000 };
+  const error = { ...request, stepId: 'error', status: 500, startEpochNanos: request.startEpochNanos + 200_000_000 };
+  const ok = { ...request, stepId: 'ok', startEpochNanos: request.startEpochNanos + 300_000_000 };
+  // listed out of run order on purpose
+  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [error, ok, conflict, insert] });
+  expect(document.querySelector('.edge-response')).toHaveTextContent('409');
+  expect(document.querySelector('.edge-response')).not.toHaveTextContent('500');
+});
+
+test('a failed chip shows the error type of a call that got no answer', () => {
+  renderEdge('orders-service--tax-service', { ...createOrderFlow, steps: [unrecordedHostStep] });
+  expect(chip()).toHaveClass('is-failed');
+  expect(document.querySelector('.edge-response')).toHaveTextContent('ConnectException');
+});
+
+test('a hop that succeeded is not marked as failed and shows no response text', () => {
   renderEdge('e2e-client--orders-service', createOrderFlow);
   expect(chip()).not.toHaveClass('is-failed');
+  expect(document.querySelector('.edge-response')).toBeNull();
 });
 
 test('a failed hop elsewhere on the path does not mark this chip', () => {

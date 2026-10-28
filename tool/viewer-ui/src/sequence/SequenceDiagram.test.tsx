@@ -30,3 +30,14 @@ test('a successful response has no error tone', () => {
   expect(label).not.toHaveClass('is-client-error');
   expect(label).not.toHaveClass('is-server-error');
 });
+
+test('a client call that failed after a non-error status is not drawn as ok', () => {
+  const failedAfterOk = {
+    ...unrecordedHostStep,
+    status: 200,
+    event: { ...unrecordedHostStep.event, status: 200 },
+  } as FlowStep;
+  const label = labelOf(renderSteps([failedAfterOk]), 'response 200');
+  expect(label).not.toHaveClass('is-ok');
+  expect(label).toHaveClass('is-server-error');
+});

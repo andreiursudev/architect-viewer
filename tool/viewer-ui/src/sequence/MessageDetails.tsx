@@ -1,5 +1,5 @@
 import type { FlowStep } from '../api/types';
-import { formatMillis, NOT_RECORDED } from '../board/HopDetails';
+import { clientCallNote, formatMillis } from '../board/HopDetails';
 import { statusTone } from '../status';
 
 type Kind = 'request' | 'response';
@@ -92,7 +92,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
         </>
       ) : (
         <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
-          <p className="muted md-note">{NOT_RECORDED}</p>
+          <p className="muted md-note">{clientCallNote(step)}</p>
         </Section>
       )}
     </div>

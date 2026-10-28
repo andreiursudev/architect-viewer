@@ -13,6 +13,7 @@ test('board shows inventory-service and its database', async ({ page }) => {
   await page.goto('/');
   await expect(node(page, 'inventory-service')).toBeVisible();
   await expect(node(page, 'postgresql-inventory')).toBeVisible();
+  await expect(page.locator('.legend')).toContainText('failed');
 });
 
 test('out-of-stock path crosses both services and is marked failed', async ({ page }) => {

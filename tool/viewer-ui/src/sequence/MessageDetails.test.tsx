@@ -66,10 +66,18 @@ test('the section of the clicked message is marked', () => {
   expect(screen.getByRole('region', { name: 'Request' })).toHaveClass('is-selected');
 });
 
-test('a call to an unrecorded host shows its URL, the error type and that no body was recorded', () => {
+test('a call that got no answer shows its URL, the error type and that it never reached the service', () => {
   render(<MessageDetails step={unrecordedHostStep} kind="response" />);
   expect(screen.getByRole('heading', { name: 'POST /tax/quote' })).toBeInTheDocument();
   expect(screen.getByText('http://tax-service:9000/tax/quote')).toBeInTheDocument();
   expect(screen.getByText('java.net.ConnectException')).toBeInTheDocument();
+  expect(screen.getByText('No response: the call failed before reaching the service.')).toBeInTheDocument();
+  expect(screen.queryByText('Body not recorded: the called service is not instrumented.')).not.toBeInTheDocument();
+});
+
+test('an answered call to an unrecorded host says the called service is not instrumented', () => {
+  const answered = { ...unrecordedHostStep, status: 502, event: { ...unrecordedHostStep.event, status: 502, errorType: null } } as typeof unrecordedHostStep;
+  render(<MessageDetails step={answered} kind="response" />);
   expect(screen.getByText('Body not recorded: the called service is not instrumented.')).toBeInTheDocument();
+  expect(screen.queryByText(/No response/)).not.toBeInTheDocument();
 });

@@ -158,6 +158,16 @@ class FlowBuilderTest {
     }
 
     @Test
+    fun `a host that slugs to nothing goes to unknown-host like a call without a host`() {
+        val call = client("call", "orders-service", 0, 10, url = "http://.../x", serverAddress = "...")
+
+        val step = builder.build(emptyManifest(), listOf(call), emptyMap()).steps.single()
+
+        step.to shouldBe "unknown-host"
+        step.connectionId shouldBe "orders-service--unknown-host"
+    }
+
+    @Test
     fun `aliases apply to both ends of a hop`() {
         val call = client("call", "orders-service", 100, 500, url = "http://inventory-service:8081/reservations", parent = null)
         val inventory = http("inventory", "inventory-service", 150, 400, parent = "call")

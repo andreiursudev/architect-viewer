@@ -24,10 +24,10 @@ function fit(label: string, room: number): string {
   return label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label;
 }
 
-/** A failed response is coloured by its status; a call that got no answer at all is a server-side-looking failure. */
+/** A failed response is coloured by its error status; a call that failed without one (no answer, or an error after a 2xx) is a server-side-looking failure. */
 function tone(step: FlowStep | undefined, kind: SequenceMessage['kind']): string {
   if (kind !== 'response' || !step || !isFailedStep(step)) return '';
-  return ` ${step.status != null ? statusTone(step.status) : 'is-server-error'}`;
+  return ` ${step.status != null && step.status >= 400 ? statusTone(step.status) : 'is-server-error'}`;
 }
 
 /** The run as a sequence diagram: a lifeline per component, solid arrows for calls, dashed arrows for what came back. */

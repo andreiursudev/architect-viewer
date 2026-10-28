@@ -50,7 +50,7 @@ class FlowBuilder {
                 )
                 is HttpClientEvent -> if (event in answered) null else step(
                     event, parent = enclosingRequest(event, requests)?.eventId,
-                    from = alias(event.component), to = alias(ComponentIds.service(event.serverAddress ?: UNKNOWN_HOST)),
+                    from = alias(event.component), to = alias(ComponentIds.service(event.serverAddress.orEmpty()).ifEmpty { UNKNOWN_HOST }), // "" or "..." slug to nothing
                     kind = ConnectionKind.HTTP, label = "${event.method} ${pathOf(event.url)}", status = event.status,
                 )
             }

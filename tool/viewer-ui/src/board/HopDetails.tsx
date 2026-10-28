@@ -5,6 +5,14 @@ const BODY_LIMIT = 200;
 
 /** Said wherever a hop has no payloads: the callee is not one of the recorded components. */
 export const NOT_RECORDED = 'Body not recorded: the called service is not instrumented.';
+/** Said instead when the call never got an answer: there was nothing to record, instrumented or not. */
+export const NO_RESPONSE = 'No response: the call failed before reaching the service.';
+
+/** The note under an `http.client` step: it either never got an answer, or the answering service is not recorded. */
+export function clientCallNote(step: FlowStep): string {
+  const unanswered = step.status == null && step.event.type === 'http.client' && step.event.errorType != null;
+  return unanswered ? NO_RESPONSE : NOT_RECORDED;
+}
 
 function cut(text: string): string {
   return text.length > BODY_LIMIT ? `${text.slice(0, BODY_LIMIT)}…` : text;
@@ -47,7 +55,7 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
             <>
               <p className="hop-url">{step.event.url}</p>
               {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
-              <p className="muted">{NOT_RECORDED}</p>
+              <p className="muted">{clientCallNote(step)}</p>
             </>
           )}
         </section>
