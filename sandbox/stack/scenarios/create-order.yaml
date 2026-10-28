@@ -1,0 +1,2 @@
+id: create-order
+description: A customer places an order (POST /orders), which orders-service stores in Postgres.

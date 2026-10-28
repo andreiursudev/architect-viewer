@@ -1,0 +1,2 @@
+id: get-order
+description: A customer looks up an existing order (GET /orders/{id}), which orders-service reads from Postgres.

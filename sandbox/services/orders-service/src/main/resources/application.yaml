@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: orders-service
+  datasource:
+    # docker-compose.yml overrides this (SPRING_DATASOURCE_URL); localhost:15432 is the compose Postgres as seen
+    # from the host, for a run from the IDE.
+    url: jdbc:postgresql://localhost:15432/orders
+    username: orders
+    password: orders
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

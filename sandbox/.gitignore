@@ -1,0 +1,5 @@
+build/
+.gradle/
+.kotlin/
+# Written by the reporter (docker-compose.yml volume); never committed.
+/recordings/
