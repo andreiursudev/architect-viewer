@@ -1,0 +1,4 @@
+id: postgresql-inventory
+type: database
+displayName: postgresql-inventory
+tags: []

@@ -1,0 +1,4 @@
+from: inventory-service
+to: postgresql-inventory
+kind: db
+state: accepted

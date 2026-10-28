@@ -1,0 +1,5 @@
+from: orders-service
+to: inventory-service
+kind: http
+label: POST /reservations
+state: accepted
