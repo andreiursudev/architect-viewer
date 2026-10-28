@@ -1,6 +1,6 @@
 #!/bin/sh
 # Stack viewer launcher (POSIX sh).
-# Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]
+# Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
 # Needs Java 25+ (from $JAVA_HOME/bin/java when JAVA_HOME is set, otherwise `java` on PATH).
 
 MIN_JAVA=25
@@ -10,7 +10,8 @@ case "$0" in
     */*) script_dir=${0%/*} ;;
     *) script_dir=. ;;
 esac
-script_dir=$(cd -- "$script_dir" && pwd) || exit 1
+# CDPATH is cleared so a relative script_dir cannot resolve elsewhere (and cd stays silent).
+script_dir=$(CDPATH= cd -- "$script_dir" && pwd) || exit 1
 jar="$script_dir/stack-viewer.jar"
 
 if [ -n "${JAVA_HOME:-}" ]; then

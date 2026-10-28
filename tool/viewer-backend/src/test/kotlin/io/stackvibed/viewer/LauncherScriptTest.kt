@@ -16,12 +16,19 @@ class LauncherScriptTest {
 
     private class Result(val exitCode: Int, val output: String)
 
-    private fun run(env: Map<String, String> = emptyMap(), vararg args: String): Result {
+    /** Runs [command] (the launcher by absolute path unless given) from [dir] (the test's working directory if null). */
+    private fun run(
+        env: Map<String, String> = emptyMap(),
+        vararg args: String,
+        command: String = script.toString(),
+        dir: Path? = null,
+    ): Result {
         val log = Files.createTempFile("launcher", ".log")
-        val process = ProcessBuilder(listOf(script.toString()) + args)
+        val process = ProcessBuilder(listOf(command) + args)
             .redirectErrorStream(true)
             .redirectOutput(log.toFile())
             .apply { environment().putAll(env) }
+            .apply { if (dir != null) directory(dir.toFile()) }
             .start()
         try {
             val finished = process.waitFor(120, TimeUnit.SECONDS)
@@ -72,6 +79,30 @@ class LauncherScriptTest {
 
         (result.exitCode != 0) shouldBe true
         result.output shouldContain "has no bin/java"
+    }
+
+    @Test
+    fun `launcher started by a relative path finds its jar even with CDPATH set`() {
+        val fakeHome = fakeJavaHome(
+            """
+            if [ "${'$'}1" = "-version" ]; then echo 'openjdk version "25.0.1" 2025-10-21' >&2; exit 0; fi
+            echo "fake java launched: ${'$'}*"
+            """.trimIndent(),
+        )
+        // A decoy with the same relative path: `cd stack-viewer` would go there (and print it) if CDPATH applied.
+        val decoy = createTempDirectory("cdpath decoy")
+        Files.createDirectory(decoy.resolve(script.parent.fileName.toString()))
+        val relative = "${script.parent.fileName}/${script.fileName}"
+
+        val result = run(
+            mapOf("JAVA_HOME" to fakeHome.toString(), "CDPATH" to decoy.toString()),
+            "--workspace=$fakeHome",
+            command = relative,
+            dir = script.parent.parent,
+        )
+
+        result.exitCode shouldBe 0
+        result.output shouldContain "fake java launched: -jar ${script.parent.toRealPath().resolve("stack-viewer.jar")}"
     }
 
     @Test
