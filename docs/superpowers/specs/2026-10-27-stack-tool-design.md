@@ -170,9 +170,33 @@ Tool:
 - Viewer sequence view: basic diagram for one run; click a message to see payload.
 - Workspace: `workspace.yaml`, `components/`, `connections/` (with discovered/accepted states and both mismatch flags, D24), `scenarios/`, Markdown notes on components.
 
+### Step 2 — a second service called over HTTP (scope set by Claude; the owner skipped the questions)
+
+Why: step 1 only proved client → service → database. The tool's core claim, that one scenario is followed across services, is still unproven: it needs trace and baggage propagation between two agents and the caller's outgoing HTTP call in the recording.
+
+Sandbox:
+- New `inventory-service` (Spring Boot 4, Kotlin, Spring MVC, same conventions as `orders-service`) with its own Postgres container (database `inventory`). `POST /reservations` `{sku, quantity}` decrements stock in one conditional `UPDATE` and returns `201` with the reservation, or `409` when the stock is short (nothing changes). Flyway seeds a plentiful SKU and an out-of-stock SKU.
+- `orders-service` calls `POST /reservations` through Spring's `RestClient` before it inserts the order. A `409` from inventory makes `POST /orders` answer `409` and insert nothing.
+- `e2e-tests`: `create-order` now reserves stock; `get-order` is unchanged; new scenario `create-order-out-of-stock`.
+- Compose: `inventory-service` on `127.0.0.1:8081` under the same agent, its Postgres on `127.0.0.1:15433`; `orders-service` gets the inventory base URL by environment variable.
+
+Tool:
+- `model`: new event `http.client` (method, full URL, server address and port, status, duration) recorded on the caller. `schemaVersion` becomes 2; readers accept 1 and 2.
+- `reporter`: maps HTTP client spans to `http.client` events (today they are dropped).
+- `agent-extension`: no new capture expected. The OTel agent already creates client spans for `RestClient` and propagates `traceparent` and `baggage`, and our span processor copies the scenario and run onto every span. An agent test proves this end to end with two fixture apps (or the fixture calling itself).
+- Viewer flow (`FlowBuilder`): a server event whose parent span is a recorded client event becomes one hop from the caller to the callee. Its parent step is the caller's enclosing request (time containment, as for DB calls), and its payload comes from the callee's server event. A client event with no recorded callee becomes a hop to a component named after the target host, showing what the caller saw (no bodies). A server event with no recorded caller stays a hop from the e2e client.
+- Board: service-to-service connections are discovered and accepted like the others. The caller of an HTTP connection is a service unless it is the e2e client. New components get a position by auto-layout while saved positions stay put (already the case).
+- Sequence view: four participants, nested activations two levels deep. Failed hops (4xx/5xx) are visibly marked on the sequence and on the highlighted board path.
+- Details panels: show `http.client` hops (URL, status, "body not recorded: the callee is not instrumented").
+
+Claude's calls in this step (owner to check):
+- Client-side body capture is left out: an instrumented callee records both bodies already. It arrives with WireMock, the first uninstrumented callee.
+- One reservation call per order, synchronous; no retries, timeouts tuning, or compensation, because the sandbox is a stand-in, not a design.
+- The client hop and the server hop are merged into one step rather than drawn twice.
+
 ### Explicitly later (each when the sandbox needs it)
 
-Level 2 + component view; Kafka, WireMock, second service; layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
+Level 2 + component view; Kafka, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
 
 ## 12. Testing strategy (D21)
 
