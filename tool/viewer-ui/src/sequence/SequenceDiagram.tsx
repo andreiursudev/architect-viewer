@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { ComponentType, Flow, FlowStep } from '../api/types';
+import { isFailedStep, statusTone } from '../status';
 import { HEADER_HEIGHT, MARGIN_X, layoutSequence, type SequenceMessage } from './layoutSequence';
 
 export interface ParticipantInfo {
@@ -23,11 +24,10 @@ function fit(label: string, room: number): string {
   return label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label;
 }
 
+/** A failed response is coloured by its status; a call that got no answer at all is a server-side-looking failure. */
 function tone(step: FlowStep | undefined, kind: SequenceMessage['kind']): string {
-  if (kind !== 'response' || step?.status == null) return '';
-  if (step.status >= 500) return ' is-server-error';
-  if (step.status >= 400) return ' is-client-error';
-  return '';
+  if (kind !== 'response' || !step || !isFailedStep(step)) return '';
+  return ` ${step.status != null ? statusTone(step.status) : 'is-server-error'}`;
 }
 
 /** The run as a sequence diagram: a lifeline per component, solid arrows for calls, dashed arrows for what came back. */

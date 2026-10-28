@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { MarkerType, type Edge } from '@xyflow/react';
 import { emphasizePath, highlightFor, hopsOffBoard } from './highlight';
 import { PATH_COLOR } from './toFlowElements';
-import { createOrderFlow } from './testData';
+import { createOrderFlow, unrecordedHostStep } from './testData';
 
 test('highlight covers every hop of the flow', () => {
   const h = highlightFor(createOrderFlow);
@@ -56,4 +56,12 @@ test('hops without an edge on the board are counted', () => {
   expect(hopsOffBoard(h, ['e2e-client--orders-service'])).toBe(1); // the insert's connection is hidden
   expect(hopsOffBoard(h, [])).toBe(2);
   expect(hopsOffBoard(null, [])).toBe(0);
+});
+
+test('failedEdgesAreCollected', () => {
+  const [request, insert] = createOrderFlow.steps;
+  const conflict = { ...request, stepId: 'conflict', status: 409, startEpochNanos: request.startEpochNanos + 1 };
+  const h = highlightFor({ ...createOrderFlow, steps: [request, insert, conflict, unrecordedHostStep] });
+  expect(h.failedEdgeIds).toEqual(new Set(['e2e-client--orders-service', 'orders-service--tax-service']));
+  expect(highlightFor(createOrderFlow).failedEdgeIds.size).toBe(0);
 });

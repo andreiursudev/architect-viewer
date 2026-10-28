@@ -1,4 +1,4 @@
-import type { BoardComponent, BoardConnection, BoardLayout, ConnectionState, Flow, WorkspaceView } from '../api/types';
+import type { BoardComponent, BoardConnection, BoardLayout, ConnectionState, Flow, FlowStep, WorkspaceView } from '../api/types';
 
 /** Builders for the board tests. */
 export function comp(id: string, over: Partial<BoardComponent> = {}): BoardComponent {
@@ -102,4 +102,36 @@ export const createOrderFlow: Flow = {
       },
     },
   ],
+};
+
+/** A call to a host the project does not record: the backend keeps the caller's `http.client` event as the step. */
+export const unrecordedHostStep: FlowStep = {
+  stepId: 'trace-client-span',
+  parentStepId: null,
+  from: 'orders-service',
+  to: 'tax-service',
+  connectionId: 'orders-service--tax-service',
+  kind: 'http',
+  label: 'POST /tax/quote',
+  startEpochNanos: 1760000000020000000,
+  durationNanos: 3000000,
+  status: null,
+  event: {
+    type: 'http.client',
+    schemaVersion: 2,
+    eventId: 'trace-client-span',
+    runId: 'run-1',
+    traceId: 'trace',
+    spanId: 'client-span',
+    parentSpanId: null,
+    component: 'orders-service',
+    startEpochNanos: 1760000000020000000,
+    durationNanos: 3000000,
+    method: 'POST',
+    url: 'http://tax-service:9000/tax/quote',
+    serverAddress: 'tax-service',
+    serverPort: 9000,
+    status: null,
+    errorType: 'java.net.ConnectException',
+  },
 };

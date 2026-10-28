@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { Flow, FlowStep } from '../api/types';
-import { createOrderFlow } from '../board/testData';
+import { createOrderFlow, unrecordedHostStep } from '../board/testData';
 import { layoutSequence } from './layoutSequence';
 
 test('sequence rows are request, nested request, nested response, response', () => {
@@ -79,4 +79,25 @@ test('an empty flow has no participants or messages', () => {
   const l = layoutSequence({ ...createOrderFlow, steps: [] });
   expect(l.participants).toEqual([]);
   expect(l.messages).toEqual([]);
+});
+
+test('fourServicesNestTwoDeep', () => {
+  const flow: Flow = {
+    ...createOrderFlow,
+    steps: [
+      step({ stepId: 'orders', from: 'e2e-client', to: 'orders-service', startEpochNanos: 1 }),
+      step({ stepId: 'inventory', parentStepId: 'orders', from: 'orders-service', to: 'inventory-service', startEpochNanos: 2 }),
+      step({ stepId: 'db', parentStepId: 'inventory', from: 'inventory-service', to: 'postgresql-inventory', startEpochNanos: 3 }),
+    ],
+  };
+  const l = layoutSequence(flow);
+  expect(l.participants.map((p) => p.id)).toEqual(['e2e-client', 'orders-service', 'inventory-service', 'postgresql-inventory']);
+  expect(l.messages.map((m) => `${m.kind}:${m.stepId}`)).toEqual([
+    'request:orders', 'request:inventory', 'request:db', 'response:db', 'response:inventory', 'response:orders',
+  ]);
+});
+
+test('the response of a client call that failed names the error', () => {
+  const l = layoutSequence({ ...createOrderFlow, steps: [unrecordedHostStep] });
+  expect(l.messages.map((m) => m.label)).toEqual(['POST /tax/quote', 'ConnectException']);
 });

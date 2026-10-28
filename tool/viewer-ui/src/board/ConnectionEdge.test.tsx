@@ -124,3 +124,20 @@ test('hovering an edge outside the path shows no hop details', async () => {
   await user.hover(chip());
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
+
+test('a hop that failed on the path is marked on its chip', () => {
+  const [request, insert] = createOrderFlow.steps;
+  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [{ ...request, status: 409 }, insert] });
+  expect(chip()).toHaveClass('is-failed');
+});
+
+test('a hop that succeeded is not marked as failed', () => {
+  renderEdge('e2e-client--orders-service', createOrderFlow);
+  expect(chip()).not.toHaveClass('is-failed');
+});
+
+test('a failed hop elsewhere on the path does not mark this chip', () => {
+  const [request, insert] = createOrderFlow.steps;
+  renderEdge('orders-service--postgresql-orders', { ...createOrderFlow, steps: [{ ...request, status: 409 }, insert] });
+  expect(chip()).not.toHaveClass('is-failed');
+});

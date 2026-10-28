@@ -1,6 +1,7 @@
 import type { Edge } from '@xyflow/react';
 import { createContext, useContext } from 'react';
 import type { Flow, FlowStep } from '../api/types';
+import { isFailedStep } from '../status';
 import { PATH_COLOR } from './toFlowElements';
 
 /** What a recorded run touches: the components and connections of its path, and what happened on each connection. */
@@ -9,6 +10,8 @@ export interface Highlight {
   /** Connection ids in the order the run first used them. */
   edgeIds: Set<string>;
   stepsByEdge: Map<string, FlowStep[]>;
+  /** Connections on which at least one step of the run failed. */
+  failedEdgeIds: Set<string>;
   /** 1-based position of each highlighted connection along the path: the number of its badge. */
   orderByEdge: Map<string, number>;
 }
@@ -20,11 +23,13 @@ export function highlightFor(flow: Flow): Highlight {
   const edgeIds = new Set<string>();
   const stepsByEdge = new Map<string, FlowStep[]>();
   const orderByEdge = new Map<string, number>();
+  const failedEdgeIds = new Set<string>();
 
   for (const step of steps) {
     nodeIds.add(step.from);
     nodeIds.add(step.to);
     edgeIds.add(step.connectionId);
+    if (isFailedStep(step)) failedEdgeIds.add(step.connectionId);
     const onEdge = stepsByEdge.get(step.connectionId);
     if (onEdge) {
       onEdge.push(step);
@@ -33,7 +38,7 @@ export function highlightFor(flow: Flow): Highlight {
       orderByEdge.set(step.connectionId, orderByEdge.size + 1);
     }
   }
-  return { nodeIds, edgeIds, stepsByEdge, orderByEdge };
+  return { nodeIds, edgeIds, stepsByEdge, orderByEdge, failedEdgeIds };
 }
 
 /** Path edges are drawn above the dimmed ones and their arrowheads take the path colour; the others stay as they are. */

@@ -1,13 +1,8 @@
 import type { FlowStep } from '../api/types';
-import { formatMillis } from '../board/HopDetails';
+import { formatMillis, NOT_RECORDED } from '../board/HopDetails';
+import { statusTone } from '../status';
 
 type Kind = 'request' | 'response';
-
-function statusTone(status: number): string {
-  if (status >= 500) return 'is-server-error';
-  if (status >= 400) return 'is-client-error';
-  return 'is-ok';
-}
 
 /** JSON is shown indented; anything else (including a body the recording cut short) exactly as recorded. */
 export function prettyBody(text: string): string {
@@ -55,7 +50,20 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             <dt>Name</dt>
             <dd>{event.dbName ?? 'unknown'}</dd>
           </>
-        ) : null}
+        ) : (
+          <>
+            <dt>Method</dt>
+            <dd>{event.method}</dd>
+            <dt>URL</dt>
+            <dd>{event.url}</dd>
+            {event.errorType && (
+              <>
+                <dt>Error</dt>
+                <dd>{event.errorType}</dd>
+              </>
+            )}
+          </>
+        )}
       </dl>
 
       {event.type === 'http.server' ? (
@@ -82,7 +90,11 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             </p>
           </Section>
         </>
-      ) : null /* http.client: label only until Task 6 renders hops */}
+      ) : (
+        <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
+          <p className="muted md-note">{NOT_RECORDED}</p>
+        </Section>
+      )}
     </div>
   );
 }

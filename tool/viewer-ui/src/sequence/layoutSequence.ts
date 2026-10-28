@@ -1,4 +1,5 @@
 import type { Flow, FlowStep } from '../api/types';
+import { responseText } from '../status';
 
 export const COLUMN_GAP = 220;
 export const ROW_GAP = 48;
@@ -28,15 +29,6 @@ export interface SequenceLayout {
   participants: SequenceParticipant[];
   messages: SequenceMessage[];
   height: number;
-}
-
-/** What a step answers with: the HTTP status, or the number of rows a statement touched (`ok` when it did not say). */
-function responseLabel(step: FlowStep): string {
-  if (step.status != null) return String(step.status);
-  if (step.event.type === 'db.client' && step.event.rowCount != null) {
-    return step.event.rowCount === 1 ? '1 row' : `${step.event.rowCount} rows`;
-  }
-  return 'ok';
 }
 
 /**
@@ -80,7 +72,7 @@ export function layoutSequence(flow: Flow): SequenceLayout {
       fromX: kind === 'request' ? caller : callee,
       toX: kind === 'request' ? callee : caller,
       y: HEADER_HEIGHT + FIRST_ROW_OFFSET + i * ROW_GAP,
-      label: kind === 'request' ? step.label : responseLabel(step),
+      label: kind === 'request' ? step.label : responseText(step),
     };
   });
   const height = participants.length === 0 ? 0 : HEADER_HEIGHT + FIRST_ROW_OFFSET + Math.max(rows.length - 1, 0) * ROW_GAP + BOTTOM_PADDING;

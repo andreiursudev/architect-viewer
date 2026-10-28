@@ -37,6 +37,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   if (selected) classes.push('is-selected');
   if (highlight) classes.push(steps ? 'on-path' : 'is-dimmed');
   if (steps && hovered) classes.push('is-hovered');
+  if (highlight?.failedEdgeIds.has(id)) classes.push('is-failed');
 
   return (
     <>

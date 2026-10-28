@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import { createOrderFlow } from '../board/testData';
+import { createOrderFlow, unrecordedHostStep } from '../board/testData';
 import { MessageDetails } from './MessageDetails';
 
 const [request, insert] = createOrderFlow.steps;
@@ -64,4 +64,12 @@ test('the section of the clicked message is marked', () => {
   expect(screen.getByRole('region', { name: 'Request' })).not.toHaveClass('is-selected');
   rerender(<MessageDetails step={request} kind="request" />);
   expect(screen.getByRole('region', { name: 'Request' })).toHaveClass('is-selected');
+});
+
+test('a call to an unrecorded host shows its URL, the error type and that no body was recorded', () => {
+  render(<MessageDetails step={unrecordedHostStep} kind="response" />);
+  expect(screen.getByRole('heading', { name: 'POST /tax/quote' })).toBeInTheDocument();
+  expect(screen.getByText('http://tax-service:9000/tax/quote')).toBeInTheDocument();
+  expect(screen.getByText('java.net.ConnectException')).toBeInTheDocument();
+  expect(screen.getByText('Body not recorded: the called service is not instrumented.')).toBeInTheDocument();
 });

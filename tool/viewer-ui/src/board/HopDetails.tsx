@@ -1,6 +1,10 @@
 import type { FlowStep } from '../api/types';
+import { statusTone } from '../status';
 
 const BODY_LIMIT = 200;
+
+/** Said wherever a hop has no payloads: the callee is not one of the recorded components. */
+export const NOT_RECORDED = 'Body not recorded: the called service is not instrumented.';
 
 function cut(text: string): string {
   return text.length > BODY_LIMIT ? `${text.slice(0, BODY_LIMIT)}…` : text;
@@ -9,12 +13,6 @@ function cut(text: string): string {
 export function formatMillis(nanos: number): string {
   const ms = nanos / 1_000_000;
   return `${Number(ms.toFixed(ms >= 10 ? 0 : 1))} ms`;
-}
-
-function statusTone(status: number): string {
-  if (status >= 500) return 'is-server-error';
-  if (status >= 400) return 'is-client-error';
-  return 'is-ok';
 }
 
 /** What happened on one highlighted connection: every call of the run over it, with a peek at the payloads. */
@@ -45,7 +43,13 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
                 <p className="hop-rows">{step.event.rowCount === 1 ? '1 row' : `${step.event.rowCount} rows`}</p>
               )}
             </>
-          ) : null /* http.client: label only until Task 6 renders hops */}
+          ) : (
+            <>
+              <p className="hop-url">{step.event.url}</p>
+              {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
+              <p className="muted">{NOT_RECORDED}</p>
+            </>
+          )}
         </section>
       ))}
     </div>
