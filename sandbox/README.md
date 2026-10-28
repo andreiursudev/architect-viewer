@@ -145,8 +145,10 @@ above.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
   15432, 15433, 8080 or 8081: `(cd sandbox && docker compose down -v)`. The viewer uses 8090 (`--server.port=<n>`
   to move it).
-- **`POST /orders` answers `5xx` and nothing is recorded for inventory-service.** orders-service cannot reach
-  inventory-service: start the whole stack (`docker compose up -d --build --wait`), or, with orders-service run from
-  the IDE, inventory-service on `localhost:8081`.
+- **`POST /orders` answers `5xx` and the hop to inventory-service is marked failed.** orders-service cannot reach
+  inventory-service, so no inventory-service server span is recorded; the orders-service to inventory-service hop
+  still shows in the viewer, marked failed, with the error and no status. Start the whole stack
+  (`docker compose up -d --build --wait`), or, with orders-service run from the IDE, inventory-service on
+  `localhost:8081`.
 - **A run is missing from the viewer.** Spans are exported in batches (200 ms); a run appears a moment after the
   test finishes. Untagged traffic is in `recordings/_unassigned`.
