@@ -4,8 +4,11 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-/** Version of the recorded-event / manifest JSON format. Any change to the schema snapshot is deliberate. */
-const val SCHEMA_VERSION = 1
+/**
+ * Version of the recorded-event / manifest JSON format. Any change to the schema snapshot is deliberate.
+ * Version 2 added [HttpClientEvent]; version 1 recordings still deserialise unchanged.
+ */
+const val SCHEMA_VERSION = 2
 
 enum class ComponentType {
     @JsonProperty("service") SERVICE,
@@ -23,6 +26,7 @@ enum class RecordingKind {
 @JsonSubTypes(
     JsonSubTypes.Type(value = HttpServerEvent::class, name = "http.server"),
     JsonSubTypes.Type(value = DbClientEvent::class, name = "db.client"),
+    JsonSubTypes.Type(value = HttpClientEvent::class, name = "http.client"),
 )
 sealed interface RecordingEvent {
     val schemaVersion: Int
@@ -75,4 +79,27 @@ data class DbClientEvent(
     val statement: String,
     val parameters: List<String?>,
     val rowCount: Long?,
+) : RecordingEvent
+
+/** An outgoing HTTP call as observed by the caller; joined with the callee's [HttpServerEvent] into a hop by the viewer. */
+data class HttpClientEvent(
+    override val schemaVersion: Int = SCHEMA_VERSION,
+    override val eventId: String,
+    override val runId: String,
+    override val traceId: String,
+    override val spanId: String,
+    override val parentSpanId: String?,
+    /** The caller. */
+    override val component: String,
+    override val startEpochNanos: Long,
+    override val durationNanos: Long,
+    val method: String,
+    /** `url.full` as the caller sent it. */
+    val url: String,
+    val serverAddress: String?,
+    val serverPort: Int?,
+    /** Null when no response arrived. */
+    val status: Int?,
+    /** OTel `error.type`, e.g. `java.net.ConnectException`. */
+    val errorType: String?,
 ) : RecordingEvent

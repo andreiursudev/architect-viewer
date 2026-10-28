@@ -34,3 +34,20 @@ val sampleDbEvent = DbClientEvent(
     parameters = listOf("A-1", null),
     rowCount = 1L,
 )
+
+val sampleClientEvent = HttpClientEvent(
+    eventId = "ev-3",
+    runId = "run-1",
+    traceId = "0af7651916cd43dd8448eb211c80319c",
+    spanId = "d4cda95b652f4a15",
+    parentSpanId = "b7ad6b7169203331",
+    component = "orders-service",
+    startEpochNanos = 1_700_000_000_002_000_000L,
+    durationNanos = 5_000_000L,
+    method = "POST",
+    url = "http://localhost:8081/stock/reservations",
+    serverAddress = "localhost",
+    serverPort = 8081,
+    status = 201,
+    errorType = null,
+)

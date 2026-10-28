@@ -52,7 +52,7 @@ export interface ModelSchema {
     steps: {
       connectionId: string;
       durationNanos: number;
-      event: HttpServerEvent | DbClientEvent;
+      event: HttpServerEvent | DbClientEvent | HttpClientEvent;
       from: string;
       kind: ConnectionKind;
       label: string;
@@ -63,7 +63,7 @@ export interface ModelSchema {
       to: string;
     }[];
   };
-  recordingEvent: HttpServerEvent | DbClientEvent;
+  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent;
   recordingManifest: {
     componentsSeen: string[];
     kind: "e2e" | "manual" | "test";
@@ -176,6 +176,28 @@ export interface DbClientEvent {
   statement: string;
   traceId: string;
   type: "db.client";
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "HttpClientEvent".
+ */
+export interface HttpClientEvent {
+  component: string;
+  durationNanos: number;
+  errorType?: string | null;
+  eventId: string;
+  method: string;
+  parentSpanId?: string | null;
+  runId: string;
+  schemaVersion: number;
+  serverAddress?: string | null;
+  serverPort?: number | null;
+  spanId: string;
+  startEpochNanos: number;
+  status?: number | null;
+  traceId: string;
+  type: "http.client";
+  url: string;
 }
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema

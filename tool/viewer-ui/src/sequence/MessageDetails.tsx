@@ -48,14 +48,14 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        ) : (
+        ) : event.type === 'db.client' ? (
           <>
             <dt>Database</dt>
             <dd>{event.dbSystem}</dd>
             <dt>Name</dt>
             <dd>{event.dbName ?? 'unknown'}</dd>
           </>
-        )}
+        ) : null}
       </dl>
 
       {event.type === 'http.server' ? (
@@ -69,7 +69,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             <Body what="response" text={event.responseBody} truncated={event.responseBodyTruncated} />
           </Section>
         </>
-      ) : (
+      ) : event.type === 'db.client' ? (
         <>
           <Section title="Request" selected={kind === 'request'}>
             <h4>SQL statement</h4>
@@ -82,7 +82,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             </p>
           </Section>
         </>
-      )}
+      ) : null /* http.client: label only until Task 6 renders hops */}
     </div>
   );
 }

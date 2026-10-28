@@ -2,6 +2,7 @@ package io.stackvibed.viewer.topology
 
 import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
+import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
@@ -18,7 +19,7 @@ class FlowBuilder {
         fun alias(id: String) = aliases[id] ?: id
 
         val httpEvents = events.filterIsInstance<HttpServerEvent>()
-        val steps = events.sortedBy { it.startEpochNanos }.map { event ->
+        val steps = events.sortedBy { it.startEpochNanos }.mapNotNull { event ->
             when (event) {
                 is HttpServerEvent -> step(
                     event, parent = null,
@@ -30,6 +31,8 @@ class FlowBuilder {
                     from = alias(event.component), to = alias(ComponentIds.database(event.dbSystem, event.dbName)),
                     kind = ConnectionKind.DB, label = event.statement.replace(WHITESPACE, " ").trim().take(LABEL_LENGTH), status = null,
                 )
+                // Caller-side spans are joined into hops later; until then they do not appear as steps.
+                is HttpClientEvent -> null
             }
         }
         return Flow(manifest.runId, manifest.scenarioId, steps)

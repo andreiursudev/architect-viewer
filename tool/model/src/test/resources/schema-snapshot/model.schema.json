@@ -70,6 +70,65 @@
       "required" : [ "component", "dbSystem", "durationNanos", "eventId", "parameters", "runId", "schemaVersion", "spanId", "startEpochNanos", "statement", "traceId", "type" ],
       "type" : "object"
     },
+    "HttpClientEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "errorType" : {
+          "type" : [ "string", "null" ]
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "method" : {
+          "type" : "string"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "serverAddress" : {
+          "type" : [ "string", "null" ]
+        },
+        "serverPort" : {
+          "format" : "int32",
+          "type" : [ "integer", "null" ]
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "status" : {
+          "format" : "int32",
+          "type" : [ "integer", "null" ]
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "http.client"
+        },
+        "url" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "component", "durationNanos", "eventId", "method", "runId", "schemaVersion", "spanId", "startEpochNanos", "traceId", "type", "url" ],
+      "type" : "object"
+    },
     "HttpServerEvent" : {
       "properties" : {
         "component" : {
@@ -273,6 +332,8 @@
                   "$ref" : "#/$defs/HttpServerEvent"
                 }, {
                   "$ref" : "#/$defs/DbClientEvent"
+                }, {
+                  "$ref" : "#/$defs/HttpClientEvent"
                 } ]
               },
               "from" : {
@@ -316,6 +377,8 @@
         "$ref" : "#/$defs/HttpServerEvent"
       }, {
         "$ref" : "#/$defs/DbClientEvent"
+      }, {
+        "$ref" : "#/$defs/HttpClientEvent"
       } ]
     },
     "recordingManifest" : {

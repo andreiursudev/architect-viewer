@@ -33,7 +33,7 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
               <Payload title="Request" text={step.event.requestBody} truncated={step.event.requestBodyTruncated} />
               <Payload title="Response" text={step.event.responseBody} truncated={step.event.responseBodyTruncated} />
             </>
-          ) : (
+          ) : step.event.type === 'db.client' ? (
             <>
               <Payload title="SQL" text={step.event.statement} sql />
               <Payload
@@ -45,7 +45,7 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
                 <p className="hop-rows">{step.event.rowCount === 1 ? '1 row' : `${step.event.rowCount} rows`}</p>
               )}
             </>
-          )}
+          ) : null /* http.client: label only until Task 6 renders hops */}
         </section>
       ))}
     </div>
