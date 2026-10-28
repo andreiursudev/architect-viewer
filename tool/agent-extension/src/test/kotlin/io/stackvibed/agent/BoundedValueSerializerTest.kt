@@ -52,11 +52,28 @@ class BoundedValueSerializerTest {
     }
 
     @Test
+    fun streamsAndIteratorsArePlaceholdersAndNeverConsumed() {
+        val consumed = java.util.concurrent.atomic.AtomicBoolean()
+        val stream = java.util.stream.Stream.of("a", "b").peek { consumed.set(true) }
+        BoundedValueSerializer.placeholder(stream) shouldBe "<stream>"
+        BoundedValueSerializer.placeholder(java.util.stream.IntStream.range(0, 3)) shouldBe "<stream>"
+        BoundedValueSerializer.placeholder(UnreadableIterator()) shouldBe "<stream>"
+        json(linkedMapOf("items" to stream, "more" to UnreadableIterator())) shouldBe """{"items":"<stream>","more":"<stream>"}"""
+        consumed.get() shouldBe false
+        stream.toList() shouldBe listOf("a", "b") // still usable by the application
+    }
+
+    @Test
     fun platformTypesUseToString() {
         json(java.util.UUID(0, 1)) shouldBe "\"00000000-0000-0000-0000-000000000001\""
     }
 
     private class Node(val name: String, val next: Node?)
+
+    private class UnreadableIterator : Iterator<String> {
+        override fun hasNext(): Boolean = throw AssertionError("capture must not advance the iterator")
+        override fun next(): String = throw AssertionError("capture must not advance the iterator")
+    }
 
     private class UnreadableStream : java.io.InputStream() {
         override fun read(): Int = throw AssertionError("capture must not read the stream")

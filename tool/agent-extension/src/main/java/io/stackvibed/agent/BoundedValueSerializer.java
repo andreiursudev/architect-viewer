@@ -8,6 +8,7 @@ import java.lang.reflect.Modifier;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.stream.BaseStream;
 
 /**
  * Dependency-free JSON rendering of arbitrary values with hard bounds on depth, collection size and
@@ -38,14 +39,15 @@ public final class BoundedValueSerializer {
 
     /**
      * A placeholder for values whose content must not be read to render them (doing so could load a
-     * whole file into memory or consume/leak a stream), or {@code null} for ordinary values. Spring's
+     * whole file into memory or consume/leak a stream, or use up a one-shot {@code Stream} or
+     * {@code Iterator} the application is about to write), or {@code null} for ordinary values. Spring's
      * {@code InputStreamSource} (e.g. {@code Resource}) is matched by name so no Spring type is loaded.
      */
     public static String placeholder(Object value) {
         if (value instanceof byte[] bytes) {
             return "<binary " + bytes.length + " bytes>";
         }
-        if (value instanceof InputStream) {
+        if (value instanceof InputStream || value instanceof BaseStream<?, ?> || value instanceof Iterator<?>) {
             return "<stream>";
         }
         if (value instanceof Reader) {

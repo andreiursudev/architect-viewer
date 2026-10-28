@@ -102,6 +102,16 @@ class HttpCaptureAgentTest {
     }
 
     @Test
+    fun streamAndIteratorBodiesAreRecordedAsPlaceholderAndStillSentWhole() {
+        for (path in listOf("/stream", "/iterator")) {
+            val call = get(path)
+            call.status shouldBe 200
+            call.body shouldBe """["a","b","c"]"""
+            serverSpan(call).attr(StackAttributes.HTTP_RESPONSE_BODY) shouldBe "<stream>"
+        }
+    }
+
+    @Test
     fun notFoundStillRecordsStatusAndBody() {
         val call = get("/items/does-not-exist")
         call.status shouldBe 404

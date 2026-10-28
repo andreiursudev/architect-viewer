@@ -6,10 +6,14 @@ import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
+import java.util.stream.Stream
 
 data class BigEntry(val index: Int, val payload: String)
 
-/** Bodies that stress capture: a ~5 MB JSON array, a plain-text body and a binary resource. */
+/**
+ * Bodies that stress capture: a ~5 MB JSON array, a plain-text body, a binary resource, and one-shot `Stream` and
+ * `Iterator` bodies that capture must not consume.
+ */
 @RestController
 class PayloadController {
 
@@ -22,6 +26,12 @@ class PayloadController {
     @GetMapping("/file")
     fun file(): ResponseEntity<Resource> =
         ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).body(ByteArrayResource("file-content".toByteArray()))
+
+    @GetMapping("/stream")
+    fun stream(): Stream<String> = Stream.of("a", "b", "c")
+
+    @GetMapping("/iterator")
+    fun iterator(): Iterator<String> = listOf("a", "b", "c").iterator()
 
     private companion object {
         // Each entry serialises to ~105 chars: 50 000 entries ≈ 5 MB.
