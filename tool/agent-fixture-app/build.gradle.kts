@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.jdbc)
+    implementation(libs.spring.boot.starter.restclient)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
     runtimeOnly(libs.h2)

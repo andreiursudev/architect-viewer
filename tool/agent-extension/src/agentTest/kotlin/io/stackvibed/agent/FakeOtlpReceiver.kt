@@ -65,6 +65,9 @@ class FakeOtlpReceiver : AutoCloseable {
         }
     }
 
+    /** Every span received so far. */
+    fun spans(): List<Span> = lock.withLock { spans.toList() }
+
     override fun close() {
         server.stop(0)
     }
