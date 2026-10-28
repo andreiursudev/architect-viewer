@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service
  * Joins what people curated (the workspace) with what the recordings prove (spec D24):
  * evidence without a connection file is `DISCOVERED`; an `ACCEPTED` connection without evidence is `unverified`;
  * `MANUAL` connections are never unverified; `HIDDEN` ones are returned as they are.
+ * Every endpoint of a non-hidden curated connection is a component, so no curated connection dangles on the board.
  */
 @Service
 class TopologyService(
@@ -58,7 +59,11 @@ class TopologyService(
         val connections = linkedMapOf<String, ObservedConnection>()
     }
 
-    private class ObservedConnection(val from: String, val to: String, val kind: ConnectionKind, val label: String?)
+    /** [labels]: the distinct step labels of an HTTP connection (its routes), in first-seen order; none for a database. */
+    private class ObservedConnection(val from: String, val to: String, val kind: ConnectionKind) {
+        val labels = linkedSetOf<String>()
+        val label: String? get() = labels.joinToString(", ").ifEmpty { null }
+    }
 
     private fun observe(manifest: RecordingManifest, aliases: Map<String, String>, into: Observed) {
         val flow = flowBuilder.build(manifest, recordings.events(manifest.runId), aliases)
@@ -74,9 +79,9 @@ class TopologyService(
         // The e2e client is a client wherever it shows up, and a database is not downgraded to a service.
         into.componentTypes.putIfAbsent(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else fromType)
         into.componentTypes.merge(step.to, toType) { known, new -> if (new == ComponentType.DATABASE) new else known }
+        val connection = into.connections.getOrPut(step.connectionId) { ObservedConnection(step.from, step.to, step.kind) }
         // A database call's label is its SQL, which says nothing about the connection as a whole.
-        val label = step.label.takeIf { step.kind == ConnectionKind.HTTP }
-        into.connections.putIfAbsent(step.connectionId, ObservedConnection(step.from, step.to, step.kind, label))
+        if (step.kind == ConnectionKind.HTTP) connection.labels += step.label
     }
 
     private fun components(loaded: LoadedWorkspace, observed: Observed): List<BoardComponent> {
@@ -84,11 +89,30 @@ class TopologyService(
             BoardComponent(it.id, it.type, it.displayName, discovered = false, hasNotes = it.id in loaded.notedTargets)
         }
         val known = curated.map { it.id }.toSet()
-        val discovered = observed.componentTypes
+        val types = LinkedHashMap(observed.componentTypes)
+        curatedEndpoints(loaded).forEach { (id, type) -> types.putIfAbsent(id, type) }
+        val discovered = types
             .filterKeys { it !in known }
             .toSortedMap()
             .map { (id, type) -> BoardComponent(id, type, id, discovered = true, hasNotes = id in loaded.notedTargets) }
         return curated + discovered
+    }
+
+    /**
+     * The endpoints of the non-hidden curated connections, typed from the connections alone: the e2e client is a
+     * client, the target of a database connection a database, anything else a service.
+     */
+    private fun curatedEndpoints(loaded: LoadedWorkspace): Map<String, ComponentType> {
+        val types = linkedMapOf<String, ComponentType>()
+        fun add(id: String, type: ComponentType) {
+            val inferred = if (id == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else type
+            types.merge(id, inferred) { known, new -> if (new == ComponentType.DATABASE) new else known }
+        }
+        loaded.connections.filter { it.state != ConnectionState.HIDDEN }.forEach {
+            add(it.from, ComponentType.SERVICE)
+            add(it.to, if (it.kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE)
+        }
+        return types
     }
 
     private fun connections(loaded: LoadedWorkspace, observed: Observed): List<BoardConnection> {

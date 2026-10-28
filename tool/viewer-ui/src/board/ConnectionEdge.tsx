@@ -25,13 +25,16 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   if (!data) return null;
 
   const discovered = data.state === 'discovered';
-  const text = data.label ?? (data.kind === 'db' ? 'SQL' : '');
+  const steps = highlight?.stepsByEdge.get(id);
+  const order = highlight?.orderByEdge.get(id);
+  // On the path of a run the chip tells what the run did on this hop; otherwise it shows the connection's own label.
+  const text = steps
+    ? [...new Set(steps.map((s) => s.label))].join(', ')
+    : (data.label ?? (data.kind === 'db' ? 'SQL' : ''));
   const classes = ['edge-chip'];
   if (discovered) classes.push('is-discovered');
   if (data.unverified) classes.push('is-unverified');
   if (selected) classes.push('is-selected');
-  const steps = highlight?.stepsByEdge.get(id);
-  const order = highlight?.orderByEdge.get(id);
   if (highlight) classes.push(steps ? 'on-path' : 'is-dimmed');
   if (steps && hovered) classes.push('is-hovered');
 

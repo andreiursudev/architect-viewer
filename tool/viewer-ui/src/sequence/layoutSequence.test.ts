@@ -9,7 +9,7 @@ test('sequence rows are request, nested request, nested response, response', () 
   expect(l.messages.map((m) => `${m.kind}:${m.label}`)).toEqual([
     'request:POST /orders',
     `request:${createOrderFlow.steps[1].label}`,
-    'response:1 rows',
+    'response:1 row',
     'response:201',
   ]);
 });
@@ -65,6 +65,14 @@ test('a database response without a row count says ok', () => {
   const noCount = { ...insert, event: { ...insert.event, rowCount: null } } as FlowStep;
   const l = layoutSequence({ ...createOrderFlow, steps: [noCount] });
   expect(l.messages[1].label).toBe('ok');
+});
+
+test('a database response counts its rows in the plural unless there is one', () => {
+  const [, insert] = createOrderFlow.steps;
+  const withRows = (rowCount: number) => ({ ...insert, event: { ...insert.event, rowCount } }) as FlowStep;
+  expect(layoutSequence({ ...createOrderFlow, steps: [withRows(0)] }).messages[1].label).toBe('0 rows');
+  expect(layoutSequence({ ...createOrderFlow, steps: [withRows(1)] }).messages[1].label).toBe('1 row');
+  expect(layoutSequence({ ...createOrderFlow, steps: [withRows(3)] }).messages[1].label).toBe('3 rows');
 });
 
 test('an empty flow has no participants or messages', () => {

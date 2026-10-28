@@ -16,10 +16,11 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   EdgeLabelRenderer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-function edgeProps(id: string): EdgeProps<ConnectionEdgeType> {
+function edgeProps(id: string, label?: string | null): EdgeProps<ConnectionEdgeType> {
+  const isDb = id.includes('postgres');
   return {
     id,
-    data: conn(id, 'accepted', { label: id === 'orders-service--postgresql-orders' ? null : 'POST /orders', kind: id.includes('postgres') ? 'db' : 'http' }),
+    data: conn(id, 'accepted', { label: label !== undefined ? label : isDb ? null : 'POST /orders', kind: isDb ? 'db' : 'http' }),
     source: 'a',
     target: 'b',
     sourceX: 0,
@@ -37,13 +38,13 @@ function edgeProps(id: string): EdgeProps<ConnectionEdgeType> {
   } as unknown as EdgeProps<ConnectionEdgeType>;
 }
 
-function renderEdge(id: string, flow: typeof createOrderFlow | null) {
+function renderEdge(id: string, flow: typeof createOrderFlow | null, label?: string | null) {
   const highlight = flow ? highlightFor(flow) : null;
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <HighlightContext.Provider value={highlight}>
         <svg>
-          <ConnectionEdge {...edgeProps(id)} />
+          <ConnectionEdge {...edgeProps(id, label)} />
         </svg>
       </HighlightContext.Provider>
     </QueryClientProvider>,
@@ -80,6 +81,28 @@ test('repeated calls over one connection add a multiplier to the badge', () => {
   const again = { ...insert, stepId: 'again', startEpochNanos: insert.startEpochNanos + 1_000_000 };
   renderEdge('orders-service--postgresql-orders', { ...createOrderFlow, steps: [request, insert, again] });
   expect(document.querySelector('.step-badge')).toHaveTextContent('2×2');
+});
+
+const chipLabel = () => document.querySelector('.edge-label') as HTMLElement;
+
+test('without a run the chip shows the stored connection label', () => {
+  renderEdge('e2e-client--orders-service', null, 'POST /orders, GET /orders/{id}');
+  expect(chipLabel()).toHaveTextContent('POST /orders, GET /orders/{id}');
+});
+
+test('on the path of a run the chip shows what the run did on that hop, once per distinct label', () => {
+  const [request, insert] = createOrderFlow.steps;
+  const read = { ...request, stepId: 'read', label: 'GET /orders/{id}', startEpochNanos: request.startEpochNanos + 100_000_000 };
+  const again = { ...request, stepId: 'again', startEpochNanos: request.startEpochNanos + 200_000_000 };
+  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [request, insert, read, again] }, 'Orders API');
+  expect(chipLabel()).toHaveTextContent('POST /orders, GET /orders/{id}');
+  expect(chipLabel()).not.toHaveTextContent('Orders API');
+  expect(document.querySelector('.step-badge')).toHaveTextContent('1×3');
+});
+
+test('off the path of a run the chip keeps the stored label', () => {
+  renderEdge('orders-service--billing-service', createOrderFlow, 'Invoices');
+  expect(chipLabel()).toHaveTextContent('Invoices');
 });
 
 test('hovering a path edge shows its hop details, and leaving hides them', async () => {

@@ -139,7 +139,10 @@ function ConnectionDetails({ connection, view }: { connection: BoardConnection; 
         {connection.unverified && <span className="badge badge-unverified">unverified</span>}
       </p>
       {connection.unverified && (
-        <p className="muted">No recording has gone through this connection yet.</p>
+        <p className="muted">
+          No current evidence for this connection: neither the latest run of a scenario nor a reference recording goes
+          through it.
+        </p>
       )}
 
       {connection.state === 'discovered' && (

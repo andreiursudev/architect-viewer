@@ -65,6 +65,72 @@ class TopologyServiceTest {
     }
 
     @Test
+    fun `a discovered http connection is labelled with every route of its evidence, in first-seen order`() {
+        Fixtures.copyAll(recordingsDir)
+
+        val view = service().workspaceView()
+
+        // evidence: run-2 (POST /orders, no DB call) then run-3 (GET /orders/{id})
+        view.connection(httpConnection).label shouldBe "POST /orders, GET /orders/{id}"
+    }
+
+    @Test
+    fun `a route seen in several evidence runs is listed once`() {
+        Fixtures.copyRun(Fixtures.CREATE_ORDER_1, workspaceDir.resolve("reference-recordings"))
+        Fixtures.copyRun(Fixtures.CREATE_ORDER_2, recordingsDir)
+
+        val view = service().workspaceView()
+
+        view.connection(httpConnection).label shouldBe "POST /orders"
+        view.connection(dbConnection).label shouldBe null
+    }
+
+    @Test
+    fun `curated connections keep their stored label`() {
+        Fixtures.copyAll(recordingsDir)
+        store.saveConnection(ConnectionDefinition("e2e-client", "orders-service", ConnectionKind.HTTP, "Orders API", ConnectionState.ACCEPTED))
+        store.saveConnection(ConnectionDefinition("orders-service", "billing", ConnectionKind.HTTP, "Invoices", ConnectionState.MANUAL))
+
+        val view = service().workspaceView()
+
+        view.connection(httpConnection).label shouldBe "Orders API"
+        view.connection("orders-service--billing").label shouldBe "Invoices"
+    }
+
+    @Test
+    fun `endpoints of curated connections are on the board even without recordings`() {
+        store.saveConnection(definition("e2e-client", "orders-service", ConnectionKind.HTTP, ConnectionState.ACCEPTED))
+        store.saveConnection(definition("orders-service", "postgresql-orders", ConnectionKind.DB, ConnectionState.MANUAL))
+        store.saveConnection(definition("ghost", "phantom", ConnectionKind.HTTP, ConnectionState.HIDDEN))
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "orders-service" to ComponentType.SERVICE,
+            "postgresql-orders" to ComponentType.DATABASE,
+        )
+        view.components.all { it.discovered && it.displayName == it.id } shouldBe true
+        view.connection(httpConnection).unverified shouldBe true
+    }
+
+    @Test
+    fun `curated and observed component types win over types inferred from connections`() {
+        Fixtures.copyRun(Fixtures.CREATE_ORDER_1, recordingsDir)
+        store.saveComponent(ComponentDefinition("billing", ComponentType.DATABASE, "Billing"))
+        store.saveConnection(definition("orders-service", "billing", ConnectionKind.HTTP, ConnectionState.MANUAL))
+        store.saveConnection(definition("postgresql-orders", "audit", ConnectionKind.HTTP, ConnectionState.MANUAL))
+
+        val components = service().workspaceView().components.associateBy { it.id }
+
+        components.getValue("billing").type shouldBe ComponentType.DATABASE
+        components.getValue("billing").discovered shouldBe false
+        components.getValue("postgresql-orders").type shouldBe ComponentType.DATABASE
+        components.getValue("audit").type shouldBe ComponentType.SERVICE
+        components.getValue("audit").discovered shouldBe true
+    }
+
+    @Test
     fun `empty workspace and no recordings is an empty view`() {
         val view = service().workspaceView()
 

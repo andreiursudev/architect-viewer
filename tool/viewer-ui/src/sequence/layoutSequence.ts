@@ -33,7 +33,9 @@ export interface SequenceLayout {
 /** What a step answers with: the HTTP status, or the number of rows a statement touched (`ok` when it did not say). */
 function responseLabel(step: FlowStep): string {
   if (step.status != null) return String(step.status);
-  if (step.event.type === 'db.client' && step.event.rowCount != null) return `${step.event.rowCount} rows`;
+  if (step.event.type === 'db.client' && step.event.rowCount != null) {
+    return step.event.rowCount === 1 ? '1 row' : `${step.event.rowCount} rows`;
+  }
   return 'ok';
 }
 

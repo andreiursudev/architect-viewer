@@ -68,7 +68,7 @@ test('clicking a message shows its payload', async () => {
 test('clicking a database response shows the statement of the same step', async () => {
   const user = userEvent.setup();
   renderAt('/sequence/run-1');
-  await user.click(await screen.findByRole('button', { name: /response 1 rows/ }));
+  await user.click(await screen.findByRole('button', { name: /response 1 row$/ }));
   expect(screen.getByText(/values \(\?, \?, \?, \?\)/)).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Response' })).toHaveClass('is-selected');
 });
