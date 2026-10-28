@@ -20,8 +20,22 @@ dependencies {
 // A fixed file name keeps the launcher independent of the project version.
 tasks.bootJar { archiveFileName = "stack-viewer.jar" }
 
+// The distribution: the boot jar next to the `stack-viewer` launcher (src/dist). Windows is deferred, so only the sh launcher.
+val viewerDist = tasks.register<Sync>("viewerDist") {
+    group = "distribution"
+    description = "Assembles build/stack-viewer: stack-viewer.jar and the stack-viewer launcher script."
+    from(tasks.bootJar)
+    from("src/dist")
+    into(layout.buildDirectory.dir("stack-viewer"))
+}
+
 // The JVM prints a class-data-sharing warning when a Spring Boot test attaches its agent; sharing is only a startup optimisation.
-tasks.test { jvmArgs("-Xshare:off") }
+tasks.test {
+    jvmArgs("-Xshare:off")
+    // LauncherScriptTest runs the assembled distribution.
+    dependsOn(viewerDist)
+    systemProperty("stack.viewer.dist", layout.buildDirectory.dir("stack-viewer").get().asFile.absolutePath)
+}
 
 // The built UI is served from the jar's classpath (Spring Boot's static resources).
 tasks.processResources {

@@ -1,0 +1,43 @@
+#!/bin/sh
+# Stack viewer launcher (POSIX sh).
+# Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]
+# Needs Java 25+ (from $JAVA_HOME/bin/java when JAVA_HOME is set, otherwise `java` on PATH).
+
+MIN_JAVA=25
+
+# Resolve the directory this script lives in (the jar sits next to it).
+case "$0" in
+    */*) script_dir=${0%/*} ;;
+    *) script_dir=. ;;
+esac
+script_dir=$(cd -- "$script_dir" && pwd) || exit 1
+jar="$script_dir/stack-viewer.jar"
+
+if [ -n "${JAVA_HOME:-}" ]; then
+    java_cmd="$JAVA_HOME/bin/java"
+    if [ ! -x "$java_cmd" ]; then
+        echo "stack-viewer: Java $MIN_JAVA or newer is required, but JAVA_HOME ($JAVA_HOME) has no bin/java." >&2
+        exit 1
+    fi
+else
+    java_cmd=java
+    if ! command -v java >/dev/null 2>&1; then
+        echo "stack-viewer: Java $MIN_JAVA or newer is required, but 'java' was not found on PATH. Install a JDK $MIN_JAVA+ or set JAVA_HOME." >&2
+        exit 1
+    fi
+fi
+
+# First line of `java -version` is e.g.: openjdk version "25.0.1" 2025-10-21  /  java version "1.8.0_392"
+version_line=$("$java_cmd" -version 2>&1 | head -n 1)
+major=$(printf '%s\n' "$version_line" | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p')
+if [ -z "$major" ] || [ "$major" -lt "$MIN_JAVA" ]; then
+    echo "stack-viewer: Java $MIN_JAVA or newer is required, but found: ${version_line:-unknown}" >&2
+    exit 1
+fi
+
+if [ ! -f "$jar" ]; then
+    echo "stack-viewer: $jar not found." >&2
+    exit 1
+fi
+
+exec "$java_cmd" -jar "$jar" "$@"
