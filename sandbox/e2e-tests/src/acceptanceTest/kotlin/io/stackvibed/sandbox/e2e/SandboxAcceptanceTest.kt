@@ -10,6 +10,7 @@ import io.stackvibed.harness.StackContext
 import io.stackvibed.harness.StackScenario
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.ComposeContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.junit.jupiter.Container
@@ -17,6 +18,11 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.json.JsonMapper
 import java.io.File
+import java.io.IOException
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -160,22 +166,38 @@ class SandboxAcceptanceTest {
     companion object {
         private const val BASE_URL = "http://localhost:8080"
 
+        private val STARTUP_TIMEOUT: Duration = Duration.ofMinutes(3)
+
         /** The reporter's volume (`./recordings:/recordings` in docker-compose.yml); tests run from e2e-tests/. */
         private val RECORDINGS: Path = Path.of("..", "recordings").toAbsolutePath().normalize()
 
         private val JSON = JsonMapper.builder().build()
 
+        /** Whether the engine is Podman (its Docker-compatible API): it needs the adjustments of README "With Podman". */
+        private val PODMAN: Boolean = DockerClientFactory.instance().client().versionCmd().exec()
+            .components.orEmpty().any { it.name.orEmpty().contains("Podman", ignoreCase = true) }
+
+        private val COMPOSE_FILES: Array<File> =
+            listOfNotNull(File("../docker-compose.yml"), File("../docker-compose.podman.yml").takeIf { PODMAN }).toTypedArray()
+
         @Container
         @JvmField
-        val stack: ComposeContainer = ComposeContainer(File("../docker-compose.yml")) // runs the local `docker compose`
+        val stack: ComposeContainer = ComposeContainer(*COMPOSE_FILES) // runs the local `docker compose`
             .withBuild(true)
+            // On Podman, images are built by Podman itself (classic builder) rather than streamed in from BuildKit.
+            .apply { if (PODMAN) withEnv(mapOf("DOCKER_BUILDKIT" to "0", "COMPOSE_BAKE" to "false")) }
             // Missing images are pulled by `compose up`; an explicit pull would fail on the locally built reporter.
             .withPull(false)
             // Exposed services are probed through Testcontainers' ambassador; the tests use the fixed host ports.
-            .withExposedService("reporter", 4318, Wait.forHttp("/api/recordings/active").forStatusCodeMatching { it < 500 })
-            .withExposedService("orders-service", 8080, Wait.forHttp("/actuator/health"))
-            .withExposedService("inventory-service", 8081, Wait.forHttp("/actuator/health"))
-            .withStartupTimeout(Duration.ofMinutes(3))
+            // The ambassador needs container links, which Podman does not support: there, seedOrder waits instead.
+            .apply {
+                if (!PODMAN) {
+                    withExposedService("reporter", 4318, Wait.forHttp("/api/recordings/active").forStatusCodeMatching { it < 500 })
+                    withExposedService("orders-service", 8080, Wait.forHttp("/actuator/health"))
+                    withExposedService("inventory-service", 8081, Wait.forHttp("/actuator/health"))
+                }
+            }
+            .withStartupTimeout(STARTUP_TIMEOUT)
 
         private lateinit var seededOrderId: String
 
@@ -186,7 +208,34 @@ class SandboxAcceptanceTest {
         @JvmStatic
         @BeforeAll
         fun seedOrder() {
+            if (PODMAN) {
+                awaitHttp("http://localhost:4318/api/recordings/active")
+                awaitHttp("$BASE_URL/actuator/health")
+                awaitHttp("http://localhost:8081/actuator/health")
+            }
             seededOrderId = OrdersScenarios(BASE_URL).createOrder()
+        }
+
+        /**
+         * Waits until [url] answers this machine with a status below 500. On Podman the published ports start to
+         * forward a while after the containers are up (and healthy), and until then connections are cut.
+         */
+        private fun awaitHttp(url: String) {
+            val client = HttpClient.newHttpClient()
+            val request = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(5)).build()
+            val deadline = Instant.now().plus(STARTUP_TIMEOUT)
+            var last: Any? = null
+            while (Instant.now().isBefore(deadline)) {
+                try {
+                    val status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()
+                    if (status < 500) return
+                    last = "status $status"
+                } catch (e: IOException) {
+                    last = e
+                }
+                Thread.sleep(500)
+            }
+            throw AssertionError("$url did not answer within $STARTUP_TIMEOUT; last: $last")
         }
     }
 }

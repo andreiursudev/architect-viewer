@@ -120,7 +120,8 @@ $env:COMPOSE_BAKE = 'false'
   refuses `healthcheck.start_interval` on Podman, so the override drops it and probes the services every 10s.
 
 `tool/gradlew -p tool :reporter:dockerImage` needs no change: it builds with BuildKit and `--load`, whatever
-`DOCKER_BUILDKIT` says. The acceptance test (Testcontainers) has not been run on Podman.
+`DOCKER_BUILDKIT` says. The acceptance test needs none of this: it detects Podman and adds the override and the
+classic builder itself.
 
 ## Acceptance test
 
@@ -129,7 +130,9 @@ sandbox/gradlew -p sandbox stackAgent acceptanceTest
 ```
 
 It starts its own copy of the stack with Docker Compose (Testcontainers), runs all three scenarios, checks the
-recordings the reporter wrote, and tears the stack down. It uses the same fixed ports (4318, 15432, 15433, 8080, 8081), so stop a
+recordings the reporter wrote, and tears the stack down. On Podman it uses `docker-compose.podman.yml` and the classic
+builder (see [With Podman](#with-podman)), and waits for the services on their published ports instead of through
+Testcontainers' ambassador container, which needs container links that Podman does not support. It uses the same fixed ports (4318, 15432, 15433, 8080, 8081), so stop a
 stack started by hand first. Neither `e2eTest` nor `acceptanceTest` is part of `build`.
 
 ## Running orders-service from IntelliJ
@@ -182,6 +185,8 @@ above.
   the classic builder as in [With Podman](#with-podman).
 - **Podman: `can't set healthcheck.start_interval as feature require Docker Engine v25 or later`.** Add
   `-f sandbox/docker-compose.podman.yml` (see [With Podman](#with-podman)).
+- **Podman: the first request right after `up --wait` fails (`connection reset`, `connection was aborted`).** The
+  services are up, but Podman forwards the published ports to them only some seconds later; retry.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
   15432, 15433, 8080 or 8081: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
   to move it).
