@@ -16,8 +16,9 @@ import java.lang.reflect.Parameter;
 /**
  * One INTERNAL span per call of an instrumented method, named {@code SimpleClass.method}, child of the
  * current context and current itself while the method runs. Arguments and the return value are
- * rendered with {@link BoundedValueSerializer} under {@link BodyCapture}'s bounds; a value that cannot be
- * rendered becomes a placeholder. Nothing here may throw into, or change the behaviour of, the
+ * rendered with {@link BoundedValueSerializer} under {@link BodyCapture}'s bounds, each cut at
+ * {@link BodyCapture#MAX_METHOD_VALUE_CHARS} characters; a value that cannot be rendered becomes a
+ * placeholder. Nothing here may throw into, or change the behaviour of, the
  * application: the advice suppresses whatever escapes, and every rendering is guarded on its own.
  */
 public final class MethodSpans {
@@ -70,7 +71,11 @@ public final class MethodSpans {
     static String render(Object value) {
         try {
             return BoundedValueSerializer.toJson(
-                    value, BodyCapture.MAX_DEPTH, BodyCapture.MAX_COLLECTION, BodyCapture.MAX_STRING);
+                    value,
+                    BodyCapture.MAX_DEPTH,
+                    BodyCapture.MAX_COLLECTION,
+                    BodyCapture.MAX_STRING,
+                    BodyCapture.MAX_METHOD_VALUE_CHARS);
         } catch (Throwable e) {
             StringBuilder out = new StringBuilder();
             BoundedValueSerializer.appendString(out, "<" + value.getClass().getSimpleName() + ">");

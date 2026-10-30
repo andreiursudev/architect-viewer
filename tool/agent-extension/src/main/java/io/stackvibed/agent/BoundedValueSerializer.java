@@ -14,27 +14,55 @@ import java.util.stream.BaseStream;
  * Dependency-free JSON rendering of arbitrary values with hard bounds on depth, collection size and
  * string length. Used when the application offers no JSON mapper, so it favours safety over
  * fidelity: cycles, deep nesting and inaccessible objects degrade to short placeholder strings.
+ * Cycle detection only covers the current path, so a graph that shares objects renders them once per
+ * path; callers that render arbitrary application values pass a total character budget.
  */
 public final class BoundedValueSerializer {
+
+    /**
+     * Ends a rendering cut at its character budget. The cut output is no longer valid JSON; it keeps
+     * the rendering's first {@code maxChars} characters so it stays recognisable.
+     */
+    public static final String TRUNCATED = "\u2026<truncated>";
 
     private static final String INPUT_STREAM_SOURCE = "org.springframework.core.io.InputStreamSource";
 
     private final int maxDepth;
     private final int maxCollection;
     private final int maxString;
+    private final int maxChars;
     private final StringBuilder out = new StringBuilder();
     private final IdentityHashMap<Object, Boolean> inProgress = new IdentityHashMap<>();
 
-    private BoundedValueSerializer(int maxDepth, int maxCollection, int maxString) {
+    private BoundedValueSerializer(int maxDepth, int maxCollection, int maxString, int maxChars) {
         this.maxDepth = maxDepth;
         this.maxCollection = maxCollection;
         this.maxString = maxString;
+        this.maxChars = maxChars;
     }
 
+    /** Renders {@code value} with no total budget (only depth, collection and string bounds). */
     public static String toJson(Object value, int maxDepth, int maxCollection, int maxString) {
-        BoundedValueSerializer serializer = new BoundedValueSerializer(maxDepth, maxCollection, maxString);
+        return toJson(value, maxDepth, maxCollection, maxString, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Renders {@code value}, stopping once the output passes {@code maxChars} characters: the result is
+     * then its first {@code maxChars} characters followed by {@link #TRUNCATED}.
+     */
+    public static String toJson(Object value, int maxDepth, int maxCollection, int maxString, int maxChars) {
+        BoundedValueSerializer serializer = new BoundedValueSerializer(maxDepth, maxCollection, maxString, maxChars);
         serializer.write(value, 0);
-        return serializer.out.toString();
+        StringBuilder out = serializer.out;
+        if (out.length() > maxChars) {
+            int end = maxChars;
+            if (end > 0 && Character.isHighSurrogate(out.charAt(end - 1))) {
+                end--; // never split a surrogate pair
+            }
+            out.setLength(end);
+            out.append(TRUNCATED);
+        }
+        return out.toString();
     }
 
     /**
@@ -73,6 +101,10 @@ public final class BoundedValueSerializer {
         return false;
     }
 
+    private boolean full() {
+        return out.length() > maxChars;
+    }
+
     /** Appends {@code value} as a JSON string literal. */
     public static void appendString(StringBuilder out, CharSequence value) {
         out.append('"');
@@ -99,6 +131,9 @@ public final class BoundedValueSerializer {
     }
 
     private void write(Object value, int depth) {
+        if (full()) {
+            return;
+        }
         if (value == null) {
             out.append("null");
         } else if (value instanceof CharSequence text) {
@@ -149,7 +184,7 @@ public final class BoundedValueSerializer {
         out.append('{');
         int count = 0;
         for (Map.Entry<?, ?> entry : map.entrySet()) {
-            if (count == maxCollection) {
+            if (count == maxCollection || full()) {
                 break;
             }
             if (count++ > 0) {
@@ -164,7 +199,7 @@ public final class BoundedValueSerializer {
 
     private void array(Iterator<?> items, int depth) {
         out.append('[');
-        for (int count = 0; count < maxCollection && items.hasNext(); count++) {
+        for (int count = 0; count < maxCollection && !full() && items.hasNext(); count++) {
             if (count > 0) {
                 out.append(',');
             }
@@ -176,7 +211,7 @@ public final class BoundedValueSerializer {
     private void array(Object array, int depth) {
         out.append('[');
         int length = Math.min(Array.getLength(array), maxCollection);
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < length && !full(); i++) {
             if (i > 0) {
                 out.append(',');
             }
@@ -191,7 +226,7 @@ public final class BoundedValueSerializer {
         for (Class<?> type = value.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
             for (Field field : type.getDeclaredFields()) {
                 int modifiers = field.getModifiers();
-                if (count == maxCollection) {
+                if (count == maxCollection || full()) {
                     break;
                 }
                 if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isSynthetic()

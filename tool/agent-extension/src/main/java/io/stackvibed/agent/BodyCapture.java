@@ -20,6 +20,11 @@ public final class BodyCapture {
     public static final int MAX_DEPTH = 8;
     public static final int MAX_COLLECTION = 100;
     public static final int MAX_STRING = 4096;
+    /**
+     * Total characters of one rendered method argument or return value (then cut with
+     * {@link BoundedValueSerializer#TRUNCATED}): shared object graphs re-render once per path.
+     */
+    public static final int MAX_METHOD_VALUE_CHARS = 16384;
 
     private BodyCapture() {}
 

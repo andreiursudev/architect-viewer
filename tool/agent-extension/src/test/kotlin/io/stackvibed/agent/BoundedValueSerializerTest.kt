@@ -1,6 +1,9 @@
 package io.stackvibed.agent
 
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Test
 
 class BoundedValueSerializerTest {
@@ -66,6 +69,27 @@ class BoundedValueSerializerTest {
     @Test
     fun platformTypesUseToString() {
         json(java.util.UUID(0, 1)) shouldBe "\"00000000-0000-0000-0000-000000000001\""
+    }
+
+    @Test
+    fun `a total budget cuts a large shared object graph and ends with the marker`() {
+        // Cycle detection is per path, so a graph sharing nodes renders each node once per path (a
+        // bean factory renders to hundreds of thousands of characters this way).
+        val inner = List(50) { "x".repeat(100) }
+        val shared = List(50) { inner }
+        val unbounded = json(shared)
+        (unbounded.length > 100_000) shouldBe true
+
+        val cut = BoundedValueSerializer.toJson(shared, 8, 100, 4096, 1000)
+        cut.length shouldBeLessThanOrEqual 1000 + BoundedValueSerializer.TRUNCATED.length
+        cut shouldEndWith BoundedValueSerializer.TRUNCATED
+        cut shouldStartWith unbounded.substring(0, 1000)
+    }
+
+    @Test
+    fun `a value within the budget is rendered whole`() {
+        BoundedValueSerializer.toJson(listOf("a", 1), 8, 100, 4096, 9) shouldBe """["a",1]"""
+        BoundedValueSerializer.toJson("abcdefgh", 8, 100, 4096, 4) shouldBe "\"abc" + BoundedValueSerializer.TRUNCATED
     }
 
     private class Node(val name: String, val next: Node?)
