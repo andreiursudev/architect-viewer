@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { MarkerType, type Edge } from '@xyflow/react';
 import { emphasizePath, highlightFor, hopsOffBoard } from './highlight';
 import { PATH_COLOR } from './toFlowElements';
-import { createOrderFlow, unrecordedHostStep } from './testData';
+import { createOrderFlow, methodFlow, unrecordedHostStep } from './testData';
 
 test('highlight covers every hop of the flow', () => {
   const h = highlightFor(createOrderFlow);
@@ -64,4 +64,19 @@ test('failedEdgesAreCollected', () => {
   const h = highlightFor({ ...createOrderFlow, steps: [request, insert, conflict, unrecordedHostStep] });
   expect(h.failedEdgeIds).toEqual(new Set(['e2e-client--orders-service', 'orders-service--tax-service']));
   expect(highlightFor(createOrderFlow).failedEdgeIds.size).toBe(0);
+});
+
+test('method steps have no connection and add nothing to the path', () => {
+  const h = highlightFor(methodFlow);
+  expect([...h.edgeIds]).toEqual(['e2e-client--orders-service', 'orders-service--inventory-service', 'orders-service--postgresql-orders']);
+  expect(h.nodeIds).toEqual(new Set(['e2e-client', 'orders-service', 'inventory-service', 'postgresql-orders']));
+  expect([...h.stepsByEdge.values()].flat().every((s) => s.kind !== 'method')).toBe(true);
+  expect(h.orderByEdge.size).toBe(3);
+});
+
+test('a flow of method steps alone highlights nothing', () => {
+  const h = highlightFor({ ...methodFlow, steps: methodFlow.steps.filter((s) => s.kind === 'method') });
+  expect(h.nodeIds.size).toBe(0);
+  expect(h.edgeIds.size).toBe(0);
+  expect(h.failedEdgeIds.size).toBe(0);
 });

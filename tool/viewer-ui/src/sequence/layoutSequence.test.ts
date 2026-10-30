@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { Flow, FlowStep } from '../api/types';
-import { createOrderFlow, unrecordedHostStep } from '../board/testData';
-import { layoutSequence } from './layoutSequence';
+import { createOrderFlow, methodFlow, methodStep, unrecordedHostStep } from '../board/testData';
+import { GROUP_BAND, HEADER_HEIGHT, MARGIN_X, classCounts, layoutSequence } from './layoutSequence';
 
 test('sequence rows are request, nested request, nested response, response', () => {
   const l = layoutSequence(createOrderFlow);
@@ -100,4 +100,106 @@ test('fourServicesNestTwoDeep', () => {
 test('the response of a client call that failed names the error', () => {
   const l = layoutSequence({ ...createOrderFlow, steps: [unrecordedHostStep] });
   expect(l.messages.map((m) => m.label)).toEqual(['POST /tax/quote', 'ConnectException']);
+});
+
+test('a step that lists itself among its own ancestors is laid out once', () => {
+  // two steps share an id, so the second is a child of the first and of itself
+  const flow: Flow = {
+    ...createOrderFlow,
+    steps: [
+      step({ stepId: 'a', from: 'client', to: 'api', startEpochNanos: 1 }),
+      step({ stepId: 'a', parentStepId: 'a', from: 'api', to: 'db', startEpochNanos: 2 }),
+    ],
+  };
+  expect(layoutSequence(flow).messages.map((m) => `${m.kind}:${m.stepId}`)).toEqual(['request:a', 'request:a', 'response:a', 'response:a']);
+});
+
+const withoutMethods = (flow: Flow): Flow => {
+  const byId = new Map(flow.steps.map((s) => [s.stepId, s]));
+  const nearest = (id: string | null | undefined): string | null => {
+    const parent = id != null ? byId.get(id) : undefined;
+    return parent == null ? null : parent.kind === 'method' ? nearest(parent.parentStepId) : parent.stepId;
+  };
+  return { ...flow, steps: flow.steps.filter((s) => s.kind !== 'method').map((s) => ({ ...s, parentStepId: nearest(s.parentStepId) })) };
+};
+
+test('collapsed run with methods lays out like the run without them', () => {
+  const collapsed = layoutSequence(methodFlow);
+  const plain = layoutSequence(withoutMethods(methodFlow));
+  expect(collapsed.participants).toEqual(plain.participants);
+  expect(collapsed.messages).toEqual(plain.messages);
+  expect(collapsed.groups).toEqual([]);
+  expect(collapsed.headerHeight).toBe(HEADER_HEIGHT);
+  expect(collapsed.height).toBe(plain.height);
+});
+
+const CLASSES = ['x.OrdersController', 'x.OrderService', 'x.InventoryClient', 'x.OrderRepository'];
+
+test('expanded service gets one lifeline per class in order of appearance', () => {
+  const l = layoutSequence(methodFlow, new Set(['orders-service']));
+  expect(l.participants.map((p) => p.id)).toEqual([
+    'e2e-client',
+    ...CLASSES.map((c) => `orders-service::${c}`),
+    'inventory-service',
+    'postgresql-orders',
+  ]);
+  expect(l.participants.slice(1, 5).map((p) => [p.component, p.unit])).toEqual(CLASSES.map((c) => ['orders-service', c]));
+  expect(l.participants.map((p) => p.x - MARGIN_X)).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => i * 220));
+});
+
+test('request lands on the handler class and calls leave from their owner class', () => {
+  const l = layoutSequence(methodFlow, new Set(['orders-service']));
+  const x = Object.fromEntries(l.participants.map((p) => [p.id, p.x]));
+  const at = (stepId: string, kind: 'request' | 'response') => l.messages.find((m) => m.stepId === stepId && m.kind === kind)!;
+  const unit = (c: string) => x[`orders-service::${c}`];
+  expect([at('req', 'request').fromX, at('req', 'request').toX]).toEqual([x['e2e-client'], unit('x.OrdersController')]);
+  expect([at('place', 'request').fromX, at('place', 'request').toX]).toEqual([unit('x.OrdersController'), unit('x.OrderService')]);
+  expect([at('total', 'request').fromX, at('total', 'request').toX]).toEqual([unit('x.OrderService'), unit('x.OrderService')]);
+  expect([at('inv', 'request').fromX, at('inv', 'request').toX]).toEqual([unit('x.InventoryClient'), x['inventory-service']]);
+  expect([at('ins', 'request').fromX, at('ins', 'request').toX]).toEqual([unit('x.OrderRepository'), x['postgresql-orders']]);
+  expect([at('req', 'response').fromX, at('req', 'response').toX]).toEqual([unit('x.OrdersController'), x['e2e-client']]);
+});
+
+test('two classes with the same simple name get two lifelines', () => {
+  const flow: Flow = {
+    ...createOrderFlow,
+    steps: [
+      step({ stepId: 'r', from: 'client', to: 'api', toUnit: 'a.Handler', startEpochNanos: 1 }),
+      methodStep('m', 'r', 'api', 'a.Handler', 'b.Handler', 'go', 2),
+    ],
+  };
+  const l = layoutSequence(flow, new Set(['api']));
+  expect(l.participants.map((p) => p.id)).toEqual(['client', 'api::a.Handler', 'api::b.Handler']);
+});
+
+test('a step with no class on an expanded service uses the service lifeline', () => {
+  const flow: Flow = {
+    ...createOrderFlow,
+    steps: [
+      step({ stepId: 'r', from: 'client', to: 'api', startEpochNanos: 1 }),
+      step({ stepId: 'q', parentStepId: 'r', from: 'api', to: 'db', startEpochNanos: 2 }),
+    ],
+  };
+  const l = layoutSequence(flow, new Set(['api']));
+  expect(l.participants.map((p) => p.id)).toEqual(['client', 'api', 'db']);
+  expect(l.groups).toHaveLength(1);
+});
+
+test('group spans its classes and raises the header', () => {
+  const l = layoutSequence(methodFlow, new Set(['orders-service']));
+  const x = Object.fromEntries(l.participants.map((p) => [p.id, p.x]));
+  expect(l.groups).toEqual([
+    { component: 'orders-service', fromX: x['orders-service::x.OrdersController'], toX: x['orders-service::x.OrderRepository'] },
+  ]);
+  expect(l.headerHeight).toBe(HEADER_HEIGHT + GROUP_BAND);
+  expect(l.messages[0].y).toBe(layoutSequence(methodFlow).messages[0].y + GROUP_BAND);
+});
+
+test('a component that is expanded but not in the run adds no group', () => {
+  expect(layoutSequence(methodFlow, new Set(['elsewhere'])).groups).toEqual([]);
+});
+
+test('classCounts counts the distinct classes of each service that has method steps', () => {
+  expect(classCounts(methodFlow)).toEqual(new Map([['orders-service', 4]]));
+  expect(classCounts(createOrderFlow)).toEqual(new Map());
 });

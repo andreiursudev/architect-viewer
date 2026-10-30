@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useFlow, useWorkspace } from '../api/queries';
 import { MessageDetails } from './MessageDetails';
+import { classCounts } from './layoutSequence';
 import { SequenceDiagram, type MessageSelection, type ParticipantInfo } from './SequenceDiagram';
 
 /** The page of one recorded run: its calls as a sequence diagram, and the payload of the message clicked. */
@@ -10,6 +11,8 @@ export function SequenceView() {
   const flow = useFlow(runId);
   const workspace = useWorkspace();
   const [selected, setSelected] = useState<MessageSelection | null>(null);
+  // services drawn as one lifeline per class; every run opens fully collapsed
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const components = useMemo(() => {
     const byId: Record<string, ParticipantInfo> = {};
@@ -17,7 +20,18 @@ export function SequenceView() {
     return byId;
   }, [workspace.data]);
 
-  const step = flow.data?.steps.find((s) => s.stepId === selected?.stepId);
+  const expandable = useMemo(() => [...(flow.data ? classCounts(flow.data).keys() : [])], [flow.data]);
+  const toggle = (component: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(component)) next.add(component);
+      return next;
+    });
+
+  const steps = flow.data?.steps ?? [];
+  const methodCalls = steps.filter((s) => s.kind === 'method').length;
+  const calls = steps.length - methodCalls;
+  const step = steps.find((s) => s.stepId === selected?.stepId);
 
   return (
     <main className="sequence-page">
@@ -29,9 +43,20 @@ export function SequenceView() {
           <h2>Sequence</h2>
           <span className="muted">{flow.data?.scenarioId ?? ''}</span>
           <code className="sequence-run">{runId}</code>
-          {flow.data && flow.data.steps.length > 0 && (
+          {expandable.length > 0 && (
+            <>
+              <button type="button" className="btn btn-small" onClick={() => setExpanded(new Set(expandable))}>
+                Expand all
+              </button>
+              <button type="button" className="btn btn-small" onClick={() => setExpanded(new Set())}>
+                Collapse all
+              </button>
+            </>
+          )}
+          {steps.length > 0 && (
             <span className="sequence-count muted">
-              {flow.data.steps.length} {flow.data.steps.length === 1 ? 'call' : 'calls'}
+              {calls} {calls === 1 ? 'call' : 'calls'}
+              {methodCalls > 0 && ` · ${methodCalls} method ${methodCalls === 1 ? 'call' : 'calls'}`}
             </span>
           )}
         </div>
@@ -40,7 +65,14 @@ export function SequenceView() {
           {flow.isError && <p className="error sequence-message">Could not load the run: {flow.error.message}</p>}
           {flow.data && flow.data.steps.length === 0 && <p className="muted sequence-message">This run recorded no calls.</p>}
           {flow.data && flow.data.steps.length > 0 && (
-            <SequenceDiagram flow={flow.data} components={components} selected={selected} onSelect={setSelected} />
+            <SequenceDiagram
+              flow={flow.data}
+              components={components}
+              expanded={expanded}
+              onToggle={toggle}
+              selected={selected}
+              onSelect={setSelected}
+            />
           )}
         </div>
       </div>

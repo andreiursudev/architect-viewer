@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient';
-import { comp, createOrderFlow, viewWith } from '../board/testData';
+import { comp, createOrderFlow, methodFlow, viewWith } from '../board/testData';
 import { SequenceView } from './SequenceView';
 
 beforeEach(() => {
@@ -23,6 +23,7 @@ beforeEach(() => {
         );
       }
       if (url === '/api/runs/run-1/flow') return Response.json(createOrderFlow);
+      if (url === '/api/runs/methods/flow') return Response.json(methodFlow);
       if (url === '/api/runs/empty/flow') return Response.json({ ...createOrderFlow, runId: 'empty', steps: [] });
       return Response.json({ error: 'unknown run' }, { status: 404 });
     }),
@@ -85,4 +86,44 @@ test('an unknown run shows the error and a way back', async () => {
   expect(await screen.findByText(/could not load the run/i, {}, { timeout: 4000 })).toBeInTheDocument();
   await user.click(screen.getByRole('link', { name: /board/i }));
   expect(screen.getByText('the board')).toBeInTheDocument();
+});
+
+test('the bar counts calls, and method calls when there are any', async () => {
+  const first = renderAt('/sequence/run-1');
+  expect(await screen.findByText('2 calls')).toBeInTheDocument();
+  first.unmount();
+  renderAt('/sequence/methods');
+  expect(await screen.findByText('4 calls · 4 method calls')).toBeInTheDocument();
+});
+
+test('without method steps there is nothing to expand', async () => {
+  renderAt('/sequence/run-1');
+  await screen.findByText('2 calls');
+  expect(screen.queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument();
+});
+
+test('expand all and collapse all', async () => {
+  const user = userEvent.setup();
+  renderAt('/sequence/methods');
+  const diagram = await screen.findByRole('group', { name: /sequence diagram/i });
+  expect(within(diagram).getAllByRole('button')).toHaveLength(8); // 4 calls, request and response each
+  expect(screen.getByRole('button', { name: '▸ 4 classes' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Expand all' }));
+  expect(within(diagram).getAllByRole('button')).toHaveLength(16);
+  expect(screen.getByText('OrderService')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /classes$/ })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+  expect(within(diagram).getAllByRole('button')).toHaveLength(8);
+  expect(screen.queryByText('OrderService')).not.toBeInTheDocument();
+});
+
+test('a service expands on its own toggle and collapses on its group button', async () => {
+  const user = userEvent.setup();
+  renderAt('/sequence/methods');
+  await user.click(await screen.findByRole('button', { name: '▸ 4 classes' }));
+  expect(screen.getByText('OrderService')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Collapse Orders service' }));
+  expect(screen.queryByText('OrderService')).not.toBeInTheDocument();
 });

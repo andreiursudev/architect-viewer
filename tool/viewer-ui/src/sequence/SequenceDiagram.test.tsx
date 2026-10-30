@@ -1,11 +1,21 @@
 import { render, screen, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { FlowStep } from '../api/types';
-import { createOrderFlow, unrecordedHostStep } from '../board/testData';
+import userEvent from '@testing-library/user-event';
+import { createOrderFlow, methodFlow, unrecordedHostStep } from '../board/testData';
 import { SequenceDiagram } from './SequenceDiagram';
 
-function renderSteps(steps: FlowStep[]) {
-  render(<SequenceDiagram flow={{ ...createOrderFlow, steps }} components={{}} selected={null} onSelect={() => {}} />);
+function renderSteps(steps: FlowStep[], expanded: string[] = [], onToggle: (component: string) => void = () => {}) {
+  render(
+    <SequenceDiagram
+      flow={{ ...createOrderFlow, steps }}
+      components={{ 'orders-service': { displayName: 'Orders service', type: 'service' } }}
+      expanded={new Set(expanded)}
+      onToggle={onToggle}
+      selected={null}
+      onSelect={() => {}}
+    />,
+  );
   return screen.getByRole('group', { name: /sequence diagram/i });
 }
 
@@ -40,4 +50,32 @@ test('a client call that failed after a non-error status is not drawn as ok', ()
   const label = labelOf(renderSteps([failedAfterOk]), 'response 200');
   expect(label).not.toHaveClass('is-ok');
   expect(label).toHaveClass('is-server-error');
+});
+
+test('collapsed service with methods shows a class count toggle', async () => {
+  const onToggle = vi.fn();
+  renderSteps(methodFlow.steps, [], onToggle);
+  await userEvent.click(screen.getByRole('button', { name: '▸ 4 classes' }));
+  expect(onToggle).toHaveBeenCalledWith('orders-service');
+});
+
+test('no toggle without method steps', () => {
+  renderSteps(createOrderFlow.steps);
+  expect(screen.queryByText(/classes?$/)).not.toBeInTheDocument();
+});
+
+test('expanded group shows its name and collapses', async () => {
+  const onToggle = vi.fn();
+  renderSteps(methodFlow.steps, ['orders-service'], onToggle);
+  expect(screen.getByText('Orders service', { selector: '.seq-group-name' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /classes$/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Collapse Orders service' }));
+  expect(onToggle).toHaveBeenCalledWith('orders-service');
+});
+
+test('a class lifeline is headed by its simple name and titled with the full one', () => {
+  renderSteps(methodFlow.steps, ['orders-service']);
+  const head = screen.getByText('OrdersController').closest('.seq-head');
+  expect(head).toHaveAttribute('title', 'x.OrdersController');
+  expect(screen.getAllByText(/^Order(s?Controller|Service|Repository)$|^InventoryClient$/)).toHaveLength(4);
 });

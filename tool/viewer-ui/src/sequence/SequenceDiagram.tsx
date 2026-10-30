@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { ComponentType, Flow, FlowStep } from '../api/types';
 import { isFailedStep, statusTone } from '../status';
-import { HEADER_HEIGHT, MARGIN_X, layoutSequence, type SequenceMessage } from './layoutSequence';
+import { MARGIN_X, classCounts, layoutSequence, type SequenceMessage } from './layoutSequence';
+import { SequenceHeads } from './SequenceHeads';
 
 export interface ParticipantInfo {
   displayName: string;
@@ -13,7 +14,6 @@ export interface MessageSelection {
   kind: SequenceMessage['kind'];
 }
 
-const HEAD_WIDTH = 176;
 const ARROW_GAP = 7; // the arrow stops short of the lifeline so activation bars stay visible
 const BAR_WIDTH = 10;
 const LABEL_CHAR_WIDTH = 6.7;
@@ -30,22 +30,28 @@ function tone(step: FlowStep | undefined, kind: SequenceMessage['kind']): string
   return ` ${step.status != null && step.status >= 400 ? statusTone(step.status) : 'is-server-error'}`;
 }
 
-/** The run as a sequence diagram: a lifeline per component, solid arrows for calls, dashed arrows for what came back. */
+/** The run as a sequence diagram: a lifeline per component (or per class, in an expanded service), solid arrows for calls, dashed arrows for what came back. */
 export function SequenceDiagram({
   flow,
   components,
+  expanded,
+  onToggle,
   selected,
   onSelect,
 }: {
   flow: Flow;
   /** Display name and type per component id; a component the workspace does not list is drawn with its id. */
   components: Record<string, ParticipantInfo | undefined>;
+  /** Services drawn as one lifeline per class. */
+  expanded: ReadonlySet<string>;
+  onToggle: (component: string) => void;
   selected: MessageSelection | null;
   onSelect: (selection: MessageSelection) => void;
 }) {
-  const layout = useMemo(() => layoutSequence(flow), [flow]);
+  const layout = useMemo(() => layoutSequence(flow, expanded), [flow, expanded]);
+  const counts = useMemo(() => classCounts(flow), [flow]);
   const steps = useMemo(() => new Map(flow.steps.map((s) => [s.stepId, s])), [flow]);
-  const { participants, messages, height } = layout;
+  const { participants, messages, height, headerHeight } = layout;
   const width = participants.length === 0 ? 0 : participants[participants.length - 1].x + MARGIN_X;
 
   // each step's activation bar: the callee is busy from the request until the response
@@ -61,22 +67,7 @@ export function SequenceDiagram({
 
   return (
     <div className="seq-canvas" style={{ width }}>
-      <div className="seq-heads" style={{ height: HEADER_HEIGHT }}>
-        {participants.map((p) => {
-          const info = components[p.id];
-          return (
-            <div
-              key={p.id}
-              className={`seq-head type-${info?.type ?? 'service'}`}
-              style={{ left: p.x - HEAD_WIDTH / 2, width: HEAD_WIDTH }}
-              title={p.id}
-            >
-              <span className="seq-head-name">{info?.displayName ?? p.id}</span>
-              <span className="seq-head-type">{info?.type ?? 'unknown'}</span>
-            </div>
-          );
-        })}
-      </div>
+      <SequenceHeads layout={layout} components={components} counts={counts} expanded={expanded} onToggle={onToggle} />
       <svg
         className="seq-svg"
         role="group"
@@ -84,7 +75,7 @@ export function SequenceDiagram({
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{ marginTop: -HEADER_HEIGHT }}
+        style={{ marginTop: -headerHeight }}
       >
         <defs>
           <marker id="seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
@@ -99,7 +90,7 @@ export function SequenceDiagram({
         </defs>
 
         {participants.map((p) => (
-          <line key={p.id} className="seq-lifeline" x1={p.x} x2={p.x} y1={HEADER_HEIGHT - 12} y2={height - 12} />
+          <line key={p.id} className="seq-lifeline" x1={p.x} x2={p.x} y1={headerHeight - 12} y2={height - 12} />
         ))}
         {bars.map(([stepId, bar]) => (
           <rect

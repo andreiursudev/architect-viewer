@@ -144,3 +144,80 @@ export const unrecordedHostStep: FlowStep = {
   },
   handler: null,
 };
+
+const T0 = 1760000001000000000;
+
+/** A method step on `component` from `fromUnit` to `toUnit` (fully qualified class names). */
+export function methodStep(
+  stepId: string,
+  parentStepId: string | null,
+  component: string,
+  fromUnit: string | null,
+  toUnit: string,
+  methodName: string,
+  startMillis: number,
+): FlowStep {
+  const startEpochNanos = T0 + startMillis * 1_000_000;
+  return {
+    stepId,
+    parentStepId,
+    from: component,
+    to: component,
+    fromUnit,
+    toUnit,
+    connectionId: null,
+    kind: 'method',
+    label: `${toUnit.slice(toUnit.lastIndexOf('.') + 1)}.${methodName}`,
+    startEpochNanos,
+    durationNanos: 1_000_000,
+    status: null,
+    event: {
+      type: 'method',
+      schemaVersion: 3,
+      eventId: stepId,
+      runId: 'run-m',
+      traceId: 'trace',
+      spanId: stepId,
+      parentSpanId: parentStepId,
+      component,
+      startEpochNanos,
+      durationNanos: 1_000_000,
+      className: toUnit,
+      methodName,
+      parameterNames: [],
+      arguments: [],
+    },
+    handler: null,
+  };
+}
+
+const CONTROLLER = 'x.OrdersController';
+const SERVICE = 'x.OrderService';
+const CLIENT = 'x.InventoryClient';
+const REPOSITORY = 'x.OrderRepository';
+
+/** A non-method step (HTTP or database) made from inside `fromUnit` of `from`, started `startMillis` after the run began. */
+function callStep(over: Partial<FlowStep> & Pick<FlowStep, 'stepId' | 'from' | 'to' | 'kind'>, startMillis: number): FlowStep {
+  const base = over.kind === 'db' ? createOrderFlow.steps[1] : createOrderFlow.steps[0];
+  const connectionId = `${over.from}--${over.to}`;
+  return { ...base, label: over.stepId, connectionId, status: null, handler: null, startEpochNanos: T0 + startMillis * 1_000_000, ...over } as FlowStep;
+}
+
+/**
+ * An order placed through a controller, a service, an inventory client and a repository: four non-method steps
+ * (the request, the call to inventory, two statements) and four method steps (one of them a self-call).
+ */
+export const methodFlow: Flow = {
+  runId: 'run-m',
+  scenarioId: null,
+  steps: [
+    callStep({ stepId: 'req', parentStepId: null, from: 'e2e-client', to: 'orders-service', toUnit: CONTROLLER, kind: 'http', label: 'POST /orders' }, 1),
+    methodStep('place', 'req', 'orders-service', CONTROLLER, SERVICE, 'placeOrder', 2),
+    methodStep('total', 'place', 'orders-service', SERVICE, SERVICE, 'total', 3),
+    methodStep('reserve', 'place', 'orders-service', SERVICE, CLIENT, 'reserve', 4),
+    callStep({ stepId: 'inv', parentStepId: 'reserve', from: 'orders-service', fromUnit: CLIENT, to: 'inventory-service', kind: 'http', label: 'POST /reservations' }, 5),
+    methodStep('save', 'place', 'orders-service', SERVICE, REPOSITORY, 'save', 6),
+    callStep({ stepId: 'ins', parentStepId: 'save', from: 'orders-service', fromUnit: REPOSITORY, to: 'postgresql-orders', kind: 'db', label: 'insert into orders' }, 7),
+    callStep({ stepId: 'sel', parentStepId: 'save', from: 'orders-service', fromUnit: REPOSITORY, to: 'postgresql-orders', kind: 'db', label: 'select from orders' }, 8),
+  ],
+};
