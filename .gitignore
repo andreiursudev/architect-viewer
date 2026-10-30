@@ -8,3 +8,4 @@ dist/
 /sandbox/recordings/*
 !/sandbox/recordings/.gitkeep
 .idea/
+.DS_Store
