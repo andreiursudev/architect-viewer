@@ -53,7 +53,7 @@ public final class MethodSpans {
         INSTRUMENTER.end(call.context, call, returned, thrown);
     }
 
-    /** Declared parameter names, or none when the class was compiled without them. */
+    /** Declared parameter names, or none when the class was compiled without them (the attribute is then left out). */
     public static String[] parameterNames(Method method) {
         Parameter[] parameters = method.getParameters();
         if (parameters.length == 0 || !parameters[0].isNamePresent()) {
@@ -132,7 +132,11 @@ public final class MethodSpans {
             attributes.put(StackAttributes.METHOD_CLASS, call.type.getName());
             attributes.put(StackAttributes.METHOD_NAME, call.method);
             attributes.put(StackAttributes.METHOD_THREAD, Thread.currentThread().getName());
-            attributes.put(StackAttributes.METHOD_PARAM_NAMES, jsonArray(call.paramNames));
+            // Absent, not empty, when the class file has no names (compiled without -parameters) or
+            // the method has no parameters.
+            if (call.paramNames != null && call.paramNames.length > 0) {
+                attributes.put(StackAttributes.METHOD_PARAM_NAMES, jsonArray(call.paramNames));
+            }
             Object[] args = call.args == null ? new Object[0] : call.args;
             String[] rendered = new String[args.length];
             for (int i = 0; i < args.length; i++) {
