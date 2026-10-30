@@ -334,6 +334,14 @@ java "-javaagent:$stack\build\stack-agent\opentelemetry-javaagent.jar" `
      -jar $jar.FullName
 ```
 
+- **Method capture is off by default.** Add `-Dstack.methods.packages=<base package>` (comma-separated for several; the
+  environment variable `STACK_METHODS_PACKAGES` works too) to the agent arguments, e.g.
+  `-Dstack.methods.packages=com.acme.orders`, and the viewer can expand that service into class lifelines. Use the
+  service's own base package (what its `@SpringBootApplication` class sits in): only Spring stereotype classes
+  (`@RestController`, `@Controller`, `@Service`, `@Repository`, `@Component`) in that package or below are recorded, with
+  their public methods, arguments and return values. Without the property nothing changes. A trailing dot
+  (`com.acme.`) matches nothing; write `com.acme`. Ask the user whether they want it before enabling it: it records
+  every call's arguments and return value, so it fits sample and test data, not production data.
 - Pass the agent as `java` arguments, as above. **Don't set `JAVA_TOOL_OPTIONS`** in a shell that also runs Gradle
   or Maven: every JVM reads it, so the agent would attach to the build too.
 - Override configuration only through environment variables or `-D` properties (Spring relaxed binding:
@@ -343,12 +351,13 @@ java "-javaagent:$stack\build\stack-agent\opentelemetry-javaagent.jar" `
 **For the user's IntelliJ run configurations** (to debug a service), write the equivalent into the stack repo's
 README: VM options `-javaagent:<STACK_REPO>/build/stack-agent/opentelemetry-javaagent.jar
 -Dotel.javaagent.extensions=<STACK_REPO>/build/stack-agent/stack-agent-extension.jar`, plus the same environment
-variables. Tell the user to leave "Store as project file" unchecked, so the configuration never lands in the
+variables (and `-Dstack.methods.packages=<base package>` if method capture is on). Tell the user to leave "Store as project file" unchecked, so the configuration never lands in the
 service repo.
 
 **Alternative: the service as a compose container**, when the user only explores and doesn't change its code. Use
 `build: <relative path to SERVICE_REPO>` if the repo has a Dockerfile, mount `./build/stack-agent:/stack-agent:ro`,
-and set `JAVA_TOOL_OPTIONS` (safe inside a container), `OTEL_SERVICE_NAME`, and
+and set `JAVA_TOOL_OPTIONS` (safe inside a container; add `-Dstack.methods.packages=<base package>` after the other
+two options for method capture), `OTEL_SERVICE_NAME`, and
 `OTEL_EXPORTER_OTLP_ENDPOINT: http://reporter:4318`. See `orders-service` in
 `<TOOL_REPO>/sandbox/docker-compose.yml`. Don't combine the service repo's own compose file with yours through
 `-f`: Compose resolves relative paths against the first file's folder.

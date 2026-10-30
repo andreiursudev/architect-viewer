@@ -73,6 +73,17 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    docker compose -f sandbox/docker-compose.yml down -v
    ```
 
+Method capture is on for both services: `docker-compose.yml` passes `-Dstack.methods.packages=io.stackvibed.sandbox.orders`
+(and `...inventory`) to the agent, so every public method of a Spring stereotype class (`@RestController`, `@Service`,
+`@Repository`, `@Component`, `@Controller`) in those packages is recorded with its arguments, return value or thrown
+exception. In the viewer, open a `create-order` run in the sequence view and click the `▸ N classes` toggle under a
+service to expand it into its classes (`OrdersController`, `OrderService`, `InventoryClient`, `OrderRepository` in
+orders-service; `ReservationsController`, `StockRepository` in inventory-service); the arrows between classes are the
+method calls, and clicking one shows its arguments and return value or exception. In the `create-order-out-of-stock`
+run the exception thrown by inventory-service's controller shows as failed arrows up through the callers. To turn method
+capture off, remove the `-Dstack.methods.packages=...` option from the two `JAVA_TOOL_OPTIONS` in
+`docker-compose.yml` (without it the agent records the service level only, as before step 3) and start the stack again.
+
 All published ports (8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres, 15433
 inventory Postgres) are bound to `127.0.0.1` only.
 
