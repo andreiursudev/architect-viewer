@@ -46,7 +46,8 @@ class SandboxAcceptanceTest {
     fun `create order is recorded across both services`() {
         OrdersScenarios(BASE_URL).createOrder()
 
-        val run = awaitRecording(scenario = "create-order", minEvents = 5)
+        // 5 http/db events and 6 method events (the methods asserted below).
+        val run = awaitRecording(scenario = "create-order", minEvents = 11)
 
         run.manifest["kind"] shouldBe "e2e"
         run.manifest["scenarioId"] shouldBe "create-order"
@@ -93,7 +94,8 @@ class SandboxAcceptanceTest {
     fun `out of stock is recorded as a failed hop and no insert`() {
         OrdersScenarios(BASE_URL).createOrderOutOfStock()
 
-        val run = awaitRecording(scenario = "create-order-out-of-stock", minEvents = 4)
+        // 4 http/db events and 5 method events (no OrderRepository.insert).
+        val run = awaitRecording(scenario = "create-order-out-of-stock", minEvents = 9)
 
         run.events.single { it["type"] == "http.server" && it["component"] == "orders-service" }["status"] shouldBe 409
         run.events.single { it["type"] == "http.client" }["status"] shouldBe 409
@@ -154,7 +156,7 @@ class SandboxAcceptanceTest {
         }
         throw AssertionError(
             "no recording of run $runId ($scenario) with at least $minEvents events in $RECORDINGS within $timeout; " +
-                "last seen: $latest",
+                "last seen: ${latest?.events?.size ?: 0} events, types ${latest?.events?.groupingBy { it["type"] }?.eachCount()}; $latest",
         )
     }
 
