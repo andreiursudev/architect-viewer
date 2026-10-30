@@ -10,28 +10,15 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ResponseStatusException
 import java.net.URI
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @RestController
 @RequestMapping("/orders")
-class OrdersController(private val orders: OrderRepository, private val inventory: InventoryClient) {
+class OrdersController(private val orders: OrderService) {
 
     @PostMapping
     fun create(@RequestBody newOrder: NewOrder): ResponseEntity<Order> {
-        // Before the insert: an order whose stock cannot be reserved is never stored.
-        inventory.reserve(newOrder.sku, newOrder.quantity)
-        val order = Order(
-            id = UUID.randomUUID(),
-            customerId = newOrder.customerId,
-            sku = newOrder.sku,
-            quantity = newOrder.quantity,
-            status = OrderStatus.CREATED,
-            // Postgres keeps microseconds; truncating here makes the response match what a later GET returns.
-            createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS),
-        )
-        orders.insert(order)
+        val order = orders.create(newOrder)
         return ResponseEntity.created(URI.create("/orders/${order.id}")).body(order)
     }
 

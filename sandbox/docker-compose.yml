@@ -58,6 +58,7 @@ services:
       JAVA_TOOL_OPTIONS: >-
         -javaagent:/stack-agent/opentelemetry-javaagent.jar
         -Dotel.javaagent.extensions=/stack-agent/stack-agent-extension.jar
+        -Dstack.methods.packages=io.stackvibed.sandbox.orders
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://reporter:4318
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
@@ -94,6 +95,7 @@ services:
       JAVA_TOOL_OPTIONS: >-
         -javaagent:/stack-agent/opentelemetry-javaagent.jar
         -Dotel.javaagent.extensions=/stack-agent/stack-agent-extension.jar
+        -Dstack.methods.packages=io.stackvibed.sandbox.inventory
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://reporter:4318
       SPRING_DATASOURCE_URL: jdbc:postgresql://inventory-db:5432/inventory

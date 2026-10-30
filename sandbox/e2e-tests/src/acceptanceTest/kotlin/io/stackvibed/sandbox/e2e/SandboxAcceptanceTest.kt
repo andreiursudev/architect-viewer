@@ -2,6 +2,7 @@ package io.stackvibed.sandbox.e2e
 
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
@@ -76,6 +77,15 @@ class SandboxAcceptanceTest {
             (it["statement"] as String) shouldStartWith "update stock"
             it["rowCount"] shouldBe 1
         }
+        // Level 2: one event per method of the services' own beans, the HTTP client call a child of its method.
+        val methods = run.events.filter { it["type"] == "method" }
+        methods.map { "${(it["className"] as String).substringAfterLast('.')}.${it["methodName"]}" }.toSet() shouldBe setOf(
+            "OrdersController.create", "OrderService.create", "InventoryClient.reserve", "OrderRepository.insert",
+            "ReservationsController.reserve", "StockRepository.reserve",
+        )
+        val reserveMethod = methods.single { it["methodName"] == "reserve" && it["component"] == "orders-service" }
+        client["parentSpanId"] shouldBe reserveMethod["spanId"]
+        (reserveMethod["arguments"] as List<*>) shouldBe listOf("\"sku-1\"", "2") // the values createOrder() posts
     }
 
     @Test
@@ -91,6 +101,13 @@ class SandboxAcceptanceTest {
         val statements = run.events.filter { it["type"] == "db.client" }
         statements.single()["dbName"] shouldBe "inventory"
         statements.single()["rowCount"] shouldBe 0
+        // The 409 travels up the orders-service call chain as the same exception, and no insert method ran.
+        val methods = run.events.filter { it["type"] == "method" && it["component"] == "orders-service" }
+        val named = methods.associateBy { "${(it["className"] as String).substringAfterLast('.')}.${it["methodName"]}" }
+        for (name in listOf("InventoryClient.reserve", "OrderService.create", "OrdersController.create")) {
+            named[name]?.get("exceptionType") shouldBe "org.springframework.web.server.ResponseStatusException"
+        }
+        named.keys shouldNotContain "OrderRepository.insert"
     }
 
     @Test
