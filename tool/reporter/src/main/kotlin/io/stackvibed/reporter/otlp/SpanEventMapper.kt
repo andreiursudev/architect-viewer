@@ -10,6 +10,7 @@ import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import tools.jackson.core.JacksonException
 import tools.jackson.core.type.TypeReference
@@ -26,8 +27,9 @@ fun interface EventDraft {
 data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
 
 /**
- * Maps OTLP spans to recording events: HTTP server spans, DB client spans and HTTP client spans. Every other span is dropped,
- * and so are DB client spans without a statement.
+ * Maps OTLP spans to recording events: HTTP server spans, DB client spans, HTTP client spans and the INTERNAL spans the agent
+ * writes for method calls (those carrying `stack.method.class`). Every other span is dropped, and so are DB client spans
+ * without a statement.
  */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
@@ -42,6 +44,7 @@ class SpanEventMapper {
                         Span.SpanKind.SPAN_KIND_SERVER -> httpDraft(span, attrs, component)
                         Span.SpanKind.SPAN_KIND_CLIENT ->
                             if (isDb(attrs)) dbDraft(span, attrs, component) else clientDraft(span, attrs, component)
+                        Span.SpanKind.SPAN_KIND_INTERNAL -> methodDraft(span, attrs, component)
                         else -> null
                     } ?: continue
                     add(MappedSpan(SpanTags(attrs.string(StackAttributes.SCENARIO), attrs.string(StackAttributes.RUN)), draft))
@@ -130,9 +133,35 @@ class SpanEventMapper {
         }
     }
 
+    private fun methodDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        val className = attrs.string(StackAttributes.METHOD_CLASS) ?: return null
+        return EventDraft { runId ->
+            MethodEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                className = className,
+                methodName = attrs.string(StackAttributes.METHOD_NAME) ?: "",
+                parameterNames = strings(attrs.string(StackAttributes.METHOD_PARAM_NAMES)),
+                arguments = strings(attrs.string(StackAttributes.METHOD_ARGS)),
+                returnValue = attrs.string(StackAttributes.METHOD_RETURN),
+                exceptionType = attrs.string(StackAttributes.METHOD_EXCEPTION_TYPE),
+                exceptionMessage = attrs.string(StackAttributes.METHOD_EXCEPTION_MESSAGE),
+                thread = attrs.string(StackAttributes.METHOD_THREAD),
+            )
+        }
+    }
+
     private fun headers(raw: String?): Map<String, List<String>> = decode(raw, HEADERS_TYPE) ?: emptyMap()
 
     private fun parameters(raw: String?): List<String?> = decode(raw, PARAMETERS_TYPE) ?: emptyList()
+
+    private fun strings(raw: String?): List<String> = decode(raw, STRINGS_TYPE) ?: emptyList()
 
     /** Malformed JSON in a capture attribute must not lose the whole span, so it decodes to nothing. */
     private fun <T> decode(raw: String?, type: TypeReference<T>): T? {
@@ -159,5 +188,6 @@ class SpanEventMapper {
         const val UNKNOWN_SERVICE = "unknown-service"
         val HEADERS_TYPE = object : TypeReference<Map<String, List<String>>>() {}
         val PARAMETERS_TYPE = object : TypeReference<List<String?>>() {}
+        val STRINGS_TYPE = object : TypeReference<List<String>>() {}
     }
 }

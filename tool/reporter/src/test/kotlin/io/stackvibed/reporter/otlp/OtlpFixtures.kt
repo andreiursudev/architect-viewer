@@ -8,6 +8,7 @@ import io.opentelemetry.proto.resource.v1.Resource
 import io.opentelemetry.proto.trace.v1.ResourceSpans
 import io.opentelemetry.proto.trace.v1.ScopeSpans
 import io.opentelemetry.proto.trace.v1.Span
+import tools.jackson.databind.json.JsonMapper
 
 /** Deterministic OTLP payloads shared by the mapper tests and the reporter golden tests. */
 object OtlpFixtures {
@@ -18,6 +19,10 @@ object OtlpFixtures {
     const val CLIENT_SPAN_ID = "a1b2c3d4e5f60718"
     const val INVENTORY_SERVER_SPAN_ID = "d4c3b2a190817263"
     const val INVENTORY_DB_SPAN_ID = "5e4d3c2b1a090817"
+    const val CONTROLLER_SPAN_ID = "1a2b3c4d5e6f7081"
+    const val SERVICE_SPAN_ID = "2b3c4d5e6f708192"
+    const val RESERVE_SPAN_ID = "3c4d5e6f708192a3"
+    const val REPOSITORY_SPAN_ID = "4d5e6f708192a3b4"
 
     const val SERVER_START_NANOS = 1_760_000_000_000_000_000L
     const val SERVER_END_NANOS = SERVER_START_NANOS + 42_000_000L
@@ -31,6 +36,18 @@ object OtlpFixtures {
     const val INSERT_STATEMENT = "insert into orders (customer_id, status, total, created_at) values (?, ?, ?, ?)"
     const val RESERVATION_URL = "http://inventory-service:8081/reservations"
     const val RESERVE_STATEMENT = "update stock set reserved = reserved + ? where sku = ?"
+
+    const val SANDBOX_PACKAGE = "io.stackvibed.sandbox.orders"
+    const val NEW_ORDER_JSON = """{"customerId":"c-1","sku":"sku-1","quantity":2}"""
+    const val ORDER_JSON =
+        """{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","customerId":"c-1","sku":"sku-1","quantity":2,"status":"CREATED","createdAt":"2026-10-27T10:00:00.000123Z"}"""
+    const val SANDBOX_INSERT_STATEMENT = "insert into orders (id, customer_id, sku, quantity, status, created_at) values (?, ?, ?, ?, ?, ?)"
+    const val HANDLER_THREAD = "http-nio-8080-exec-1"
+
+    private val jsonStrings = JsonMapper.builder().build()
+
+    /** A JSON array of strings, the way the agent encodes `stack.method.args` and `stack.method.param_names`. */
+    fun jsonArray(vararg values: String): String = jsonStrings.writeValueAsString(values.toList())
 
     fun createOrderRun(scenario: String = "create-order", run: String = "run-1"): ExportTraceServiceRequest =
         request("orders-service", listOf(serverSpan(scenario, run), internalSpan(scenario, run), dbSpan(scenario, run, oldSemconv = false)))
@@ -48,6 +65,89 @@ object OtlpFixtures {
         request("inventory-service", listOf(inventoryServerSpan(scenario, run), inventoryDbSpan(scenario, run))),
     )
 
+    /**
+     * The same scenario as the sandbox runs it with method capture on: orders-service's server span, then
+     * OrdersController.create, OrderService.create, InventoryClient.reserve (with the reservation call under it) and
+     * OrderRepository.insert (with the insert under it), listed in call order.
+     */
+    fun createOrderWithMethodsRun(scenario: String = "create-order", run: String = "run-3"): ExportTraceServiceRequest = request(
+        "orders-service",
+        listOf(
+            serverSpan(scenario, run, requestBody = NEW_ORDER_JSON, responseBody = ORDER_JSON),
+            methodSpan(
+                CONTROLLER_SPAN_ID, SERVER_SPAN_ID, scenario, run, "OrdersController", "create",
+                SERVER_START_NANOS + 1_000_000L, SERVER_END_NANOS - 1_000_000L,
+                paramNames = listOf("newOrder"), args = listOf(NEW_ORDER_JSON),
+                returnValue = """{"statusCode":"CREATED","headers":{"Location":["/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7"]},"body":$ORDER_JSON}""",
+            ),
+            methodSpan(
+                SERVICE_SPAN_ID, CONTROLLER_SPAN_ID, scenario, run, "OrderService", "create",
+                SERVER_START_NANOS + 2_000_000L, SERVER_END_NANOS - 2_000_000L,
+                paramNames = listOf("newOrder"), args = listOf(NEW_ORDER_JSON), returnValue = ORDER_JSON,
+            ),
+            methodSpan(
+                RESERVE_SPAN_ID, SERVICE_SPAN_ID, scenario, run, "InventoryClient", "reserve",
+                SERVER_START_NANOS + 3_000_000L, SERVER_START_NANOS + 32_000_000L,
+                paramNames = listOf("sku", "quantity"), args = listOf("\"sku-1\"", "2"), returnValue = null,
+            ),
+            span(CLIENT_SPAN_ID, parent = RESERVE_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = "POST", SERVER_START_NANOS + 4_000_000L, SERVER_START_NANOS + 31_000_000L)
+                .addAllAttributes(tags(scenario, run))
+                .addAttributes(str("http.request.method", "POST"))
+                .addAttributes(str("url.full", RESERVATION_URL))
+                .addAttributes(str("server.address", "inventory-service"))
+                .addAttributes(long("server.port", 8081))
+                .addAttributes(long("http.response.status_code", 201))
+                .build(),
+            methodSpan(
+                REPOSITORY_SPAN_ID, SERVICE_SPAN_ID, scenario, run, "OrderRepository", "insert",
+                SERVER_START_NANOS + 33_000_000L, SERVER_START_NANOS + 39_000_000L,
+                paramNames = listOf("order"), args = listOf(ORDER_JSON), returnValue = null,
+            ),
+            span(DB_SPAN_ID, parent = REPOSITORY_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = "INSERT orders", SERVER_START_NANOS + 34_000_000L, SERVER_START_NANOS + 38_000_000L)
+                .addAllAttributes(tags(scenario, run))
+                .addAttributes(str("db.system.name", "postgresql"))
+                .addAttributes(str("db.namespace", "orders"))
+                .addAttributes(str("db.query.text", SANDBOX_INSERT_STATEMENT))
+                .addAttributes(str("stack.db.parameters", jsonArray("7c9e6679-7425-40de-944b-e07fc1f90ae7", "c-1", "sku-1", "2", "CREATED", "2026-10-27T10:00:00.000123Z")))
+                .addAttributes(long("stack.db.row_count", 1))
+                .build(),
+        ),
+    )
+
+    /**
+     * An INTERNAL span as the agent writes it for a method call: [paramNames] null leaves the attribute out (no names in the
+     * class file), [returnValue] null leaves it out (void, or the method threw), and an exception sets both exception attributes.
+     */
+    fun methodSpan(
+        spanId: String,
+        parent: String?,
+        scenario: String?,
+        run: String?,
+        simpleClass: String,
+        method: String,
+        startNanos: Long,
+        endNanos: Long,
+        paramNames: List<String>?,
+        args: List<String>,
+        returnValue: String?,
+        exceptionType: String? = null,
+        exceptionMessage: String? = null,
+        thread: String? = HANDLER_THREAD,
+    ): Span =
+        span(spanId, parent, Span.SpanKind.SPAN_KIND_INTERNAL, "$simpleClass.$method", startNanos, endNanos)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("stack.method.class", "$SANDBOX_PACKAGE.$simpleClass"))
+            .addAttributes(str("stack.method.name", method))
+            .apply {
+                if (paramNames != null) addAttributes(str("stack.method.param_names", jsonArray(*paramNames.toTypedArray())))
+                addAttributes(str("stack.method.args", jsonArray(*args.toTypedArray())))
+                if (returnValue != null) addAttributes(str("stack.method.return", returnValue))
+                if (exceptionType != null) addAttributes(str("stack.method.exception.type", exceptionType))
+                if (exceptionMessage != null) addAttributes(str("stack.method.exception.message", exceptionMessage))
+                if (thread != null) addAttributes(str("stack.method.thread", thread))
+            }
+            .build()
+
     fun request(serviceName: String?, spans: List<Span>): ExportTraceServiceRequest {
         val resource = Resource.newBuilder()
         if (serviceName != null) resource.addAttributes(str("service.name", serviceName))
@@ -60,7 +160,12 @@ object OtlpFixtures {
             .build()
     }
 
-    fun serverSpan(scenario: String? = "create-order", run: String? = "run-1"): Span =
+    fun serverSpan(
+        scenario: String? = "create-order",
+        run: String? = "run-1",
+        requestBody: String = REQUEST_BODY,
+        responseBody: String = RESPONSE_BODY,
+    ): Span =
         span(SERVER_SPAN_ID, parent = null, kind = Span.SpanKind.SPAN_KIND_SERVER, name = "POST /orders", SERVER_START_NANOS, SERVER_END_NANOS)
             .addAllAttributes(tags(scenario, run))
             .addAttributes(str("http.request.method", "POST"))
@@ -69,8 +174,8 @@ object OtlpFixtures {
             .addAttributes(long("http.response.status_code", 201))
             .addAttributes(str("stack.http.request.headers", """{"content-type":["application/json"],"x-multi":["a","b"]}"""))
             .addAttributes(str("stack.http.response.headers", """{"content-type":["application/json"]}"""))
-            .addAttributes(str("stack.http.request.body", REQUEST_BODY))
-            .addAttributes(str("stack.http.response.body", RESPONSE_BODY))
+            .addAttributes(str("stack.http.request.body", requestBody))
+            .addAttributes(str("stack.http.response.body", responseBody))
             .addAttributes(bool("stack.http.request.body_truncated", false))
             .addAttributes(bool("stack.http.response.body_truncated", false))
             .build()

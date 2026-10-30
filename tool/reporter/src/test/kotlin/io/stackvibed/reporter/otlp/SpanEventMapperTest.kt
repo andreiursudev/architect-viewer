@@ -7,6 +7,7 @@ import io.opentelemetry.proto.trace.v1.Span
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import org.junit.jupiter.api.Test
 
@@ -24,6 +25,11 @@ class SpanEventMapperTest {
 
     private fun client(request: io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest) =
         events(request).filterIsInstance<HttpClientEvent>().single()
+
+    private fun method(request: io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest) =
+        events(request).filterIsInstance<MethodEvent>().single()
+
+    private fun methodRequest(span: Span) = OtlpFixtures.request("orders-service", listOf(span))
 
     @Test fun `server span becomes http event`() {
         val event = http(OtlpFixtures.createOrderRun())
@@ -106,6 +112,77 @@ class SpanEventMapperTest {
         event.dbSystem shouldBe "postgresql"
         event.dbName shouldBe "orders"
         event.statement shouldBe OtlpFixtures.INSERT_STATEMENT
+    }
+
+    @Test fun `internal span with method attributes becomes method event`() {
+        val span = OtlpFixtures.methodSpan(
+            OtlpFixtures.SERVICE_SPAN_ID, OtlpFixtures.CONTROLLER_SPAN_ID, "create-order", "run-1", "OrderService", "create",
+            OtlpFixtures.SERVER_START_NANOS + 2_000_000L, OtlpFixtures.SERVER_START_NANOS + 40_000_000L,
+            paramNames = listOf("newOrder", "dryRun"), args = listOf(OtlpFixtures.NEW_ORDER_JSON, "false"), returnValue = OtlpFixtures.ORDER_JSON,
+        )
+        val event = method(methodRequest(span))
+        event.component shouldBe "orders-service"
+        event.className shouldBe "io.stackvibed.sandbox.orders.OrderService"
+        event.methodName shouldBe "create"
+        event.parameterNames shouldBe listOf("newOrder", "dryRun")
+        event.arguments shouldBe listOf(OtlpFixtures.NEW_ORDER_JSON, "false")
+        event.returnValue shouldBe OtlpFixtures.ORDER_JSON
+        event.exceptionType shouldBe null
+        event.exceptionMessage shouldBe null
+        event.thread shouldBe OtlpFixtures.HANDLER_THREAD
+        event.eventId shouldBe "${OtlpFixtures.TRACE_ID}-${OtlpFixtures.SERVICE_SPAN_ID}"
+        event.traceId shouldBe OtlpFixtures.TRACE_ID
+        event.spanId shouldBe OtlpFixtures.SERVICE_SPAN_ID
+        event.parentSpanId shouldBe OtlpFixtures.CONTROLLER_SPAN_ID
+        event.runId shouldBe "r"
+        event.startEpochNanos shouldBe OtlpFixtures.SERVER_START_NANOS + 2_000_000L
+        event.durationNanos shouldBe 38_000_000L
+    }
+
+    @Test fun `method span that threw has exception and no return`() {
+        val span = OtlpFixtures.methodSpan(
+            OtlpFixtures.RESERVE_SPAN_ID, OtlpFixtures.SERVICE_SPAN_ID, "create-order", "run-1", "InventoryClient", "reserve",
+            1, 2, paramNames = listOf("sku", "quantity"), args = listOf("\"sku-1\"", "2"), returnValue = null,
+            exceptionType = "org.springframework.web.server.ResponseStatusException",
+            exceptionMessage = "409 CONFLICT \"not enough stock for sku-1\"",
+        )
+        val event = method(methodRequest(span))
+        event.returnValue shouldBe null
+        event.exceptionType shouldBe "org.springframework.web.server.ResponseStatusException"
+        event.exceptionMessage shouldBe "409 CONFLICT \"not enough stock for sku-1\""
+        event.arguments shouldBe listOf("\"sku-1\"", "2")
+    }
+
+    @Test fun `method span without parameter names or with malformed json maps to empty lists`() {
+        val noNames = OtlpFixtures.methodSpan(
+            "1111111111111111", null, null, null, "Clock", "now", 1, 2, paramNames = null, args = emptyList(), returnValue = "\"x\"", thread = null,
+        )
+        method(methodRequest(noNames)).apply {
+            parameterNames shouldBe emptyList()
+            arguments shouldBe emptyList()
+            returnValue shouldBe "\"x\""
+            thread shouldBe null
+        }
+
+        val malformed = OtlpFixtures.span("2222222222222222", null, Span.SpanKind.SPAN_KIND_INTERNAL, "X.y", 1, 2)
+            .addAttributes(OtlpFixtures.str("stack.method.class", "a.X"))
+            .addAttributes(OtlpFixtures.str("stack.method.name", "y"))
+            .addAttributes(OtlpFixtures.str("stack.method.param_names", "[\"a\""))
+            .addAttributes(OtlpFixtures.str("stack.method.args", "not json"))
+            .build()
+        method(methodRequest(malformed)).apply {
+            className shouldBe "a.X"
+            parameterNames shouldBe emptyList()
+            arguments shouldBe emptyList()
+        }
+    }
+
+    @Test fun `internal span without method attributes is dropped`() {
+        val plain = OtlpFixtures.span("1111111111111111", null, Span.SpanKind.SPAN_KIND_INTERNAL, "Something.happens", 1, 2).build()
+        val nameOnly = OtlpFixtures.span("2222222222222222", null, Span.SpanKind.SPAN_KIND_INTERNAL, "Other.thing", 1, 2)
+            .addAttributes(OtlpFixtures.str("stack.method.name", "thing"))
+            .build()
+        events(OtlpFixtures.request("orders-service", listOf(plain, nameOnly))) shouldBe emptyList()
     }
 
     @Test fun `internal and unknown spans are dropped`() {

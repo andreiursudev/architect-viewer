@@ -100,6 +100,14 @@ class ReporterGoldenTest {
         folder.resolve("manifest.json").readText() shouldBe golden("create-order-reserves/manifest.json")
     }
 
+    @Test fun `create order with methods is written in call order`() {
+        postProtobuf("/v1/traces", OtlpFixtures.createOrderWithMethodsRun()).statusCode() shouldBe 200
+
+        val folder = recordingFolder("_create-order_run-3")
+        folder.resolve("events.jsonl").readText() shouldBe golden("create-order-methods/events.jsonl")
+        folder.resolve("manifest.json").readText() shouldBe golden("create-order-methods/manifest.json")
+    }
+
     @Test fun `malformed protobuf is a 400`() {
         val response = http.send(
             HttpRequest.newBuilder(url("/v1/traces")).header("Content-Type", "application/x-protobuf")
