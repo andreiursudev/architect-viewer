@@ -240,14 +240,14 @@ class FlowBuilderTest {
             connectionId shouldBe null
             status shouldBe null
             handler shouldBe null
-            label shouldBe """create({"sku":"sku-1"})"""
+            label shouldBe "create"
             event shouldBe service
         }
         with(steps.getValue("reserve")) {
             fromUnit shouldBe "x.OrderService"
             toUnit shouldBe "x.InventoryClient"
             parentStepId shouldBe "svc"
-            label shouldBe "reserve(\"sku-1\", 2)"
+            label shouldBe "reserve"
         }
         with(steps.getValue("inventory")) {
             kind shouldBe FlowStepKind.HTTP
@@ -323,7 +323,7 @@ class FlowBuilderTest {
         step.fromUnit shouldBe "x.CatalogService"
         step.toUnit shouldBe "x.CatalogService"
         step.parentStepId shouldBe "price"
-        step.label shouldBe "discount(3)"
+        step.label shouldBe "discount"
     }
 
     @Test
@@ -339,7 +339,7 @@ class FlowBuilderTest {
         val methodSteps = flow.steps.filter { it.kind == FlowStepKind.METHOD }
         methodSteps.map { it.stepId } shouldBe listOf("svc", "reserve")
         methodSteps.map { (it.event as MethodEvent).exceptionType } shouldBe listOf(failure, failure)
-        methodSteps.map { it.label } shouldBe listOf("create(1)", "reserve(2)")
+        methodSteps.map { it.label } shouldBe listOf("create", "reserve")
         methodSteps.map { it.status } shouldBe listOf(null, null)
         flow.steps.first().handler?.exceptionType shouldBe failure
     }
@@ -370,14 +370,14 @@ class FlowBuilderTest {
     }
 
     @Test
-    fun `long method label is cut to 60 characters`() {
+    fun `method label is the method name without its arguments`() {
         val request = http("req", "orders-service", 0, 1000)
         val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
         val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "ctl", args = listOf("\"" + "a".repeat(100) + "\""))
 
         val label = builder.build(emptyManifest(), listOf(request, controller, service), emptyMap()).steps.single { it.stepId == "svc" }.label
 
-        label shouldBe ("create(\"" + "a".repeat(100)).take(60)
+        label shouldBe "create"
     }
 
     @Test
@@ -419,7 +419,7 @@ class FlowBuilderTest {
         )
         val ids = steps.map { it.stepId }
         steps.map { it.parentStepId } shouldBe listOf(null, ids[0], ids[1], ids[2], ids[3], ids[4], ids[1], ids[6])
-        steps.map { it.label }[2] shouldBe "reserve(\"sku-1\", 2)"
+        steps.map { it.label }[2] shouldBe "reserve"
     }
 
     private fun step2(

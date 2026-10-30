@@ -36,7 +36,7 @@ test('expanding orders-service shows its classes and a method call', async ({ pa
   }
   await expect(classes.filter({ hasText: 'InventoryClient' })).toHaveAttribute('title', 'io.stackvibed.sandbox.orders.InventoryClient');
 
-  await diagram(page).getByRole('button', { name: 'request reserve("sku-1", 2)' }).click();
+  await diagram(page).getByRole('button', { name: 'request reserve' }).click();
   const details = page.getByRole('complementary', { name: 'Message details' });
   await expect(details).toContainText('InventoryClient');
   const quantity = details.getByRole('table', { name: 'Arguments' }).getByRole('row', { name: /quantity/ });
@@ -48,7 +48,7 @@ test('collapse all returns to the collapsed diagram', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Expand all' }).click();
   await expect(page.locator('.seq-head.is-class')).toHaveCount(6); // 4 in orders-service, 2 in inventory-service
-  await expect(diagram(page).getByRole('button', { name: 'request reserve("sku-1", 2)' }).first()).toBeVisible();
+  await expect(diagram(page).getByRole('button', { name: 'request reserve' }).first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Collapse all' }).click();
   await expect(page.locator('.seq-head.is-class')).toHaveCount(0);

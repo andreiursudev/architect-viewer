@@ -68,7 +68,7 @@ class FlowBuilder {
                     if (request == null || tree.isHandler(event)) null else step(
                         event, parent = tree.parentStepOf(event),
                         from = alias(event.component), to = alias(event.component),
-                        kind = FlowStepKind.METHOD, label = "${event.methodName}(${event.arguments.joinToString(", ")})".take(LABEL_LENGTH),
+                        kind = FlowStepKind.METHOD, label = event.methodName, // arguments are in the details, not on the arrow
                         status = null,
                         fromUnit = (tree.owner(event) ?: tree.handlerOf(request))?.className, toUnit = event.className,
                     )

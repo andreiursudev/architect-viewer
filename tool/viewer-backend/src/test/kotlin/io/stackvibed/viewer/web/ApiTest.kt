@@ -216,7 +216,7 @@ class ApiTest {
             jsonPath("$.steps[1].fromUnit") { value(orders + "OrdersController") }
             jsonPath("$.steps[1].toUnit") { value(orders + "OrderService") }
             jsonPath("$.steps[1].event.type") { value("method") }
-            jsonPath("$.steps[2].label") { value("reserve(\"sku-1\", 2)") }
+            jsonPath("$.steps[2].label") { value("reserve") }
             jsonPath("$.steps[3].connectionId") { value("orders-service--inventory-service") }
             jsonPath("$.steps[3].fromUnit") { value(orders + "InventoryClient") }
             jsonPath("$.steps[3].toUnit") { value(inventory + "ReservationsController") }

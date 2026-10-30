@@ -116,7 +116,7 @@ time interval contains the event (the rule `enclosingRequest` uses today). An ev
 - Any other ownerless method inside a request: a method step from the handler's class.
 - **Method step** for every other method event: `kind = method`, `from = to = component`, `fromUnit` = owner's class,
   `toUnit` = own class (equal for a self-call), parent = owner's step (the request step when the owner is the handler),
-  label = `methodName(arg1, arg2)` from the rendered arguments, cut to 60 characters, `status = null`.
+  label = `methodName` alone (the arguments are in the details panel; the owner chose this after trying step 3), `status = null`.
 - **DB and `http.client` steps, and server steps called by another service**: `fromUnit` = class of the owner (of the
   client event, for a server step); parent = the owner's step when there is an owner, else the enclosing request as
   today.
