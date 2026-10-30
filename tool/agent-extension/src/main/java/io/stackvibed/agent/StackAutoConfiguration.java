@@ -27,6 +27,9 @@ public final class StackAutoConfiguration implements AutoConfigurationCustomizer
         defaults.put("otel.logs.exporter", "none");
         defaults.put("otel.traces.sampler", "always_on");
         defaults.put("otel.bsp.schedule.delay", "200");
+        // The SDK's 2048 silently drops spans of a method-heavy request; the server span ends last, so it
+        // would be the one lost.
+        defaults.put("otel.bsp.max.queue.size", "65536");
         // Recorded SQL keeps its literals. This is the key opentelemetry-javaagent 2.33 reads; the older
         // otel.instrumentation.common.db-statement-sanitizer.enabled logs a deprecation warning.
         defaults.put("otel.instrumentation.common.db.query-sanitization.enabled", "false");

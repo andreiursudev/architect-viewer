@@ -24,6 +24,8 @@ dependencies {
     // Unit tests load helpers that reference instrumentation-api types (e.g. VirtualField).
     testImplementation(platform(libs.opentelemetry.instrumentation.bom.alpha))
     testImplementation(libs.opentelemetry.instrumentation.api)
+    // StackAutoConfiguration's defaults are checked in a unit test.
+    testImplementation(libs.opentelemetry.sdk.extension.autoconfigure.spi)
     // Matcher tests evaluate ByteBuddy matchers against TypeDescription.ForLoadedType.
     testImplementation(libs.bytebuddy)
 
