@@ -15,10 +15,11 @@ test('board shows components and highlights create-order', async ({ page }) => {
   await expect(page.locator('.path-edge')).toHaveCount(0);
 
   await pickCreateOrder(page);
+  await page.getByLabel('Run').selectOption('run-1'); // the newest run crosses every component, which would not show a selective highlight
 
-  // the newest create-order run is run-5, which crosses both services and both databases
-  await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(4);
-  await expect(page.locator('.component-node.on-path')).toHaveCount(5);
+  await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(2);
+  await expect(page.locator('.component-node.on-path')).toHaveCount(3);
+  await expect(page.locator('.component-node:not(.on-path)')).toHaveCount(2); // inventory-service and its database stay unhighlighted
 });
 
 test('dragging a node persists its position', async ({ page }) => {
