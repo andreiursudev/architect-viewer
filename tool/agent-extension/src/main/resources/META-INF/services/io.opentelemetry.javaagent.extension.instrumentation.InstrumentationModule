@@ -1,3 +1,4 @@
 io.stackvibed.agent.http.ServletHeadersInstrumentationModule
 io.stackvibed.agent.http.SpringMvcBodyInstrumentationModule
 io.stackvibed.agent.jdbc.JdbcParametersInstrumentationModule
+io.stackvibed.agent.method.MethodInstrumentationModule

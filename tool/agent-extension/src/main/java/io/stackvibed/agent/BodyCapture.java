@@ -16,9 +16,10 @@ import java.util.List;
  */
 public final class BodyCapture {
 
-    private static final int MAX_DEPTH = 8;
-    private static final int MAX_COLLECTION = 100;
-    private static final int MAX_STRING = 4096;
+    /** Bounds for {@link BoundedValueSerializer}, shared by every capture that renders application values. */
+    public static final int MAX_DEPTH = 8;
+    public static final int MAX_COLLECTION = 100;
+    public static final int MAX_STRING = 4096;
 
     private BodyCapture() {}
 

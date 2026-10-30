@@ -10,6 +10,7 @@ import kotlin.concurrent.thread
 /**
  * The fixture app running in its own JVM under the OpenTelemetry Java agent plus our extension,
  * exporting to `http://localhost:<receiverPort>`. Its console output goes to `stack.agentTestLogDir`.
+ * Method capture is off unless [start] is given `-Dstack.methods.packages=…` among its JVM arguments.
  */
 class ForkedAgentApp private constructor(private val process: Process, port: Int) : AutoCloseable {
 
@@ -25,7 +26,7 @@ class ForkedAgentApp private constructor(private val process: Process, port: Int
     companion object {
         private val PORT_LINE = Regex("""Tomcat started on port\D*(\d+)""")
 
-        fun start(receiverPort: Int): ForkedAgentApp {
+        fun start(receiverPort: Int, jvmArgs: List<String> = emptyList()): ForkedAgentApp {
             val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
             val command = listOf(
                 java,
@@ -33,12 +34,15 @@ class ForkedAgentApp private constructor(private val process: Process, port: Int
                 "-Dotel.javaagent.extensions=${requiredProperty("stack.extensionJar")}",
                 "-Dotel.exporter.otlp.endpoint=http://localhost:$receiverPort",
                 "-Dotel.service.name=fixture-app",
+            ) + jvmArgs + listOf(
                 "-jar", requiredProperty("stack.fixtureJar"),
                 "--server.port=0",
                 "--server.address=127.0.0.1",
             )
             val logDir = Files.createDirectories(Path.of(requiredProperty("stack.agentTestLogDir")))
-            val process = ProcessBuilder(command).redirectErrorStream(true).start()
+            val builder = ProcessBuilder(command).redirectErrorStream(true)
+            builder.environment().remove("STACK_METHODS_PACKAGES")
+            val process = builder.start()
             val logFile = logDir.resolve("fixture-app-${process.pid()}.log")
             val port = CompletableFuture<Int>()
             thread(isDaemon = true, name = "fixture-app-output") {
