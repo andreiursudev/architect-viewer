@@ -35,6 +35,21 @@ class MethodSpansTest {
     }
 
     @Test
+    fun `a void method records no return value`() {
+        endAttributes(null, isVoid = true).get(returnValue).shouldBeNull()
+    }
+
+    @Test
+    fun `a returned null is recorded as null`() {
+        endAttributes(null, isVoid = false).get(returnValue) shouldBe "null"
+    }
+
+    @Test
+    fun `a Kotlin Unit returned as an object records no return value`() {
+        endAttributes(Unit, isVoid = false).get(returnValue).shouldBeNull()
+    }
+
+    @Test
     fun `a value is cut at the method value budget`() {
         // A shared graph re-renders once per path: unbounded this is about 250,000 characters.
         val inner = List(50) { "x".repeat(100) }

@@ -83,6 +83,14 @@ public final class MethodSpans {
         }
     }
 
+    /**
+     * Kotlin's {@code Unit}, returned as an object by an override of a generic function, means no return
+     * value (as a {@code void} method). Matched by name: the extension never loads Kotlin types.
+     */
+    static boolean isKotlinUnit(Object value) {
+        return value != null && "kotlin.Unit".equals(value.getClass().getName());
+    }
+
     /** The exception's message; {@code null} when it has none or an overridden getter fails. */
     private static String message(Throwable error) {
         try {
@@ -159,7 +167,7 @@ public final class MethodSpans {
                 if (message != null) {
                     attributes.put(StackAttributes.METHOD_EXCEPTION_MESSAGE, message);
                 }
-            } else if (!call.isVoid) {
+            } else if (!call.isVoid && !isKotlinUnit(returned)) {
                 attributes.put(StackAttributes.METHOD_RETURN, render(returned));
             }
         }
