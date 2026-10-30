@@ -78,7 +78,7 @@ object OtlpFixtures {
                 CONTROLLER_SPAN_ID, SERVER_SPAN_ID, scenario, run, "OrdersController", "create",
                 SERVER_START_NANOS + 1_000_000L, SERVER_END_NANOS - 1_000_000L,
                 paramNames = listOf("newOrder"), args = listOf(NEW_ORDER_JSON),
-                returnValue = """{"statusCode":"CREATED","headers":{"Location":["/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7"]},"body":$ORDER_JSON}""",
+                returnValue = """{"status":"CREATED","headers":{"headers":{"Location":["/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7"]}},"body":$ORDER_JSON}""",
             ),
             methodSpan(
                 SERVICE_SPAN_ID, CONTROLLER_SPAN_ID, scenario, run, "OrderService", "create",
