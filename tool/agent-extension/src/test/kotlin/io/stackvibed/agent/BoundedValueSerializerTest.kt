@@ -92,7 +92,51 @@ class BoundedValueSerializerTest {
         BoundedValueSerializer.toJson("abcdefgh", 8, 100, 4096, 4) shouldBe "\"abc" + BoundedValueSerializer.TRUNCATED
     }
 
+    @Test
+    fun `an uninitialized lazy collection is a placeholder and never read`() {
+        BoundedValueSerializer.placeholder(LazyBag(initialized = false)) shouldBe "<lazy>"
+        json(Order("o-1", LazyBag(initialized = false))) shouldBe """{"id":"o-1","items":"<lazy>"}"""
+    }
+
+    @Test
+    fun `a lazy collection whose state cannot be read is a placeholder`() {
+        BoundedValueSerializer.placeholder(LazyBag(initialized = null)) shouldBe "<lazy>"
+    }
+
+    @Test
+    fun `an initialized lazy collection is rendered normally`() {
+        BoundedValueSerializer.placeholder(LazyBag(initialized = true, listOf("a", "b"))) shouldBe null
+        json(Order("o-1", LazyBag(initialized = true, listOf("a", "b")))) shouldBe """{"id":"o-1","items":["a","b"]}"""
+    }
+
+    @Test
+    fun `an entity proxy is a placeholder and never read`() {
+        BoundedValueSerializer.placeholder(OrderProxy()) shouldBe "<lazy>"
+        json(listOf(OrderProxy())) shouldBe """["<lazy>"]"""
+    }
+
     private class Node(val name: String, val next: Node?)
+
+    private class Order(val id: String, val items: List<String>)
+
+    /** A Hibernate-style bag (see test stub); {@code null} makes the state check itself fail. */
+    private class LazyBag(private val initialized: Boolean?, private val items: List<String> = emptyList()) :
+        java.util.AbstractList<String>(), org.hibernate.collection.spi.PersistentCollection {
+        override fun wasInitialized(): Boolean = initialized ?: throw IllegalStateException("no session")
+        override val size: Int get() = check().size
+        override fun get(index: Int): String = check()[index]
+        override fun iterator(): MutableIterator<String> = check().toMutableList().iterator()
+        private fun check(): List<String> =
+            if (initialized == true) items else throw AssertionError("capture must not load a lazy collection")
+    }
+
+    /** A Hibernate-style entity proxy: reading its state would load the entity. */
+    private class OrderProxy : org.hibernate.proxy.HibernateProxy {
+        @Suppress("unused")
+        val id: String get() = throw AssertionError("capture must not initialize a proxy")
+        @Suppress("unused")
+        private val interceptor: Any = object { val session: Any = "must not be rendered" }
+    }
 
     private class UnreadableIterator : Iterator<String> {
         override fun hasNext(): Boolean = throw AssertionError("capture must not advance the iterator")

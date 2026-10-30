@@ -26,6 +26,9 @@ public final class BoundedValueSerializer {
     public static final String TRUNCATED = "\u2026<truncated>";
 
     private static final String INPUT_STREAM_SOURCE = "org.springframework.core.io.InputStreamSource";
+    // Hibernate 4 to 7; its implementations (in .internal before 6, .spi since) implement this interface.
+    private static final String PERSISTENT_COLLECTION = "org.hibernate.collection.spi.PersistentCollection";
+    private static final String HIBERNATE_PROXY = "org.hibernate.proxy.HibernateProxy";
 
     private final int maxDepth;
     private final int maxCollection;
@@ -68,8 +71,9 @@ public final class BoundedValueSerializer {
     /**
      * A placeholder for values whose content must not be read to render them (doing so could load a
      * whole file into memory or consume/leak a stream, or use up a one-shot {@code Stream} or
-     * {@code Iterator} the application is about to write), or {@code null} for ordinary values. Spring's
-     * {@code InputStreamSource} (e.g. {@code Resource}) is matched by name so no Spring type is loaded.
+     * {@code Iterator} the application is about to write, or load lazy JPA data and issue SQL), or
+     * {@code null} for ordinary values. Spring's {@code InputStreamSource} (e.g. {@code Resource}) and
+     * Hibernate's lazy collections and entity proxies are matched by name so no framework type is loaded.
      */
     public static String placeholder(Object value) {
         if (value instanceof byte[] bytes) {
@@ -81,24 +85,46 @@ public final class BoundedValueSerializer {
         if (value instanceof Reader) {
             return "<reader>";
         }
-        if (value != null && implementsByName(value.getClass(), INPUT_STREAM_SOURCE)) {
+        if (value == null) {
+            return null;
+        }
+        Class<?> type = value.getClass();
+        if (implementsByName(type, INPUT_STREAM_SOURCE) != null) {
             return "<resource>";
+        }
+        if (implementsByName(type, HIBERNATE_PROXY) != null) {
+            return "<lazy>";
+        }
+        Class<?> persistentCollection = implementsByName(type, PERSISTENT_COLLECTION);
+        if (persistentCollection != null && !wasInitialized(persistentCollection, value)) {
+            return "<lazy>";
         }
         return null;
     }
 
-    private static boolean implementsByName(Class<?> type, String name) {
+    /** The class or interface named {@code name} that {@code type} is or implements, or {@code null}. */
+    private static Class<?> implementsByName(Class<?> type, String name) {
         for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             if (current.getName().equals(name)) {
-                return true;
+                return current;
             }
             for (Class<?> implemented : current.getInterfaces()) {
-                if (implementsByName(implemented, name)) {
-                    return true;
+                Class<?> found = implementsByName(implemented, name);
+                if (found != null) {
+                    return found;
                 }
             }
         }
-        return false;
+        return null;
+    }
+
+    /** Hibernate's {@code PersistentCollection.wasInitialized()}, called reflectively; {@code false} if it fails. */
+    private static boolean wasInitialized(Class<?> persistentCollection, Object collection) {
+        try {
+            return Boolean.TRUE.equals(persistentCollection.getMethod("wasInitialized").invoke(collection));
+        } catch (Throwable e) {
+            return false;
+        }
     }
 
     private boolean full() {
