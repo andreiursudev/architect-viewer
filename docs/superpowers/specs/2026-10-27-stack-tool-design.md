@@ -194,9 +194,13 @@ Claude's calls in this step (owner to check):
 - One reservation call per order, synchronous; no retries, timeouts tuning, or compensation, because the sandbox is a stand-in, not a design.
 - The client hop and the server hop are merged into one step rather than drawn twice.
 
+### Step 3 — methods inside services (level 2) in the sequence view
+
+See `2026-10-30-step-3-method-capture-design.md`.
+
 ### Explicitly later (each when the sandbox needs it)
 
-Level 2 + component view; Kafka, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
+Component view and the rest of level 2 (coroutines, workspace include/exclude patterns); Kafka, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
 
 ## 12. Testing strategy (D21)
 
