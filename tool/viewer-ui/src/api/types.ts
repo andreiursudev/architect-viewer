@@ -10,6 +10,7 @@ export type BoardLayout = ModelSchema['boardLayout'];
 export type Viewport = NonNullable<BoardLayout['viewport']>;
 export type Flow = ModelSchema['flow'];
 export type FlowStep = Flow['steps'][number];
+export type MethodEvent = Extract<FlowStep['event'], { type: 'method' }>;
 export type RecordingManifest = ModelSchema['recordingManifest'];
 export type ComponentDefinition = ModelSchema['componentDefinition'];
 export type ConnectionDefinition = ModelSchema['connectionDefinition'];

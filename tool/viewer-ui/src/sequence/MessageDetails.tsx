@@ -1,4 +1,4 @@
-import type { FlowStep } from '../api/types';
+import type { FlowStep, MethodEvent } from '../api/types';
 import { clientCallNote, formatMillis } from '../board/HopDetails';
 import { statusTone } from '../status';
 
@@ -63,7 +63,20 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        ) : null /* method: drawn in a later task */}
+        ) : (
+          <>
+            <dt>Class</dt>
+            <dd>{event.className}</dd>
+            <dt>Method</dt>
+            <dd>{event.methodName}</dd>
+            {event.thread && (
+              <>
+                <dt>Thread</dt>
+                <dd>{event.thread}</dd>
+              </>
+            )}
+          </>
+        )}
       </dl>
 
       {event.type === 'http.server' ? (
@@ -76,6 +89,12 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             <Headers title="Response headers" headers={event.responseHeaders} />
             <Body what="response" text={event.responseBody} truncated={event.responseBodyTruncated} />
           </Section>
+          {step.handler && (
+            <Section title={`Handled by ${simpleName(step.handler.className)}.${step.handler.methodName}`} selected={false}>
+              <Arguments method={step.handler} />
+              <Outcome method={step.handler} />
+            </Section>
+          )}
         </>
       ) : event.type === 'db.client' ? (
         <>
@@ -94,10 +113,21 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
         <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
           <p className="muted md-note">{clientCallNote(step)}</p>
         </Section>
-      ) : null /* method: drawn in a later task */}
+      ) : (
+        <>
+          <Section title="Arguments" selected={kind === 'request'}>
+            <Arguments method={event} titled={false} />
+          </Section>
+          <Section title={event.exceptionType != null ? 'Threw' : 'Returned'} selected={kind === 'response'}>
+            <Outcome method={event} titled={false} />
+          </Section>
+        </>
+      )}
     </div>
   );
 }
+
+const simpleName = (type: string) => type.slice(type.lastIndexOf('.') + 1);
 
 function Section({ title, selected, children }: { title: string; selected: boolean; children: React.ReactNode }) {
   return (
@@ -160,6 +190,54 @@ function Parameters({ values }: { values: (string | null)[] }) {
             ))}
           </tbody>
         </table>
+      )}
+    </>
+  );
+}
+
+/** One row per argument, named after the parameter, or `argN` when the recording did not know the names. */
+function Arguments({ method, titled = true }: { method: MethodEvent; titled?: boolean }) {
+  return (
+    <>
+      {titled && <h4>Arguments</h4>}
+      {method.arguments.length === 0 ? (
+        <p className="muted md-note">none</p>
+      ) : (
+        <table className="md-table" aria-label="Arguments">
+          <tbody>
+            {method.arguments.map((value, i) => (
+              <tr key={i}>
+                <th scope="row">{method.parameterNames[i] ?? `arg${i}`}</th>
+                <td>
+                  <pre className="md-code">{prettyBody(value)}</pre>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
+/** What the method gave back, or the exception it ended with. */
+function Outcome({ method, titled = true }: { method: MethodEvent; titled?: boolean }) {
+  if (method.exceptionType != null) {
+    return (
+      <>
+        {titled && <h4>Threw</h4>}
+        <p className="hop-error">{method.exceptionType}</p>
+        {method.exceptionMessage && <pre className="md-code">{method.exceptionMessage}</pre>}
+      </>
+    );
+  }
+  return (
+    <>
+      {titled && <h4>Returned</h4>}
+      {method.returnValue == null ? (
+        <p className="muted md-note">no value</p>
+      ) : (
+        <pre className="md-code">{prettyBody(method.returnValue)}</pre>
       )}
     </>
   );

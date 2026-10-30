@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { FlowStep } from './api/types';
-import { createOrderFlow, unrecordedHostStep } from './board/testData';
+import { createOrderFlow, methodStep, unrecordedHostStep } from './board/testData';
 import { isFailedStep, responseText, statusTone } from './status';
 
 const [request, insert] = createOrderFlow.steps;
@@ -38,4 +38,29 @@ test('statusTone picks the tone of the status class', () => {
   expect(statusTone(204)).toBe('is-ok');
   expect(statusTone(404)).toBe('is-client-error');
   expect(statusTone(503)).toBe('is-server-error');
+});
+
+const methodWith = (over: Record<string, unknown>) => {
+  const step = methodStep('m', null, 'orders-service', null, 'x.OrdersController', 'create', 1);
+  return { ...step, event: { ...step.event, ...over } } as FlowStep;
+};
+
+test('method that threw is failed and says what it threw', () => {
+  const threw = methodWith({ exceptionType: 'org.springframework.web.server.ResponseStatusException' });
+  expect(isFailedStep(threw)).toBe(true);
+  expect(responseText(threw)).toBe('throws ResponseStatusException');
+  expect(isFailedStep(methodWith({ returnValue: '1' }))).toBe(false);
+});
+
+test('method return is shortened', () => {
+  const long = JSON.stringify({ items: 'x'.repeat(90) });
+  const text = responseText(methodWith({ returnValue: long }));
+  expect(text).toHaveLength(40);
+  expect(text.endsWith('…')).toBe(true);
+  expect(responseText(methodWith({ returnValue: '{\n  "id": 1,\n  "ok": true\n}' }))).toBe('{ "id": 1, "ok": true }');
+  expect(responseText(methodWith({ returnValue: 'x'.repeat(40) }))).toBe('x'.repeat(40));
+});
+
+test('void method says returned', () => {
+  expect(responseText(methodWith({ returnValue: null }))).toBe('returned');
 });

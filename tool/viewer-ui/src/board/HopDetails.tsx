@@ -57,7 +57,7 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
               {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
               <p className="muted">{clientCallNote(step)}</p>
             </>
-          ) : null /* method: drawn in a later task */}
+          ) : null /* method steps have no connection, so the board never lists them */}
         </section>
       ))}
     </div>

@@ -21,14 +21,23 @@ export function SequenceView() {
   }, [workspace.data]);
 
   const expandable = useMemo(() => [...(flow.data ? classCounts(flow.data).keys() : [])], [flow.data]);
-  const toggle = (component: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(component)) next.add(component);
-      return next;
-    });
-
   const steps = flow.data?.steps ?? [];
+  // a method step only exists while its service is expanded, so collapsing the service drops it from the details panel
+  const dropSelectionOfCollapsed = (stillExpanded: ReadonlySet<string>) => {
+    const open = steps.find((s) => s.stepId === selected?.stepId);
+    if (open?.kind === 'method' && !stillExpanded.has(open.from)) setSelected(null);
+  };
+  const toggle = (component: string) => {
+    const next = new Set(expanded);
+    if (!next.delete(component)) next.add(component);
+    setExpanded(next);
+    dropSelectionOfCollapsed(next);
+  };
+  const collapseAll = () => {
+    setExpanded(new Set());
+    dropSelectionOfCollapsed(new Set());
+  };
+
   const methodCalls = steps.filter((s) => s.kind === 'method').length;
   const calls = steps.length - methodCalls;
   const step = steps.find((s) => s.stepId === selected?.stepId);
@@ -48,7 +57,7 @@ export function SequenceView() {
               <button type="button" className="btn btn-small" onClick={() => setExpanded(new Set(expandable))}>
                 Expand all
               </button>
-              <button type="button" className="btn btn-small" onClick={() => setExpanded(new Set())}>
+              <button type="button" className="btn btn-small" onClick={collapseAll}>
                 Collapse all
               </button>
             </>

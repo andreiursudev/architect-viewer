@@ -127,3 +127,34 @@ test('a service expands on its own toggle and collapses on its group button', as
   await user.click(screen.getByRole('button', { name: 'Collapse Orders service' }));
   expect(screen.queryByText('OrderService')).not.toBeInTheDocument();
 });
+
+test('collapsing a service clears a selected method step of it', async () => {
+  const user = userEvent.setup();
+  renderAt('/sequence/methods');
+  await user.click(await screen.findByRole('button', { name: 'Expand all' }));
+  const diagram = screen.getByRole('group', { name: /sequence diagram/i });
+  await user.click(within(diagram).getByRole('button', { name: /OrderService\.placeOrder/ }));
+  const panel = screen.getByRole('complementary', { name: 'Message details' });
+  expect(within(panel).getByRole('heading', { name: 'OrderService.placeOrder' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Collapse Orders service' }));
+  expect(within(panel).queryByRole('heading', { name: 'OrderService.placeOrder' })).not.toBeInTheDocument();
+  expect(within(panel).getByText(/Select a message/)).toBeInTheDocument();
+});
+
+test('collapse all clears a selected method step, but keeps a selected call', async () => {
+  const user = userEvent.setup();
+  renderAt('/sequence/methods');
+  await user.click(await screen.findByRole('button', { name: 'Expand all' }));
+  const diagram = screen.getByRole('group', { name: /sequence diagram/i });
+  const panel = screen.getByRole('complementary', { name: 'Message details' });
+
+  await user.click(within(diagram).getByRole('button', { name: /POST \/orders/ }));
+  await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+  expect(within(panel).getByRole('heading', { name: 'POST /orders' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Expand all' }));
+  await user.click(within(diagram).getByRole('button', { name: /OrderService\.placeOrder/ }));
+  await user.click(screen.getByRole('button', { name: 'Collapse all' }));
+  expect(within(panel).getByText(/Select a message/)).toBeInTheDocument();
+});
