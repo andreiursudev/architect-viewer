@@ -341,7 +341,14 @@ java "-javaagent:$stack\build\stack-agent\opentelemetry-javaagent.jar" `
   (`@RestController`, `@Controller`, `@Service`, `@Repository`, `@Component`) in that package or below are recorded, with
   their public methods, arguments and return values. Without the property nothing changes. A trailing dot
   (`com.acme.`) matches nothing; write `com.acme`. Ask the user whether they want it before enabling it: it records
-  every call's arguments and return value, so it fits sample and test data, not production data.
+  every call's arguments and return value, so it fits sample and test data, not production data. Caveats:
+  - Every call of a recorded method costs a span and the rendering of its values: keep the base packages narrow (the
+    service's own code, not shared libraries or generated clients).
+  - A `HandlerInterceptor`, `Filter` or other interceptor `@Component` in those packages runs first, so it appears as
+    the request's handler instead of the controller.
+  - JPA lazy associations not yet loaded (Hibernate lazy collections and entity proxies) show as `"<lazy>"`: recording
+    never loads them.
+  - Each argument and return value is cut at 16384 characters and then ends with `…<truncated>`.
 - Pass the agent as `java` arguments, as above. **Don't set `JAVA_TOOL_OPTIONS`** in a shell that also runs Gradle
   or Maven: every JVM reads it, so the agent would attach to the build too.
 - Override configuration only through environment variables or `-D` properties (Spring relaxed binding:
@@ -351,8 +358,8 @@ java "-javaagent:$stack\build\stack-agent\opentelemetry-javaagent.jar" `
 **For the user's IntelliJ run configurations** (to debug a service), write the equivalent into the stack repo's
 README: VM options `-javaagent:<STACK_REPO>/build/stack-agent/opentelemetry-javaagent.jar
 -Dotel.javaagent.extensions=<STACK_REPO>/build/stack-agent/stack-agent-extension.jar`, plus the same environment
-variables (and `-Dstack.methods.packages=<base package>` if method capture is on). Tell the user to leave "Store as project file" unchecked, so the configuration never lands in the
-service repo.
+variables (and `-Dstack.methods.packages=<base package>` if method capture is on). Tell the user to leave "Store as
+project file" unchecked, so the configuration never lands in the service repo.
 
 **Alternative: the service as a compose container**, when the user only explores and doesn't change its code. Use
 `build: <relative path to SERVICE_REPO>` if the repo has a Dockerfile, mount `./build/stack-agent:/stack-agent:ro`,
