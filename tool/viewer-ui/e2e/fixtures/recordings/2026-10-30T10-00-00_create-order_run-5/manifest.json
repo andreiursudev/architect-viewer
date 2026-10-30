@@ -1,0 +1,1 @@
+{"schemaVersion":3,"runId":"run-5","scenarioId":"create-order","kind":"e2e","startedAt":"2026-10-30T10:00:00Z","lastEventAt":"2026-10-30T10:00:00Z","stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["inventory-service","orders-service"]}

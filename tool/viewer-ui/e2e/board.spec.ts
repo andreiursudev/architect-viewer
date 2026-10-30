@@ -16,8 +16,9 @@ test('board shows components and highlights create-order', async ({ page }) => {
 
   await pickCreateOrder(page);
 
-  await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(2);
-  await expect(page.locator('.component-node.on-path')).toHaveCount(3);
+  // the newest create-order run is run-5, which crosses both services and both databases
+  await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(4);
+  await expect(page.locator('.component-node.on-path')).toHaveCount(5);
 });
 
 test('dragging a node persists its position', async ({ page }) => {
@@ -53,7 +54,7 @@ test('a drag is saved even when the user leaves the board right away', async ({ 
   const dragged = (await node.boundingBox())!;
 
   await page.getByRole('button', { name: 'Open sequence' }).click(); // well within the 500 ms debounce
-  await expect(page).toHaveURL(/\/sequence\/run-1$/);
+  await expect(page).toHaveURL(/\/sequence\/run-5$/);
   await page.getByRole('link', { name: /board/i }).click();
 
   const after = (await page.locator('.react-flow__node').filter({ hasText: 'Orders service' }).boundingBox())!;

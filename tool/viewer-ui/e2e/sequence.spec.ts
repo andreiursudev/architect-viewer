@@ -4,6 +4,7 @@ test('clicking a message shows its payload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /scenario/i }).click();
   await page.getByRole('option', { name: /^create-order(?!-)/ }).click();
+  await page.getByLabel('Run').selectOption('run-1'); // the older run: orders-service alone, recorded without method events
   await page.getByRole('button', { name: 'Open sequence' }).click();
 
   const diagram = page.getByRole('group', { name: 'Sequence diagram' });
