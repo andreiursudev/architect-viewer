@@ -51,3 +51,22 @@ val sampleClientEvent = HttpClientEvent(
     status = 201,
     errorType = null,
 )
+
+val sampleMethodEvent = MethodEvent(
+    eventId = "ev-4",
+    runId = "run-1",
+    traceId = "0af7651916cd43dd8448eb211c80319c",
+    spanId = "e5d0a1b2c3d4e5f6",
+    parentSpanId = "b7ad6b7169203331",
+    component = "orders-service",
+    startEpochNanos = 1_700_000_000_003_000_000L,
+    durationNanos = 1_000_000L,
+    className = "com.example.orders.OrderService",
+    methodName = "create",
+    parameterNames = listOf("request"),
+    arguments = listOf("""{"sku":"A-1"}"""),
+    returnValue = """{"id":1}""",
+    exceptionType = null,
+    exceptionMessage = null,
+    thread = "http-nio-8080-exec-1",
+)

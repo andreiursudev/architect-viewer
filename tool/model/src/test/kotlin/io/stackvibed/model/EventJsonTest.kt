@@ -3,6 +3,7 @@ package io.stackvibed.model
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.stackvibed.model.view.FlowStepKind
 import org.junit.jupiter.api.Test
 import tools.jackson.module.kotlin.jacksonMapperBuilder
 import tools.jackson.module.kotlin.readValue
@@ -29,8 +30,31 @@ class EventJsonTest {
     fun `httpClientEventRoundTrips`() {
         val json = mapper.writeValueAsString(sampleClientEvent)
         json shouldContain "\"type\":\"http.client\""
-        json shouldContain "\"schemaVersion\":2"
+        json shouldContain "\"schemaVersion\":$SCHEMA_VERSION"
         mapper.readValue<RecordingEvent>(json) shouldBe sampleClientEvent
+    }
+
+    @Test
+    fun `method event round-trips with type discriminator`() {
+        val json = mapper.writeValueAsString(sampleMethodEvent)
+        json shouldContain "\"type\":\"method\""
+        json shouldContain "\"schemaVersion\":3"
+        mapper.readValue<RecordingEvent>(json) shouldBe sampleMethodEvent
+    }
+
+    @Test
+    fun `version 2 lines still read`() {
+        // A literal http.client line from the reporter golden file recorded before schema version 3.
+        val line = """{"type":"http.client","schemaVersion":2,"eventId":"0af7651916cd43dd8448eb211c80319c-a1b2c3d4e5f60718","runId":"run-2","traceId":"0af7651916cd43dd8448eb211c80319c","spanId":"a1b2c3d4e5f60718","parentSpanId":"b7ad6b7169203331","component":"orders-service","startEpochNanos":1760000000002000000,"durationNanos":28000000,"method":"POST","url":"http://inventory-service:8081/reservations","serverAddress":"inventory-service","serverPort":8081,"status":201,"errorType":null}"""
+        val event = mapper.readValue<RecordingEvent>(line)
+        event.schemaVersion shouldBe 2
+        event.shouldBeInstanceOf<HttpClientEvent>()
+    }
+
+    @Test
+    fun `flow step kind serialises lowercase`() {
+        mapper.writeValueAsString(FlowStepKind.METHOD) shouldBe "\"method\""
+        mapper.writeValueAsString(FlowStepKind.HTTP) shouldBe "\"http\""
     }
 
     @Test

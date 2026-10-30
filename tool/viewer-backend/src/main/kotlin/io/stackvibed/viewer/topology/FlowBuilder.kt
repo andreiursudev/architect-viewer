@@ -4,11 +4,12 @@ import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
 import io.stackvibed.model.view.Flow
 import io.stackvibed.model.view.FlowStep
-import io.stackvibed.model.workspace.ConnectionKind
+import io.stackvibed.model.view.FlowStepKind
 import org.springframework.stereotype.Component
 import java.net.URI
 
@@ -40,19 +41,20 @@ class FlowBuilder {
                     step(
                         event, parent = caller?.let { enclosingRequest(it, requests)?.eventId },
                         from = alias(caller?.component ?: ComponentIds.E2E_CLIENT), to = alias(event.component),
-                        kind = ConnectionKind.HTTP, label = "${event.method} ${event.route ?: event.path}", status = event.status,
+                        kind = FlowStepKind.HTTP, label = "${event.method} ${event.route ?: event.path}", status = event.status,
                     )
                 }
                 is DbClientEvent -> step(
                     event, parent = enclosingRequest(event, requests)?.eventId,
                     from = alias(event.component), to = alias(ComponentIds.database(event.dbSystem, event.dbName)),
-                    kind = ConnectionKind.DB, label = event.statement.replace(WHITESPACE, " ").trim().take(LABEL_LENGTH), status = null,
+                    kind = FlowStepKind.DB, label = event.statement.replace(WHITESPACE, " ").trim().take(LABEL_LENGTH), status = null,
                 )
                 is HttpClientEvent -> if (event in answered) null else step(
                     event, parent = enclosingRequest(event, requests)?.eventId,
                     from = alias(event.component), to = alias(ComponentIds.service(event.serverAddress.orEmpty()).ifEmpty { UNKNOWN_HOST }), // "" or "..." slug to nothing
-                    kind = ConnectionKind.HTTP, label = "${event.method} ${pathOf(event.url)}", status = event.status,
+                    kind = FlowStepKind.HTTP, label = "${event.method} ${pathOf(event.url)}", status = event.status,
                 )
+                is MethodEvent -> null // not drawn yet
             }
         }
         return Flow(manifest.runId, manifest.scenarioId, steps)
@@ -77,12 +79,14 @@ class FlowBuilder {
             inner.startEpochNanos + inner.durationNanos <= outer.startEpochNanos + outer.durationNanos
 
     private fun step(
-        event: RecordingEvent, parent: String?, from: String, to: String, kind: ConnectionKind, label: String, status: Int?,
+        event: RecordingEvent, parent: String?, from: String, to: String, kind: FlowStepKind, label: String, status: Int?,
     ) = FlowStep(
         stepId = event.eventId,
         parentStepId = parent,
         from = from,
         to = to,
+        fromUnit = null,
+        toUnit = null,
         connectionId = "$from--$to",
         kind = kind,
         label = label,
@@ -90,6 +94,7 @@ class FlowBuilder {
         durationNanos = event.durationNanos,
         status = status,
         event = event,
+        handler = null,
     )
 
     private companion object {

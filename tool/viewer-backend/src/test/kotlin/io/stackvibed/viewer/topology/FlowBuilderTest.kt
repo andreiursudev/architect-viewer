@@ -9,7 +9,7 @@ import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
 import io.stackvibed.model.RecordingManifest
-import io.stackvibed.model.workspace.ConnectionKind
+import io.stackvibed.model.view.FlowStepKind
 import io.stackvibed.viewer.Fixtures
 import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.internal.FileRecordingRepository
@@ -33,11 +33,11 @@ class FlowBuilderTest {
         flow.steps.map { it.connectionId } shouldBe listOf("e2e-client--orders-service", "orders-service--postgresql-orders")
         flow.steps[0].label shouldBe "POST /orders"
         flow.steps[0].status shouldBe 201
-        flow.steps[0].kind shouldBe ConnectionKind.HTTP
+        flow.steps[0].kind shouldBe FlowStepKind.HTTP
         flow.steps[0].from shouldBe ComponentIds.E2E_CLIENT
         flow.steps[0].parentStepId shouldBe null
         flow.steps[1].parentStepId shouldBe flow.steps[0].stepId
-        flow.steps[1].kind shouldBe ConnectionKind.DB
+        flow.steps[1].kind shouldBe FlowStepKind.DB
         flow.steps[1].status shouldBe null
         flow.steps[1].label shouldBe "insert into orders (customer_id, status, total, created_at) values (?, ?, ?, ?)".take(60)
         flow.steps.map { it.stepId } shouldBe events.map { it.eventId }
@@ -115,7 +115,7 @@ class FlowBuilderTest {
         ordersStep.parentStepId shouldBe null
         hop.parentStepId shouldBe ordersStep.stepId
         hop.stepId shouldBe "inventory"
-        hop.kind shouldBe ConnectionKind.HTTP
+        hop.kind shouldBe FlowStepKind.HTTP
         hop.label shouldBe "POST /reservations"
         hop.event.shouldBeInstanceOf<HttpServerEvent>()
         dbStep.parentStepId shouldBe hop.stepId
@@ -134,7 +134,7 @@ class FlowBuilderTest {
         val hop = flow.steps.last()
         flow.steps.map { it.connectionId } shouldBe listOf("e2e-client--orders-service", "orders-service--inventory-service")
         hop.status shouldBe null
-        hop.kind shouldBe ConnectionKind.HTTP
+        hop.kind shouldBe FlowStepKind.HTTP
         hop.label shouldBe "POST /reservations"
         hop.parentStepId shouldBe "orders"
         hop.event.shouldBeInstanceOf<HttpClientEvent>()

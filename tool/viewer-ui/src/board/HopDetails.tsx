@@ -51,13 +51,13 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
                 <p className="hop-rows">{step.event.rowCount === 1 ? '1 row' : `${step.event.rowCount} rows`}</p>
               )}
             </>
-          ) : (
+          ) : step.event.type === 'http.client' ? (
             <>
               <p className="hop-url">{step.event.url}</p>
               {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
               <p className="muted">{clientCallNote(step)}</p>
             </>
-          )}
+          ) : null /* method: drawn in a later task */}
         </section>
       ))}
     </div>

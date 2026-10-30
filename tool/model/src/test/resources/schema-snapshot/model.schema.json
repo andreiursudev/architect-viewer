@@ -208,6 +208,75 @@
       },
       "type" : "object"
     },
+    "MethodEvent" : {
+      "properties" : {
+        "arguments" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "className" : {
+          "type" : "string"
+        },
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "exceptionMessage" : {
+          "type" : [ "string", "null" ]
+        },
+        "exceptionType" : {
+          "type" : [ "string", "null" ]
+        },
+        "methodName" : {
+          "type" : "string"
+        },
+        "parameterNames" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "returnValue" : {
+          "type" : [ "string", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "thread" : {
+          "type" : [ "string", "null" ]
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "method"
+        }
+      },
+      "required" : [ "arguments", "className", "component", "durationNanos", "eventId", "methodName", "parameterNames", "runId", "schemaVersion", "spanId", "startEpochNanos", "traceId", "type" ],
+      "type" : "object"
+    },
     "NodePosition" : {
       "properties" : {
         "x" : {
@@ -321,7 +390,7 @@
           "items" : {
             "properties" : {
               "connectionId" : {
-                "type" : "string"
+                "type" : [ "string", "null" ]
               },
               "durationNanos" : {
                 "format" : "int64",
@@ -334,13 +403,26 @@
                   "$ref" : "#/$defs/DbClientEvent"
                 }, {
                   "$ref" : "#/$defs/HttpClientEvent"
+                }, {
+                  "$ref" : "#/$defs/MethodEvent"
                 } ]
               },
               "from" : {
                 "type" : "string"
               },
+              "fromUnit" : {
+                "type" : [ "string", "null" ]
+              },
+              "handler" : {
+                "anyOf" : [ {
+                  "type" : "null"
+                }, {
+                  "$ref" : "#/$defs/MethodEvent"
+                } ]
+              },
               "kind" : {
-                "$ref" : "#/$defs/ConnectionKind"
+                "enum" : [ "http", "db", "method" ],
+                "type" : "string"
               },
               "label" : {
                 "type" : "string"
@@ -361,9 +443,12 @@
               },
               "to" : {
                 "type" : "string"
+              },
+              "toUnit" : {
+                "type" : [ "string", "null" ]
               }
             },
-            "required" : [ "connectionId", "durationNanos", "event", "from", "kind", "label", "startEpochNanos", "stepId", "to" ],
+            "required" : [ "durationNanos", "event", "from", "kind", "label", "startEpochNanos", "stepId", "to" ],
             "type" : "object"
           },
           "type" : "array"
@@ -379,6 +464,8 @@
         "$ref" : "#/$defs/DbClientEvent"
       }, {
         "$ref" : "#/$defs/HttpClientEvent"
+      }, {
+        "$ref" : "#/$defs/MethodEvent"
       } ]
     },
     "recordingManifest" : {

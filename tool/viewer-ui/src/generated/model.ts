@@ -50,20 +50,23 @@ export interface ModelSchema {
     runId: string;
     scenarioId?: string | null;
     steps: {
-      connectionId: string;
+      connectionId?: string | null;
       durationNanos: number;
-      event: HttpServerEvent | DbClientEvent | HttpClientEvent;
+      event: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent;
       from: string;
-      kind: ConnectionKind;
+      fromUnit?: string | null;
+      handler?: null | MethodEvent;
+      kind: "http" | "db" | "method";
       label: string;
       parentStepId?: string | null;
       startEpochNanos: number;
       status?: number | null;
       stepId: string;
       to: string;
+      toUnit?: string | null;
     }[];
   };
-  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent;
+  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent;
   recordingManifest: {
     componentsSeen: string[];
     kind: "e2e" | "manual" | "test";
@@ -198,6 +201,30 @@ export interface HttpClientEvent {
   traceId: string;
   type: "http.client";
   url: string;
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "MethodEvent".
+ */
+export interface MethodEvent {
+  arguments: string[];
+  className: string;
+  component: string;
+  durationNanos: number;
+  eventId: string;
+  exceptionMessage?: string | null;
+  exceptionType?: string | null;
+  methodName: string;
+  parameterNames: string[];
+  parentSpanId?: string | null;
+  returnValue?: string | null;
+  runId: string;
+  schemaVersion: number;
+  spanId: string;
+  startEpochNanos: number;
+  thread?: string | null;
+  traceId: string;
+  type: "method";
 }
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema

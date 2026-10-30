@@ -1,6 +1,8 @@
 package io.stackvibed.model.view
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.stackvibed.model.ComponentType
+import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.workspace.ConnectionKind
 import io.stackvibed.model.workspace.ConnectionState
@@ -41,18 +43,31 @@ data class WorkspaceView(
     val problems: List<WorkspaceProblem>,
 )
 
+enum class FlowStepKind {
+    @JsonProperty("http") HTTP,
+    @JsonProperty("db") DB,
+    @JsonProperty("method") METHOD,
+}
+
 data class FlowStep(
     val stepId: String,
     val parentStepId: String?,
     val from: String,
     val to: String,
-    val connectionId: String,
-    val kind: ConnectionKind,
+    /** Fully qualified class at the calling end; null when it is not a recorded class. */
+    val fromUnit: String?,
+    /** Fully qualified class at the called end; null when it is not a recorded class. */
+    val toUnit: String?,
+    /** Null for method steps: they add no connection to the board. */
+    val connectionId: String?,
+    val kind: FlowStepKind,
     val label: String,
     val startEpochNanos: Long,
     val durationNanos: Long,
     val status: Int?,
     val event: RecordingEvent,
+    /** On an http step: the method its request landed on. */
+    val handler: MethodEvent?,
 )
 
 data class Flow(

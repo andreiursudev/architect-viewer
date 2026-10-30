@@ -50,7 +50,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             <dt>Name</dt>
             <dd>{event.dbName ?? 'unknown'}</dd>
           </>
-        ) : (
+        ) : event.type === 'http.client' ? (
           <>
             <dt>Method</dt>
             <dd>{event.method}</dd>
@@ -63,7 +63,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        )}
+        ) : null /* method: drawn in a later task */}
       </dl>
 
       {event.type === 'http.server' ? (
@@ -90,11 +90,11 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             </p>
           </Section>
         </>
-      ) : (
+      ) : event.type === 'http.client' ? (
         <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
           <p className="muted md-note">{clientCallNote(step)}</p>
         </Section>
-      )}
+      ) : null /* method: drawn in a later task */}
     </div>
   );
 }

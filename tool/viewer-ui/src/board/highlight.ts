@@ -26,16 +26,19 @@ export function highlightFor(flow: Flow): Highlight {
   const failedEdgeIds = new Set<string>();
 
   for (const step of steps) {
+    // A method step happens inside a component: it adds no connection to the board.
+    const connectionId = step.connectionId;
+    if (connectionId == null) continue;
     nodeIds.add(step.from);
     nodeIds.add(step.to);
-    edgeIds.add(step.connectionId);
-    if (isFailedStep(step)) failedEdgeIds.add(step.connectionId);
-    const onEdge = stepsByEdge.get(step.connectionId);
+    edgeIds.add(connectionId);
+    if (isFailedStep(step)) failedEdgeIds.add(connectionId);
+    const onEdge = stepsByEdge.get(connectionId);
     if (onEdge) {
       onEdge.push(step);
     } else {
-      stepsByEdge.set(step.connectionId, [step]);
-      orderByEdge.set(step.connectionId, orderByEdge.size + 1);
+      stepsByEdge.set(connectionId, [step]);
+      orderByEdge.set(connectionId, orderByEdge.size + 1);
     }
   }
   return { nodeIds, edgeIds, stepsByEdge, orderByEdge, failedEdgeIds };

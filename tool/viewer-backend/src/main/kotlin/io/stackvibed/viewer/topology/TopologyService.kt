@@ -7,6 +7,7 @@ import io.stackvibed.model.view.BoardComponent
 import io.stackvibed.model.view.BoardConnection
 import io.stackvibed.model.view.Flow
 import io.stackvibed.model.view.FlowStep
+import io.stackvibed.model.view.FlowStepKind
 import io.stackvibed.model.view.ScenarioSummary
 import io.stackvibed.model.view.WorkspaceView
 import io.stackvibed.model.workspace.ConnectionKind
@@ -72,14 +73,21 @@ class TopologyService(
     }
 
     private fun observe(step: FlowStep, into: Observed) {
+        // Method steps happen inside a component and add no connection to the board.
+        val connectionId = step.connectionId ?: return
+        val kind = when (step.kind) {
+            FlowStepKind.HTTP -> ConnectionKind.HTTP
+            FlowStepKind.DB -> ConnectionKind.DB
+            FlowStepKind.METHOD -> return
+        }
         // Only the e2e client calls from outside; every other caller, of an HTTP hop or a database, is a service.
-        val toType = if (step.kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE
+        val toType = if (kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE
         // A database is not downgraded to a service.
         into.componentTypes.putIfAbsent(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else ComponentType.SERVICE)
         into.componentTypes.merge(step.to, toType) { known, new -> if (new == ComponentType.DATABASE) new else known }
-        val connection = into.connections.getOrPut(step.connectionId) { ObservedConnection(step.from, step.to, step.kind) }
+        val connection = into.connections.getOrPut(connectionId) { ObservedConnection(step.from, step.to, kind) }
         // A database call's label is its SQL, which says nothing about the connection as a whole.
-        if (step.kind == ConnectionKind.HTTP) connection.labels += step.label
+        if (kind == ConnectionKind.HTTP) connection.labels += step.label
     }
 
     private fun components(loaded: LoadedWorkspace, observed: Observed): List<BoardComponent> {
