@@ -49,7 +49,7 @@ class ApiTest {
             jsonPath("$.components[*].id") { value(org.hamcrest.Matchers.hasItem("orders-service")) }
             jsonPath("$.components[?(@.id=='e2e-client')].type") { value("client") }
             jsonPath("$.connections[?(@.id=='e2e-client--orders-service')].state") { value("discovered") }
-            jsonPath("$.scenarios[?(@.id=='create-order')].latestRunId") { value("run-2") }
+            jsonPath("$.scenarios[?(@.id=='create-order')].latestRunId") { value("run-5") }
         }
     }
 
@@ -175,9 +175,10 @@ class ApiTest {
     fun `runs of a scenario are listed newest first`() {
         mvc.get("/api/scenarios/create-order/runs").andExpect {
             status { isOk() }
-            jsonPath("$.length()") { value(2) }
-            jsonPath("$[0].runId") { value("run-2") }
-            jsonPath("$[1].runId") { value("run-1") }
+            jsonPath("$.length()") { value(3) }
+            jsonPath("$[0].runId") { value("run-5") }
+            jsonPath("$[1].runId") { value("run-2") }
+            jsonPath("$[2].runId") { value("run-1") }
             jsonPath("$[0].kind") { value("e2e") }
         }
         mvc.get("/api/scenarios/never-ran/runs").andExpect {
@@ -196,6 +197,32 @@ class ApiTest {
             jsonPath("$.steps[0].kind") { value("http") }
             jsonPath("$.steps[0].event.type") { value("http.server") }
             jsonPath("$.steps[1].parentStepId") { value("0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331") }
+        }
+    }
+
+    @Test
+    fun `run with methods is served with handler and units`() {
+        val orders = "io.stackvibed.sandbox.orders."
+        val inventory = "io.stackvibed.sandbox.inventory."
+        mvc.get("/api/runs/run-5/flow").andExpect {
+            status { isOk() }
+            jsonPath("$.steps.length()") { value(8) }
+            jsonPath("$.steps[0].kind") { value("http") }
+            jsonPath("$.steps[0].toUnit") { value(orders + "OrdersController") }
+            jsonPath("$.steps[0].handler.type") { value("method") }
+            jsonPath("$.steps[0].handler.methodName") { value("create") }
+            jsonPath("$.steps[0].handler.arguments[0]") { value("""{"customerId":"c-1","sku":"sku-1","quantity":2}""") }
+            jsonPath("$.steps[1].kind") { value("method") }
+            jsonPath("$.steps[1].fromUnit") { value(orders + "OrdersController") }
+            jsonPath("$.steps[1].toUnit") { value(orders + "OrderService") }
+            jsonPath("$.steps[1].event.type") { value("method") }
+            jsonPath("$.steps[2].label") { value("reserve(\"sku-1\", 2)") }
+            jsonPath("$.steps[3].connectionId") { value("orders-service--inventory-service") }
+            jsonPath("$.steps[3].fromUnit") { value(orders + "InventoryClient") }
+            jsonPath("$.steps[3].toUnit") { value(inventory + "ReservationsController") }
+            jsonPath("$.steps[3].handler.methodName") { value("reserve") }
+            jsonPath("$.steps[5].kind") { value("db") }
+            jsonPath("$.steps[5].fromUnit") { value(inventory + "StockRepository") }
         }
     }
 

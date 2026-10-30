@@ -6,9 +6,11 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.view.FlowStep
 import io.stackvibed.model.view.FlowStepKind
 import io.stackvibed.viewer.Fixtures
 import io.stackvibed.viewer.ViewerPaths
@@ -198,6 +200,236 @@ class FlowBuilderTest {
         flow.steps[2].parentStepId shouldBe flow.steps[1].stepId
     }
 
+    @Test
+    fun `controller method is merged into its request as the handler`() {
+        val request = http("req", "orders-service", 0, 100, route = "/orders", path = "/orders", method = "POST")
+        val controller = method("ctl", "orders-service", 1, 98, "x.OrdersController", "create", parent = "req")
+
+        val flow = builder.build(emptyManifest(), listOf(request, controller), emptyMap())
+
+        val step = flow.steps.single()
+        step.stepId shouldBe "req"
+        step.fromUnit shouldBe null
+        step.toUnit shouldBe "x.OrdersController"
+        step.handler?.methodName shouldBe "create"
+        flow.steps.none { it.event == controller } shouldBe true
+    }
+
+    @Test
+    fun `methods become steps between classes nested by their owners`() {
+        val request = http("req", "orders-service", 0, 1000, route = "/orders", path = "/orders", method = "POST")
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "ctl", args = listOf("""{"sku":"sku-1"}"""))
+        val reserve = method("reserve", "orders-service", 30, 600, "x.InventoryClient", "reserve", parent = "svc", args = listOf("\"sku-1\"", "2"))
+        val call = client("call", "orders-service", 40, 500, url = "http://inventory-service:8081/reservations", parent = "reserve")
+        val inventory = http("inventory", "inventory-service", 50, 400, route = "/reservations", path = "/reservations", parent = "call", method = "POST")
+        val reservations = method("res-ctl", "inventory-service", 60, 300, "y.ReservationsController", "reserve", parent = "inventory")
+
+        val flow = builder.build(emptyManifest(), listOf(request, controller, service, reserve, call, inventory, reservations), emptyMap())
+
+        flow.steps.map { it.stepId } shouldBe listOf("req", "svc", "reserve", "inventory")
+        val steps = flow.steps.associateBy { it.stepId }
+        steps.getValue("req").toUnit shouldBe "x.OrdersController"
+        with(steps.getValue("svc")) {
+            kind shouldBe FlowStepKind.METHOD
+            from shouldBe "orders-service"
+            to shouldBe "orders-service"
+            fromUnit shouldBe "x.OrdersController"
+            toUnit shouldBe "x.OrderService"
+            parentStepId shouldBe "req"
+            connectionId shouldBe null
+            status shouldBe null
+            handler shouldBe null
+            label shouldBe """create({"sku":"sku-1"})"""
+            event shouldBe service
+        }
+        with(steps.getValue("reserve")) {
+            fromUnit shouldBe "x.OrderService"
+            toUnit shouldBe "x.InventoryClient"
+            parentStepId shouldBe "svc"
+            label shouldBe "reserve(\"sku-1\", 2)"
+        }
+        with(steps.getValue("inventory")) {
+            kind shouldBe FlowStepKind.HTTP
+            connectionId shouldBe "orders-service--inventory-service"
+            fromUnit shouldBe "x.InventoryClient"
+            toUnit shouldBe "y.ReservationsController"
+            handler shouldBe reservations
+            parentStepId shouldBe "reserve"
+        }
+    }
+
+    @Test
+    fun `db step hangs under the repository method`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "ctl")
+        val insert = method("insert", "orders-service", 30, 100, "x.OrderRepository", "insert", parent = "svc")
+        val db = db("db", "orders-service", 40, 50, "insert into orders values (?)", parent = "insert")
+
+        val steps = builder.build(emptyManifest(), listOf(request, controller, service, insert, db), emptyMap()).steps.associateBy { it.stepId }
+
+        with(steps.getValue("db")) {
+            kind shouldBe FlowStepKind.DB
+            connectionId shouldBe "orders-service--postgresql-orders"
+            fromUnit shouldBe "x.OrderRepository"
+            toUnit shouldBe null
+            parentStepId shouldBe "insert"
+        }
+        steps.getValue("insert").parentStepId shouldBe "svc"
+    }
+
+    @Test
+    fun `owner falls back to time containment when the parent span is not recorded`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "unrecorded-proxy")
+        val db = db("db", "orders-service", 40, 50, parent = null)
+        val otherTrace = method("other-trace", "orders-service", 0, 1000, "x.Elsewhere", "run", trace = "t2")
+        val otherComponent = method("other-comp", "billing-service", 0, 1000, "x.Billing", "run")
+
+        val steps = builder.build(emptyManifest(), listOf(request, controller, service, db, otherTrace, otherComponent), emptyMap())
+            .steps.associateBy { it.stepId }
+
+        steps.getValue("svc").fromUnit shouldBe "x.OrdersController"
+        steps.getValue("svc").parentStepId shouldBe "req"
+        steps.getValue("db").fromUnit shouldBe "x.OrderService"
+        steps.getValue("db").parentStepId shouldBe "svc"
+    }
+
+    @Test
+    fun `two methods of the same interval do not own each other`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val first = method("first", "orders-service", 20, 900, "x.First", "run", parent = "unrecorded-1")
+        val second = method("second", "orders-service", 20, 900, "x.Second", "run", parent = "unrecorded-2")
+
+        val steps = builder.build(emptyManifest(), listOf(request, controller, first, second), emptyMap()).steps.associateBy { it.stepId }
+
+        steps.getValue("first").parentStepId shouldBe "req"
+        steps.getValue("second").parentStepId shouldBe "req"
+        steps.getValue("first").fromUnit shouldBe "x.OrdersController"
+    }
+
+    @Test
+    fun `self call is a step from a class to itself`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val price = method("price", "orders-service", 20, 900, "x.CatalogService", "price", parent = "ctl")
+        val discount = method("discount", "orders-service", 30, 100, "x.CatalogService", "discount", parent = "price", args = listOf("3"))
+
+        val step = builder.build(emptyManifest(), listOf(request, controller, price, discount), emptyMap()).steps.single { it.stepId == "discount" }
+
+        step.fromUnit shouldBe "x.CatalogService"
+        step.toUnit shouldBe "x.CatalogService"
+        step.parentStepId shouldBe "price"
+        step.label shouldBe "discount(3)"
+    }
+
+    @Test
+    fun `an exception thrown through two methods marks both`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val failure = "x.OutOfStockException"
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req", exceptionType = failure)
+        val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "ctl", args = listOf("1"), exceptionType = failure)
+        val reserve = method("reserve", "orders-service", 30, 600, "x.InventoryClient", "reserve", parent = "svc", args = listOf("2"), exceptionType = failure)
+
+        val flow = builder.build(emptyManifest(), listOf(request, controller, service, reserve), emptyMap())
+
+        val methodSteps = flow.steps.filter { it.kind == FlowStepKind.METHOD }
+        methodSteps.map { it.stepId } shouldBe listOf("svc", "reserve")
+        methodSteps.map { (it.event as MethodEvent).exceptionType } shouldBe listOf(failure, failure)
+        methodSteps.map { it.label } shouldBe listOf("create(1)", "reserve(2)")
+        methodSteps.map { it.status } shouldBe listOf(null, null)
+        flow.steps.first().handler?.exceptionType shouldBe failure
+    }
+
+    @Test
+    fun `a method outside any request adds no step`() {
+        val job = method("job", "orders-service", 0, 1000, "x.CleanupJob", "run")
+        val nested = method("nested", "orders-service", 10, 900, "x.OrderRepository", "purge", parent = "job")
+        val db = db("db", "orders-service", 20, 50, "delete from orders", parent = "nested")
+
+        val flow = builder.build(emptyManifest(), listOf(job, nested, db), emptyMap())
+
+        flow.steps.map { it.stepId } shouldBe listOf("db")
+        flow.steps.single().parentStepId shouldBe null
+    }
+
+    @Test
+    fun `a later ownerless method in a request is a step from the handler`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 500, "x.OrdersController", "create", parent = "req")
+        val audit = method("audit", "orders-service", 600, 100, "x.AuditLog", "write", parent = "req")
+
+        val step = builder.build(emptyManifest(), listOf(request, controller, audit), emptyMap()).steps.single { it.stepId == "audit" }
+
+        step.fromUnit shouldBe "x.OrdersController"
+        step.toUnit shouldBe "x.AuditLog"
+        step.parentStepId shouldBe "req"
+    }
+
+    @Test
+    fun `long method label is cut to 60 characters`() {
+        val request = http("req", "orders-service", 0, 1000)
+        val controller = method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req")
+        val service = method("svc", "orders-service", 20, 900, "x.OrderService", "create", parent = "ctl", args = listOf("\"" + "a".repeat(100) + "\""))
+
+        val label = builder.build(emptyManifest(), listOf(request, controller, service), emptyMap()).steps.single { it.stepId == "svc" }.label
+
+        label shouldBe ("create(\"" + "a".repeat(100)).take(60)
+    }
+
+    @Test
+    fun `flow without method events is unchanged`() {
+        val manifest = repository.manifests().first { it.runId == "run-4" }
+        val events = repository.events("run-4")
+
+        val flow = builder.build(manifest, events, emptyMap())
+
+        flow.steps shouldBe listOf(
+            step2(events[0], null, "e2e-client", "orders-service", FlowStepKind.HTTP, "POST /orders", 409),
+            step2(events[2], events[0].eventId, "orders-service", "inventory-service", FlowStepKind.HTTP, "POST /reservations", 409),
+            step2(
+                events[3], events[2].eventId, "inventory-service", "postgresql-inventory", FlowStepKind.DB,
+                "update stock set available = available - ? where sku = ? and available >= ?".take(60), null,
+            ),
+        )
+        builder.build(this.manifest, this.events, emptyMap()).steps
+            .all { it.fromUnit == null && it.toUnit == null && it.handler == null } shouldBe true
+    }
+
+    @Test
+    fun `run with methods nests both services under their classes`() {
+        val manifest = repository.manifests().first { it.runId == "run-5" }
+
+        val steps = builder.build(manifest, repository.events("run-5"), emptyMap()).steps
+
+        val o = "io.stackvibed.sandbox.orders."
+        val i = "io.stackvibed.sandbox.inventory."
+        steps.map { Triple(it.kind, it.fromUnit, it.toUnit) } shouldBe listOf(
+            Triple(FlowStepKind.HTTP, null, o + "OrdersController"),
+            Triple(FlowStepKind.METHOD, o + "OrdersController", o + "OrderService"),
+            Triple(FlowStepKind.METHOD, o + "OrderService", o + "InventoryClient"),
+            Triple(FlowStepKind.HTTP, o + "InventoryClient", i + "ReservationsController"),
+            Triple(FlowStepKind.METHOD, i + "ReservationsController", i + "StockRepository"),
+            Triple(FlowStepKind.DB, i + "StockRepository", null),
+            Triple(FlowStepKind.METHOD, o + "OrderService", o + "OrderRepository"),
+            Triple(FlowStepKind.DB, o + "OrderRepository", null),
+        )
+        val ids = steps.map { it.stepId }
+        steps.map { it.parentStepId } shouldBe listOf(null, ids[0], ids[1], ids[2], ids[3], ids[4], ids[1], ids[6])
+        steps.map { it.label }[2] shouldBe "reserve(\"sku-1\", 2)"
+    }
+
+    private fun step2(
+        event: RecordingEvent, parent: String?, from: String, to: String, kind: FlowStepKind, label: String, status: Int?,
+    ) = FlowStep(
+        stepId = event.eventId, parentStepId = parent, from = from, to = to, fromUnit = null, toUnit = null,
+        connectionId = "$from--$to", kind = kind, label = label, startEpochNanos = event.startEpochNanos,
+        durationNanos = event.durationNanos, status = status, event = event, handler = null,
+    )
+
     private fun emptyManifest() = RecordingManifest(
         runId = "r", scenarioId = null, kind = RecordingKind.MANUAL, startedAt = Instant.EPOCH,
         lastEventAt = null, stoppedAt = null, reporterVersion = "test", componentsSeen = emptyList(),
@@ -223,10 +455,21 @@ class FlowBuilderTest {
 
     private fun db(
         id: String, component: String, start: Long, duration: Long, statement: String = "select 1", dbName: String = "orders",
+        parent: String? = null,
     ): RecordingEvent =
         DbClientEvent(
-            eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = null, component = component,
+            eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = parent, component = component,
             startEpochNanos = start, durationNanos = duration, dbSystem = "postgresql", dbName = dbName,
             statement = statement, parameters = emptyList(), rowCount = null,
         )
+
+    private fun method(
+        id: String, component: String, start: Long, duration: Long, className: String, methodName: String,
+        parent: String? = null, args: List<String> = emptyList(), exceptionType: String? = null, trace: String = "t1",
+    ): MethodEvent = MethodEvent(
+        eventId = id, runId = "r", traceId = trace, spanId = id, parentSpanId = parent, component = component,
+        startEpochNanos = start, durationNanos = duration, className = className, methodName = methodName,
+        parameterNames = emptyList(), arguments = args, returnValue = null, exceptionType = exceptionType,
+        exceptionMessage = exceptionType?.let { "failed" }, thread = "main",
+    )
 }

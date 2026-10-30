@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
+import kotlin.io.path.readLines
 import kotlin.io.path.writeText
 
 class TopologyServiceTest {
@@ -105,8 +106,28 @@ class TopologyServiceTest {
 
         val view = service().workspaceView()
 
-        // evidence: run-2 (POST /orders, no DB call) then run-3 (GET /orders/{id})
-        view.connection(httpConnection).label shouldBe "POST /orders, GET /orders/{id}"
+        // evidence, oldest first: run-3 (GET /orders/{id}), run-4 and run-5 (POST /orders)
+        view.connection(httpConnection).label shouldBe "GET /orders/{id}, POST /orders"
+    }
+
+    @Test
+    fun `method events add no components or connections`() {
+        Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, recordingsDir)
+        val withoutMethodsDir = tmp.resolve("without-methods")
+        val events = Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, withoutMethodsDir).resolve("events.jsonl")
+        val lines = events.readLines()
+        events.writeText(lines.filterNot { "\"type\":\"method\"" in it }.joinToString("\n", postfix = "\n"))
+        val withoutMethods = TopologyService(store, FileRecordingRepository(ViewerPaths(workspaceDir, withoutMethodsDir)), FlowBuilder())
+
+        val with = service().workspaceView()
+        val without = withoutMethods.workspaceView()
+
+        events.readLines().size shouldBe lines.size - 6
+        with.components shouldBe without.components
+        with.connections shouldBe without.connections
+        with.connections.map { it.id } shouldContainExactlyInAnyOrder listOf(
+            httpConnection, dbConnection, "orders-service--inventory-service", "inventory-service--postgresql-inventory",
+        )
     }
 
     @Test
@@ -177,7 +198,9 @@ class TopologyServiceTest {
 
     @Test
     fun `evidence is latest run per scenario`() {
-        Fixtures.copyAll(recordingsDir)
+        // without run-5, whose create-order run inserts again
+        listOf(Fixtures.CREATE_ORDER_1, Fixtures.CREATE_ORDER_2, Fixtures.GET_ORDER_3, Fixtures.OUT_OF_STOCK_4)
+            .forEach { Fixtures.copyRun(it, recordingsDir) }
         store.saveConnection(definition("orders-service", "postgresql-orders", ConnectionKind.DB, ConnectionState.ACCEPTED))
         store.saveConnection(definition("e2e-client", "orders-service", ConnectionKind.HTTP, ConnectionState.ACCEPTED))
 
@@ -280,7 +303,7 @@ class TopologyServiceTest {
 
         service().workspaceView().scenarios shouldBe listOf(
             ScenarioSummary("cancel-order", "Cancel it", null, 0),
-            ScenarioSummary("create-order", "Create it", "run-2", 2),
+            ScenarioSummary("create-order", "Create it", "run-5", 3),
             ScenarioSummary("create-order-out-of-stock", null, "run-4", 1),
             ScenarioSummary("get-order", null, "run-3", 1),
         )

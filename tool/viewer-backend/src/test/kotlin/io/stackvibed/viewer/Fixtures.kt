@@ -12,6 +12,12 @@ object Fixtures {
     /** A schema version 2 run: orders-service calls inventory-service, which answers 409 for `sku-out`. */
     const val OUT_OF_STOCK_4 = "2026-10-28T09-00-00_create-order-out-of-stock_run-4"
 
+    /**
+     * A schema version 3 run with method capture on in both services: the latest create-order run. Its orders side has
+     * the shape of the reporter's `golden/create-order-methods`; inventory-service answers the reservation.
+     */
+    const val CREATE_ORDER_METHODS_5 = "2026-10-30T10-00-00_create-order_run-5"
+
     val recordings: Path = Path.of(Fixtures::class.java.getResource("/fixtures/recordings")!!.toURI())
 
     /** Copies one fixture run folder into [targetRoot] (created if needed) and returns the copy. */
