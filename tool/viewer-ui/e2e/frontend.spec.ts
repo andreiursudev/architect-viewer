@@ -22,6 +22,29 @@ test('board shows the frontend between the e2e client and the services', async (
   }
 });
 
+test('hop details stay open while the pointer moves from the chip onto them, and scroll there', async ({ page }) => {
+  await page.goto('/');
+  await pickBrowserScenario(page);
+
+  const chip = page.locator('.edge-chip.on-path').filter({ hasText: 'load /' });
+  await chip.locator('.edge-label').hover();
+  const details = chip.locator('.hop-details');
+  await expect(details).toBeVisible();
+
+  // straight down from the chip, through the gap above the details, into them
+  const from = (await chip.locator('.edge-label').boundingBox())!;
+  const to = (await details.boundingBox())!;
+  const x = from.x + from.width / 2;
+  await page.mouse.move(x, to.y + 20, { steps: 20 });
+  await expect(details).toBeVisible();
+
+  // the wheel scrolls the details, not the board's zoom
+  const zoom = await page.locator('.react-flow__viewport').getAttribute('style');
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => details.evaluate((d) => d.scrollTop)).toBeGreaterThan(0);
+  await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style', zoom!);
+});
+
 test('sequence shows the browser steps first', async ({ page }) => {
   await page.goto('/sequence/run-6');
   await expect(diagram(page)).toBeVisible();

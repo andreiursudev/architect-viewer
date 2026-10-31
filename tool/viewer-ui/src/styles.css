@@ -251,6 +251,8 @@ h1, h2, h3, p { margin: 0; }
 .edge-chip.on-path.is-failed { border-color: var(--danger); box-shadow: 0 2px 8px rgb(180 35 24 / 30%); } /* amber already means discovered here */
 .edge-response { color: var(--danger); font-size: 12px; font-weight: 700; }
 .edge-chip.is-hovered { z-index: 40; }
+/* Bridges the gap down to the hop details (top: 100% + 6px): crossing it keeps the pointer in the chip, so they stay open. */
+.edge-chip.is-hovered::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; }
 .step-badge {
   display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-width: 24px; height: 24px; padding: 0 7px;
   border-radius: 999px; background: #1d4ed8; color: #fff; font-size: 13px; font-weight: 750;

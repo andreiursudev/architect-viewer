@@ -53,7 +53,8 @@ export function UiFacts({ event }: { event: FlowStep['event'] }) {
 /** What happened on one highlighted connection: every call of the run over it, with a peek at the payloads. */
 export function HopDetails({ steps }: { steps: FlowStep[] }) {
   return (
-    <div className="hop-details" role="tooltip">
+    // nowheel: React Flow leaves the wheel alone here, so long details scroll instead of zooming the board
+    <div className="hop-details nowheel" role="tooltip">
       {steps.map((step) => (
         <section key={step.stepId} className="hop-step">
           <header className="hop-head">
