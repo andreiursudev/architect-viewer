@@ -7,10 +7,12 @@ dependencies {
     api(platform(libs.junit.bom))
     api(libs.junit.jupiter.api)
 
-    // The consuming e2e build brings its own RestAssured.
+    // The consuming e2e build brings its own RestAssured and Playwright.
     compileOnly(libs.rest.assured)
+    compileOnly(libs.playwright)
 
     testImplementation(libs.rest.assured)
+    testImplementation(libs.playwright)
     testImplementation(libs.junit.platform.testkit)
 }
 

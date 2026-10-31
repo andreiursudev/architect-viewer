@@ -17,6 +17,7 @@ opentelemetry-proto = "1.11.1-alpha"
 bytebuddy = "1.18.14"
 jakarta-servlet = "6.1.0"
 rest-assured = "6.3.0"
+playwright = "1.64.0"
 # Viewer backend: 2.1.x is the Spring Boot 4.1 line (2.2 is still RC)
 spring-modulith = "2.1.2"
 archunit = "1.5.1"
@@ -76,8 +77,9 @@ spring-modulith-starter-core = { module = "org.springframework.modulith:spring-m
 spring-modulith-starter-test = { module = "org.springframework.modulith:spring-modulith-starter-test" }
 archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
 
-# Test harness (RestAssured is compileOnly: the consuming e2e build brings its own)
+# Test harness (RestAssured and Playwright are compileOnly: the consuming e2e build brings its own)
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
+playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 
 [plugins]
 node-gradle = { id = "com.github.node-gradle.node", version.ref = "node-gradle" }
