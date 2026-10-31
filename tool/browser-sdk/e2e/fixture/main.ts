@@ -25,7 +25,11 @@ window.__SPANS__ = async () => {
   return inMemory.getFinishedSpans().map(plain);
 };
 
+// Renders the echo's answer, as an app renders its fetched data: the test waits for it like a user would.
+let echoes = 0;
 document.querySelector('[data-testid=go]')?.addEventListener('click', async () => {
   history.pushState({}, '', '/next');
-  await fetch('/api/echo');
+  const response = await fetch('/api/echo');
+  await response.text();
+  document.querySelector('[data-testid=echo-status]')!.textContent = `echoed ${++echoes}`;
 });

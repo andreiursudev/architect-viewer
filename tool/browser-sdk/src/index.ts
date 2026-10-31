@@ -31,6 +31,11 @@ export interface StackRecordingOptions {
 
 const DEFAULT_REPORTER_URL = 'http://localhost:4318';
 
+// A flush first waits for the spans still open: the fetch instrumentation ends a fetch's span 100-300 ms after the
+// response (it waits for the resource-timing entry), so a test that flushes as soon as the page shows the data would
+// otherwise lose that span. Capped, because a span that never ends (a hung fetch) must not hold the test up.
+const FLUSH_WAIT_FOR_OPEN_SPANS_MILLIS = 1000;
+
 let started = false;
 
 /**
@@ -47,9 +52,10 @@ export function startStackRecording(options: StackRecordingOptions): void {
   // The OTLP exporter sends Content-Type only: the reporter's CORS allows no other request header.
   const exporter = new WarnOnFailure(options.exporter ?? new OTLPTraceExporter({ url: tracesUrl }), tracesUrl);
 
+  const stackProcessor = new StackSpanProcessor();
   const provider = new TracerProvider({
     resource: resourceFromAttributes({ [SERVICE_NAME]: options.component }),
-    spanProcessors: [new StackSpanProcessor(), new BatchSpanProcessor({ exporter, scheduledDelayMillis: 200 })],
+    spanProcessors: [stackProcessor, new BatchSpanProcessor({ exporter, scheduledDelayMillis: 200 })],
   });
   // No zone.js: the stack context manager keeps a span active only through synchronous code, which is all the fetch
   // instrumentation needs to put the span's traceparent on the request.
@@ -71,10 +77,11 @@ export function startStackRecording(options: StackRecordingOptions): void {
   recordActions(tracer);
 
   // A failed export has already warned (WarnOnFailure); flushing never rejects, so callers need not care.
-  const flush = () => provider.forceFlush().catch(() => undefined);
-  window.__STACK_FLUSH__ = flush;
+  const flushNow = () => provider.forceFlush().catch(() => undefined);
+  window.__STACK_FLUSH__ = () => stackProcessor.whenNoSpanOpen(FLUSH_WAIT_FOR_OPEN_SPANS_MILLIS).then(flushNow);
   // The browser batch processor also flushes when the page is hidden; this keeps the flush on unload independent of it.
-  window.addEventListener('pagehide', () => void flush());
+  // An unloading page cannot wait (its timers may never fire), so it exports what has ended, in a keepalive request.
+  window.addEventListener('pagehide', () => void flushNow());
 }
 
 /** Passes spans on, and warns once per page the first time the reporter cannot be reached. */

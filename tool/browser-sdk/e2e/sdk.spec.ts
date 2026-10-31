@@ -158,6 +158,17 @@ test('a click records an action, a route change and a traced fetch', async ({ pa
   expect(echoed[0]).not.toHaveProperty('baggage');
 });
 
+test('flush waits for a fetch still in flight', async ({ page }) => {
+  await echo(page);
+  await page.goto('/');
+
+  await page.getByTestId('go').click();
+  await expect(page.getByTestId('echo-status')).toHaveText('echoed 1');
+
+  // The fetch instrumentation ends its span a little after the response; the flush must still export it.
+  expect(await fetchSpans(page)).toHaveLength(1);
+});
+
 test('a tagged page puts the run on every span and on fetch baggage', async ({ page }) => {
   await tagRun(page);
   const echoed = await echo(page);

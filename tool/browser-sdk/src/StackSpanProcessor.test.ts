@@ -23,3 +23,23 @@ it('processor tags spans when a run is known and leaves them alone otherwise', a
   expect(untagged.attributes).toEqual({});
   expect(tagged.attributes).toEqual({ other: 'kept', [SCENARIO]: 's-1', [RUN]: 'r-1' });
 });
+
+it('processor waits until every started span has ended, but no longer than asked', async () => {
+  const processor = new StackSpanProcessor();
+  const tracer = new TracerProvider({ spanProcessors: [processor] }).getTracer('test');
+  await processor.whenNoSpanOpen(1000); // nothing open: resolves at once
+
+  const open = tracer.startSpan('in flight');
+  let idle = false;
+  const waiting = processor.whenNoSpanOpen(1000).then(() => (idle = true));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(idle).toBe(false);
+  open.end();
+  await waiting;
+  expect(idle).toBe(true);
+
+  tracer.startSpan('never ends');
+  const started = Date.now();
+  await processor.whenNoSpanOpen(50);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(45);
+});
