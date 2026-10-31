@@ -177,7 +177,11 @@ data class UiActionEvent(
     override val startEpochNanos: Long,
     override val durationNanos: Long,
     val event: UiActionKind,
-    /** A short description of the element acted on (its `data-testid`, id, text or tag). */
+    /**
+     * Describes the element acted on: the `data-testid` of the nearest ancestor-or-self of the event target that has
+     * one; else the accessible name (`aria-label`, else trimmed text content) of the nearest `button`, `a` or `form`,
+     * cut to 80 characters; else the target's lower-case tag name.
+     */
     val target: String,
     /** The route the page was on when the action happened. */
     val route: String,
