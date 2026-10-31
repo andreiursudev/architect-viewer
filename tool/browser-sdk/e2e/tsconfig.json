@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node"], "rootDir": "..", "noEmit": true, "declaration": false },
+  "include": [".", "../src", "../playwright.config.ts", "../vite.config.ts"],
+  "exclude": []
+}
