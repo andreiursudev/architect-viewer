@@ -106,7 +106,7 @@ After a change under `tool/browser-sdk`, run step 1 and then step 2 again.
 
 The viewer shows `frontend` as its own node (type `frontend`) once you accept it, with a `ui` connection from
 `e2e-client` and `http` connections to `orders-service` and `inventory-service`. In the sequence view a browser run
-reads as the user would: `load /`, `click to-order`, `→ /order`, `click order-form`, `submit order-form`,
+reads as the user would: `load /`, `click to-order`, `→ /order`, `click place-order`, `submit order-form`,
 `→ /orders/<id>`, with the fetch each action triggered nested under it (as the hop to the service and on down to the
 databases, and, expanded, the classes). A fetch that started before any ui step is a top-level hop. A clicked element
 is named by its `data-testid` (the app sets them), else its `aria-label` or text, else its tag name.

@@ -43,7 +43,7 @@ export function OrderFormPage() {
             <input name="quantity" type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
           </label>
         </p>
-        <button type="submit">Place order</button>
+        <button data-testid="place-order" type="submit">Place order</button>
       </form>
       {outOfStock && <p role="alert">Out of stock</p>}
       {error && <p role="alert">{error}</p>}

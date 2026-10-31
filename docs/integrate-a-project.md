@@ -486,7 +486,7 @@ Report to the user:
 - What the tool can't show for this project (messaging, WebFlux bodies, gRPC…), with the flows it affects.
 - Anything you couldn't verify, and anything the tool would need. Name the tool gap; don't patch around it.
 - That `git status` in every service repository is unchanged, except the frontend change the user approved (list its
-  files), which is left uncommitted.
+  files), which is left uncommitted unless they explicitly said otherwise.
 
 ## Frontends
 

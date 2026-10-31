@@ -1,0 +1,5 @@
+# The image copies only the built app and the nginx config; without this the classic builder (Podman) uploads
+# node_modules as build context.
+*
+!dist
+!nginx.conf

@@ -8,6 +8,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
@@ -183,14 +184,17 @@ class SandboxAcceptanceTest {
         navigations.map { it["kind"] } shouldBe listOf("load", "route", "route")
         val actions = run.events.filter { it["type"] == "ui.action" }
         actions.map { it["component"] }.toSet() shouldBe setOf("frontend")
-        actions.map { it["event"] to it["target"] } shouldContain ("click" to "to-order")
-        actions.map { it["event"] to it["target"] } shouldContain ("submit" to "order-form")
+        // In recording order: the click on the submit button comes before the submit it triggers.
+        actions.map { it["event"] to it["target"] } shouldBe
+            listOf("click" to "to-order", "click" to "place-order", "submit" to "order-form")
 
         val fetches = run.events.filter { it["type"] == "http.client" && it["component"] == "frontend" }.sortedBy { it["startEpochNanos"] as Long }
         fetches.map { it["method"] } shouldBe listOf("GET", "POST", "GET")
         (fetches[0]["url"] as String) shouldEndWith "/stock"
         (fetches[1]["url"] as String) shouldEndWith "/orders"
         fetches[1]["status"] shouldBe 201
+        // The POST the submit handler starts is on the same clock as the submit, so it nests under it in the viewer.
+        startOf(fetches[1]) shouldBeGreaterThanOrEqual startOf(actions.single { it["event"] == "submit" })
         (fetches[2]["url"] as String) shouldEndWith "/orders/$orderId"
         fetches[2]["status"] shouldBe 200
 
@@ -212,6 +216,9 @@ class SandboxAcceptanceTest {
         fetch["method"] shouldBe "POST"
         (fetch["url"] as String) shouldEndWith "/orders"
         fetch["status"] shouldBe 409
+        val actions = run.events.filter { it["type"] == "ui.action" }
+        actions.map { it["event"] to it["target"] } shouldBe listOf("click" to "place-order", "submit" to "order-form")
+        startOf(fetch) shouldBeGreaterThanOrEqual startOf(actions.single { it["event"] == "submit" })
         run.events.single { it["type"] == "http.server" && it["component"] == "orders-service" }["status"] shouldBe 409
         run.events.filter { it["type"] == "db.client" }.map { it["statement"] as String }.none { it.startsWith("insert into orders") } shouldBe true
     }
@@ -234,6 +241,9 @@ class SandboxAcceptanceTest {
             block(page)
         }
     }
+
+    /** The start of a recorded event; Jackson reads the epoch nanos as a Long. */
+    private fun startOf(event: Map<String, Any?>): Long = event["startEpochNanos"] as Long
 
     /** A recorded run: its manifest and its events, both as plain JSON maps (no dependency on tool internals). */
     private data class Recording(val manifest: Map<String, Any?>, val events: List<Map<String, Any?>>)
