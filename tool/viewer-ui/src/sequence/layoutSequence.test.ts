@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { Flow, FlowStep } from '../api/types';
-import { createOrderFlow, methodFlow, methodStep, unrecordedHostStep } from '../board/testData';
+import { createOrderFlow, methodFlow, methodStep, submitStep, unrecordedHostStep } from '../board/testData';
 import { GROUP_BAND, HEADER_HEIGHT, MARGIN_X, classCounts, layoutSequence } from './layoutSequence';
 
 test('sequence rows are request, nested request, nested response, response', () => {
@@ -202,4 +202,14 @@ test('a component that is expanded but not in the run adds no group', () => {
 test('classCounts counts the distinct classes of each service that has method steps', () => {
   expect(classCounts(methodFlow)).toEqual(new Map([['orders-service', 4]]));
   expect(classCounts(createOrderFlow)).toEqual(new Map());
+});
+
+test('ui step has a request arrow and no response', () => {
+  const http = { ...createOrderFlow.steps[0], parentStepId: submitStep.stepId, from: 'frontend', startEpochNanos: submitStep.startEpochNanos + 1 } as FlowStep;
+  const l = layoutSequence({ ...createOrderFlow, steps: [submitStep, http] });
+  expect(l.messages).toHaveLength(3);
+  expect(l.messages[0].kind).toBe('request');
+  expect(l.messages[0].label).toBe('submit order-form');
+  expect(l.messages.map((m) => `${m.kind}:${m.stepId}`)).toEqual(['request:submit', 'request:' + http.stepId, 'response:' + http.stepId]);
+  expect(l.participants.map((p) => p.id)).toEqual(['e2e-client', 'frontend', 'orders-service']);
 });

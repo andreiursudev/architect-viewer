@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { HopDetails } from './HopDetails';
-import { createOrderFlow, unrecordedHostStep } from './testData';
+import { createOrderFlow, loadStep, submitStep, unrecordedHostStep } from './testData';
 
 const [request, insert] = createOrderFlow.steps;
 
@@ -50,4 +50,13 @@ test('a call to an unrecorded host that answered shows its status', () => {
   expect(screen.getByText('Body not recorded: the called service is not instrumented.')).toBeInTheDocument();
   expect(screen.queryByText(/No response/)).not.toBeInTheDocument();
   expect(screen.queryByText('java.net.ConnectException')).not.toBeInTheDocument();
+});
+
+test('a ui hop shows what the browser did', () => {
+  render(<HopDetails steps={[loadStep, submitStep]} />);
+  expect(screen.getByText('URL').nextSibling).toHaveTextContent('http://localhost:5173/');
+  expect(screen.getByText('Kind').nextSibling).toHaveTextContent('page load');
+  expect(screen.getByText('Target').nextSibling).toHaveTextContent('order-form');
+  expect(screen.getByText('Event').nextSibling).toHaveTextContent('submit');
+  expect(screen.getByText('Route').nextSibling).toHaveTextContent('/order');
 });

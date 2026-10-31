@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { FlowStep } from './api/types';
-import { createOrderFlow, methodStep, unrecordedHostStep } from './board/testData';
+import { createOrderFlow, loadStep, methodStep, submitStep, unrecordedHostStep } from './board/testData';
 import { isFailedStep, responseText, statusTone } from './status';
 
 const [request, insert] = createOrderFlow.steps;
@@ -63,4 +63,11 @@ test('method return is shortened', () => {
 
 test('void method says returned', () => {
   expect(responseText(methodWith({ returnValue: null }))).toBe('returned');
+});
+
+test('ui steps never fail', () => {
+  for (const step of [loadStep, submitStep]) {
+    expect(isFailedStep(step)).toBe(false);
+    expect(responseText(step)).toBe('');
+  }
 });

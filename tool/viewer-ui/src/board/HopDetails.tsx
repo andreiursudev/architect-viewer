@@ -23,6 +23,33 @@ export function formatMillis(nanos: number): string {
   return `${Number(ms.toFixed(ms >= 10 ? 0 : 1))} ms`;
 }
 
+/** The facts of a browser step: for an action its event, target and route; for a navigation its URL and kind (the duration is shown beside the step). */
+export function UiFacts({ event }: { event: FlowStep['event'] }) {
+  if (event.type === 'ui.action') {
+    return (
+      <>
+        <dt>Event</dt>
+        <dd>{event.event}</dd>
+        <dt>Target</dt>
+        <dd>{event.target}</dd>
+        <dt>Route</dt>
+        <dd>{event.route}</dd>
+      </>
+    );
+  }
+  if (event.type === 'ui.navigation') {
+    return (
+      <>
+        <dt>URL</dt>
+        <dd>{event.url}</dd>
+        <dt>Kind</dt>
+        <dd>{event.kind === 'load' ? 'page load' : 'route change'}</dd>
+      </>
+    );
+  }
+  return null;
+}
+
 /** What happened on one highlighted connection: every call of the run over it, with a peek at the payloads. */
 export function HopDetails({ steps }: { steps: FlowStep[] }) {
   return (
@@ -57,6 +84,10 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
               {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
               <p className="muted">{clientCallNote(step)}</p>
             </>
+          ) : step.event.type === 'ui.action' || step.event.type === 'ui.navigation' ? (
+            <dl className="facts hop-facts">
+              <UiFacts event={step.event} />
+            </dl>
           ) : null /* method steps have no connection, so the board never lists them */}
         </section>
       ))}

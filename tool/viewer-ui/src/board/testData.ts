@@ -221,3 +221,34 @@ export const methodFlow: Flow = {
     callStep({ stepId: 'sel', parentStepId: 'save', from: 'orders-service', fromUnit: REPOSITORY, to: 'postgresql-orders', kind: 'db', label: 'select from orders' }, 8),
   ],
 };
+
+/** A `ui` step from the e2e client to the frontend: a navigation (`load /`, `→ /order`) or a user action (`click to-order`). */
+export function uiStep(stepId: string, event: { type: 'ui.navigation'; url: string; route: string; kind: 'load' | 'route'; durationNanos: number } | { type: 'ui.action'; action: 'click' | 'submit'; target: string; route: string }, startMillis: number): FlowStep {
+  const startEpochNanos = T0 + startMillis * 1_000_000;
+  const navigation = event.type === 'ui.navigation';
+  const durationNanos = navigation ? event.durationNanos : 1_000_000;
+  const common = { schemaVersion: 4, eventId: stepId, runId: 'run-6', traceId: 'trace', spanId: stepId, parentSpanId: null, component: 'frontend', startEpochNanos, durationNanos };
+  return {
+    stepId,
+    parentStepId: null,
+    from: 'e2e-client',
+    to: 'frontend',
+    fromUnit: null,
+    toUnit: null,
+    connectionId: 'e2e-client--frontend',
+    kind: 'ui',
+    label: navigation ? (event.kind === 'load' ? `load ${event.route}` : `→ ${event.route}`) : `${event.action} ${event.target}`,
+    startEpochNanos,
+    durationNanos,
+    status: null,
+    event: navigation
+      ? { ...common, type: 'ui.navigation', url: event.url, route: event.route, kind: event.kind }
+      : { ...common, type: 'ui.action', event: event.action, target: event.target, route: event.route },
+    handler: null,
+  };
+}
+
+/** The first page load of a browser run, and the form submit that follows. */
+export const loadStep = uiStep('load', { type: 'ui.navigation', url: 'http://localhost:5173/', route: '/', kind: 'load', durationNanos: 120_000_000 }, 0);
+export const routeStep = uiStep('route', { type: 'ui.navigation', url: 'http://localhost:5173/order', route: '/order', kind: 'route', durationNanos: 2_000_000 }, 1);
+export const submitStep = uiStep('submit', { type: 'ui.action', action: 'submit', target: 'order-form', route: '/order' }, 2);

@@ -10,7 +10,7 @@ import {
   type Viewport as FlowViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFlow, useLayout, useSaveLayout, useWorkspace } from '../api/queries';
 import type { BoardLayout } from '../api/types';
 import { useUiStore } from '../store/uiStore';
@@ -74,6 +74,14 @@ function Board() {
     [flow, scheduleSave],
   );
 
+  // The effect below must not depend on `persist`: its identity changes when the canvas mounts (`useReactFlow` returns a
+  // new instance), which re-ran the layout and replaced the nodes React Flow had just measured with unmeasured copies.
+  // Their handle bounds were lost and the board stayed without edges.
+  const persistRef = useRef(persist);
+  useEffect(() => {
+    persistRef.current = persist;
+  }, [persist]);
+
   // (Re)build the elements whenever the workspace changes; positions the user has already moved are kept.
   useEffect(() => {
     if (!view || !layoutLoaded) return;
@@ -101,7 +109,7 @@ function Board() {
       apply(placed);
       setReady(true);
       // remember the new arrangement so it does not shift when more components appear later
-      persist({
+      persistRef.current({
         nodes: Object.fromEntries(placed.map((n) => [n.id, { x: n.position.x, y: n.position.y }])),
         viewport: layout?.viewport ?? null,
       });
@@ -109,7 +117,7 @@ function Board() {
     return () => {
       cancelled = true;
     };
-  }, [view, layout, layoutLoaded, setEdges, setNodes, persist]);
+  }, [view, layout, layoutLoaded, setEdges, setNodes]);
 
   if (workspace.isError) return <p className="error board-message">Could not load the workspace: {workspace.error.message}</p>;
   if (layoutQuery.isError) return <p className="error board-message">Could not load the layout: {layoutQuery.error.message}</p>;

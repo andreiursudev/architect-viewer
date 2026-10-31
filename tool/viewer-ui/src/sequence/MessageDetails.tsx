@@ -1,5 +1,5 @@
 import type { FlowStep, MethodEvent } from '../api/types';
-import { clientCallNote, formatMillis } from '../board/HopDetails';
+import { clientCallNote, formatMillis, UiFacts } from '../board/HopDetails';
 import { statusTone } from '../status';
 
 type Kind = 'request' | 'response';
@@ -76,7 +76,9 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        ) : null /* ui events get their details in a later change */}
+        ) : (
+          <UiFacts event={event} />
+        )}
       </dl>
 
       {event.type === 'http.server' ? (

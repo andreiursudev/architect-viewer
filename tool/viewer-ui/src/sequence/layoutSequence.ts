@@ -63,7 +63,7 @@ export function classCounts(flow: Flow): Map<string, number> {
 /**
  * Turns a flow into sequence-diagram geometry. Participants are columns in the order they first appear (an expanded
  * service has one column per class, side by side); every step is a request row, then (after the rows of its child
- * steps) a response row. Siblings are ordered by start time. A method step of a collapsed service has no rows, but
+ * steps) a response row, except a `ui` step, which is a request arrow only. Siblings are ordered by start time. A method step of a collapsed service has no rows, but
  * its children still do.
  */
 export function layoutSequence(flow: Flow, expanded: ReadonlySet<string> = new Set()): SequenceLayout {
@@ -95,7 +95,7 @@ export function layoutSequence(flow: Flow, expanded: ReadonlySet<string> = new S
     const ends = hidden ? null : { from: lifeline(step.from, step.fromUnit ?? null), to: lifeline(step.to, step.toUnit ?? null) };
     if (ends) rows.push({ step, kind: 'request', ...ends });
     for (const child of children.get(step.stepId) ?? []) visit(child);
-    if (ends) rows.push({ step, kind: 'response', ...ends });
+    if (ends && step.kind !== 'ui') rows.push({ step, kind: 'response', ...ends }); // a browser step has no answer
   };
   for (const root of children.get(null) ?? []) visit(root);
 

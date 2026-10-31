@@ -15,6 +15,7 @@ const MAX_RETURN_LABEL = 40;
 
 /** A step failed when it answered with an error status, when a call to an unrecorded host never got an answer, or when a method threw. */
 export function isFailedStep(step: FlowStep): boolean {
+  if (step.kind === 'ui') return false;
   if (step.status != null && step.status >= 400) return true;
   const event = step.event;
   if (event.type === 'method') return event.exceptionType != null;
@@ -23,6 +24,7 @@ export function isFailedStep(step: FlowStep): boolean {
 
 /** What a step answers with: the HTTP status, the error that stopped the call, the rows a statement touched, what a method returned or threw, or `ok`. */
 export function responseText(step: FlowStep): string {
+  if (step.kind === 'ui') return ''; // a browser step is an arrow only: nothing answers it
   if (step.status != null) return String(step.status);
   const event = step.event;
   if (event.type === 'http.client' && event.errorType != null) return simpleName(event.errorType);

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import { createOrderFlow, methodStep, unrecordedHostStep } from '../board/testData';
+import { createOrderFlow, loadStep, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
 import { MessageDetails } from './MessageDetails';
 
 const [request, insert] = createOrderFlow.steps;
@@ -149,4 +149,22 @@ test('http step with a handler shows Handled by OrdersController.create with its
 test('http step without a handler has no Handled by section', () => {
   render(<MessageDetails step={request} kind="request" />);
   expect(screen.queryByRole('region', { name: /Handled by/ })).not.toBeInTheDocument();
+});
+
+test('details of an action show event target and route', () => {
+  render(<MessageDetails step={submitStep} kind="request" />);
+  expect(screen.getByRole('heading', { name: 'submit order-form' })).toBeInTheDocument();
+  expect(screen.getByText('Event').nextSibling).toHaveTextContent('submit');
+  expect(screen.getByText('Target').nextSibling).toHaveTextContent('order-form');
+  expect(screen.getByText('Route').nextSibling).toHaveTextContent('/order');
+});
+
+test('details of a navigation show url kind and duration', () => {
+  const { rerender } = render(<MessageDetails step={loadStep} kind="request" />);
+  expect(screen.getByText('URL').nextSibling).toHaveTextContent('http://localhost:5173/');
+  expect(screen.getByText('Kind').nextSibling).toHaveTextContent('page load');
+  expect(screen.getByText('Duration').nextSibling).toHaveTextContent('120 ms');
+  rerender(<MessageDetails step={routeStep} kind="request" />);
+  expect(screen.getByText('Kind').nextSibling).toHaveTextContent('route change');
+  expect(screen.getByText('Duration').nextSibling).toHaveTextContent('2 ms');
 });

@@ -72,7 +72,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
             )}
             <button type="button" className="edge-label" onClick={() => select(id)} title={data.id}>
               <span className="edge-kind">{data.kind}</span>
-              {text && <span>{text}</span>}
+              {text && <span className="edge-text" title={text}>{text}</span>}
             </button>
             {failedStep && <span className="edge-response">{responseText(failedStep)}</span>}
             {data.unverified && <span className="badge badge-unverified">unverified</span>}

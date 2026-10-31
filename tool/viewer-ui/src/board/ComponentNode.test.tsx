@@ -1,13 +1,14 @@
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
-import { render } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { ComponentNode } from './ComponentNode';
 import { HighlightContext, highlightFor } from './highlight';
+import type { BoardComponent } from '../api/types';
 import { comp, createOrderFlow } from './testData';
 import type { ComponentNode as ComponentNodeType } from './toFlowElements';
 
-function renderNode(id: string, flow: typeof createOrderFlow | null) {
-  const props = { id, data: comp(id) } as unknown as NodeProps<ComponentNodeType>;
+function renderNode(id: string, flow: typeof createOrderFlow | null, over: Partial<BoardComponent> = {}) {
+  const props = { id, data: comp(id, over) } as unknown as NodeProps<ComponentNodeType>;
   render(
     <ReactFlowProvider>
       <HighlightContext.Provider value={flow ? highlightFor(flow) : null}>
@@ -32,4 +33,14 @@ test('without a selected run no component is dimmed', () => {
   const node = renderNode('billing-service', null);
   expect(node).not.toHaveClass('is-dimmed');
   expect(node).not.toHaveClass('on-path');
+});
+
+test('frontend node shows the browser icon', () => {
+  const frontend = renderNode('frontend', null, { type: 'frontend' }).querySelector('svg')!;
+  expect(frontend).toHaveAttribute('data-icon', 'frontend');
+  const frontendDrawing = frontend.innerHTML;
+  cleanup();
+  const service = renderNode('orders-service', null).querySelector('svg')!;
+  expect(service).toHaveAttribute('data-icon', 'service');
+  expect(frontendDrawing).not.toBe(service.innerHTML);
 });
