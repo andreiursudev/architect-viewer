@@ -12,7 +12,7 @@ import {
   TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { recordActions } from './actions.js';
-import { SERVICE_NAME } from './attributes.js';
+import { ERROR_TYPE, SERVICE_NAME } from './attributes.js';
 import { recordNavigations } from './navigation.js';
 import { StackBaggagePropagator } from './StackBaggagePropagator.js';
 import { StackSpanProcessor } from './StackSpanProcessor.js';
@@ -47,7 +47,10 @@ export function startStackRecording(options: StackRecordingOptions): void {
   if (started) return;
   started = true;
 
-  const reporterUrl = (options.reporterUrl ?? DEFAULT_REPORTER_URL).replace(/\/+$/, '');
+  // Normalised as the fetch instrumentation normalises the urls it matches against ignoreUrls (lower-case host, no
+  // default port), so that the reporter's own requests are recognised however the url is written.
+  const reporter = new URL(options.reporterUrl ?? DEFAULT_REPORTER_URL, location.href);
+  const reporterUrl = `${reporter.origin}${reporter.pathname.replace(/\/+$/, '')}`;
   const tracesUrl = `${reporterUrl}/v1/traces`;
   // The OTLP exporter sends Content-Type only: the reporter's CORS allows no other request header.
   const exporter = new WarnOnFailure(options.exporter ?? new OTLPTraceExporter({ url: tracesUrl }), tracesUrl);
@@ -67,9 +70,18 @@ export function startStackRecording(options: StackRecordingOptions): void {
 
   // The fetch instrumentation writes the stable HTTP semantic conventions (http.request.method, url.full, ...).
   // The exporter's own requests are left out: a span per export would be exported again, forever.
+  // A fetch that got no response (the network failed, or it was aborted) gets only status 0 from the instrumentation;
+  // its error type says it failed (the reporter then records no status).
   registerInstrumentations({
     tracerProvider: provider,
-    instrumentations: [new FetchInstrumentation({ ignoreUrls: [new RegExp(`^${escapeRegExp(reporterUrl)}([/?#]|$)`)] })],
+    instrumentations: [
+      new FetchInstrumentation({
+        ignoreUrls: [new RegExp(`^${escapeRegExp(reporterUrl)}([/?#]|$)`)],
+        applyCustomAttributesOnSpan: (span, _request, result) => {
+          if (!(result instanceof Response)) span.setAttribute(ERROR_TYPE, (result as Partial<Error>).name || 'Error');
+        },
+      }),
+    ],
   });
 
   const tracer = provider.getTracer('@stackvibed/browser');

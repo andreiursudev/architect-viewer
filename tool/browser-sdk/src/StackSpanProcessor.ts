@@ -20,7 +20,8 @@ export class StackSpanProcessor implements SpanProcessor {
   onEnd(span: ReadableSpan): void {
     this.open.delete(span);
     if (this.open.size > 0) return;
-    const waiters = this.idleWaiters;
+    // A copy: each waiter removes itself from the list as it is released.
+    const waiters = [...this.idleWaiters];
     this.idleWaiters = [];
     for (const resolve of waiters) resolve();
   }

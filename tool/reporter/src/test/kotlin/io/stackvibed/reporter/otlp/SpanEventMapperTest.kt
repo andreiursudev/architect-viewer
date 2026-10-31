@@ -102,6 +102,19 @@ class SpanEventMapperTest {
         event.serverPort shouldBe null
     }
 
+    @Test fun `browser fetch that got no response has null status and keeps its error type`() {
+        // As the browser package exports it: the fetch instrumentation writes status 0, the package the error's name.
+        val failed = OtlpFixtures.span("3333333333333333", null, Span.SpanKind.SPAN_KIND_CLIENT, "GET", 1, 2)
+            .addAttributes(OtlpFixtures.str("http.request.method", "GET"))
+            .addAttributes(OtlpFixtures.str("url.full", "http://localhost:3000/stock"))
+            .addAttributes(OtlpFixtures.long("http.response.status_code", 0))
+            .addAttributes(OtlpFixtures.str("error.type", "TypeError"))
+            .build()
+        val event = client(OtlpFixtures.request("frontend", listOf(failed)))
+        event.status shouldBe null
+        event.errorType shouldBe "TypeError"
+    }
+
     @Test fun `tags come from stack attributes`() {
         mapper.map(OtlpFixtures.createOrderRun()).map { it.tags }.distinct() shouldBe listOf(SpanTags("create-order", "run-1"))
         mapper.map(OtlpFixtures.createOrderRun("other", "run-9")).map { it.tags }.distinct() shouldBe listOf(SpanTags("other", "run-9"))

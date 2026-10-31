@@ -2,6 +2,8 @@
 export interface PlainSpan {
   name: string;
   kind: string;
+  /** The span's start, in milliseconds since the epoch. */
+  startMillis: number;
   attributes: Record<string, unknown>;
   resource: Record<string, unknown>;
 }

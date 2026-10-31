@@ -28,6 +28,21 @@ test('dbStepUsesRowCount', () => {
   expect(responseText({ ...insert, event: { ...insert.event, rowCount: null } } as FlowStep)).toBe('ok');
 });
 
+test('a frontend fetch that got no response is failed and says why', () => {
+  // As the reporter records a fetch that never reached a service: no status, the error's name as its type.
+  const fetchFailed = {
+    ...unrecordedHostStep,
+    from: 'frontend',
+    to: 'orders',
+    connectionId: 'frontend--orders',
+    label: 'POST /orders',
+    status: null,
+    event: { ...unrecordedHostStep.event, component: 'frontend', url: 'http://localhost:3000/orders', status: null, errorType: 'TypeError' },
+  } as FlowStep;
+  expect(isFailedStep(fetchFailed)).toBe(true);
+  expect(responseText(fetchFailed)).toBe('TypeError');
+});
+
 test('a client step that got an answer is failed only by its status', () => {
   const answered = { ...unrecordedHostStep, status: 200, event: { ...unrecordedHostStep.event, status: 200, errorType: null } } as FlowStep;
   expect(isFailedStep(answered)).toBe(false);

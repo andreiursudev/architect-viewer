@@ -136,7 +136,8 @@ class SpanEventMapper {
                 url = attrs.string("url.full") ?: "",
                 serverAddress = attrs.string("server.address"),
                 serverPort = attrs.long("server.port")?.toInt(),
-                status = attrs.long("http.response.status_code")?.toInt(),
+                // The browser's fetch instrumentation writes status 0 for a fetch that got no response: there is none.
+                status = attrs.long("http.response.status_code")?.toInt()?.takeIf { it != 0 },
                 errorType = attrs.string("error.type"),
             )
         }

@@ -43,3 +43,19 @@ it('processor waits until every started span has ended, but no longer than asked
   await processor.whenNoSpanOpen(50);
   expect(Date.now() - started).toBeGreaterThanOrEqual(45);
 });
+
+it('processor releases every waiter when the last open span ends', async () => {
+  const processor = new StackSpanProcessor();
+  const tracer = new TracerProvider({ spanProcessors: [processor] }).getTracer('test');
+  const open = tracer.startSpan('in flight');
+  const released: string[] = [];
+  const first = processor.whenNoSpanOpen(1000).then(() => released.push('first'));
+  const second = processor.whenNoSpanOpen(1000).then(() => released.push('second'));
+
+  open.end();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  // Both at once, not the second only at its 1 s cap.
+  expect(released).toEqual(['first', 'second']);
+  await Promise.all([first, second]);
+});

@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   ACTION_SPAN,
+  ERROR_TYPE,
   HTTP_REQUEST_METHOD,
   HTTP_RESPONSE_STATUS_CODE,
   NAVIGATION_SPAN,
@@ -115,6 +116,7 @@ test('page load is one navigation span', async ({ page }) => {
     {
       name: NAVIGATION_SPAN,
       kind: 'INTERNAL',
+      startMillis: expect.any(Number),
       attributes: { [UI_NAVIGATION_KIND]: 'load', [UI_URL]: page.url(), [UI_ROUTE]: '/' },
       resource: expect.objectContaining({ [SERVICE_NAME]: 'fixture' }),
     },
@@ -156,6 +158,52 @@ test('a click records an action, a route change and a traced fetch', async ({ pa
   expect(echoed).toHaveLength(1);
   expect(echoed[0].traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
   expect(echoed[0]).not.toHaveProperty('baggage');
+});
+
+// The fetch instrumentation starts its spans on the wall clock (Date.now(), whole milliseconds): a ui span on the
+// sub-millisecond performance clock would start after the fetch its own handler began in the same millisecond.
+test('a fetch started in a submit handler starts no earlier than the submit, and the submit no earlier than its click', async ({ page }) => {
+  await echo(page);
+  await page.goto('/');
+
+  const sends = 5; // the clocks disagree only within a millisecond: several sends make a mismatch all but certain
+  for (let i = 0; i < sends; i++) await page.getByTestId('send').click();
+
+  await expect.poll(() => fetchSpans(page)).toHaveLength(sends);
+  const recorded = await spans(page);
+  const actions = recorded.filter((span) => span.name === ACTION_SPAN);
+  // Exported in dispatch order, click before its submit: of two ui steps starting together the later one in the list wins.
+  expect(actions.map((span) => span.attributes[UI_ACTION_EVENT])).toEqual(Array(sends).fill(['click', 'submit']).flat());
+  const byStart = (a: PlainSpan, b: PlainSpan) => a.startMillis - b.startMillis;
+  const fetches = (await fetchSpans(page)).sort(byStart);
+  for (let i = 0; i < sends; i++) {
+    const [click, submit] = actions.slice(2 * i, 2 * i + 2);
+    expect(submit.startMillis, `send ${i}`).toBeGreaterThanOrEqual(click.startMillis);
+    expect(fetches[i].startMillis, `send ${i}`).toBeGreaterThanOrEqual(submit.startMillis);
+  }
+});
+
+test('a fetch that gets no response records its error type', async ({ page }) => {
+  await page.route('**/api/fail', (route) => route.abort());
+  await page.goto('/');
+
+  const outcome = await page.evaluate(() => fetch('/api/fail').then(() => 'answered', (error: Error) => error.name));
+  expect(outcome).toBe('TypeError');
+
+  await expect.poll(() => fetchSpans(page)).toHaveLength(1);
+  const [failed] = await fetchSpans(page);
+  expect(failed.attributes).toEqual(expect.objectContaining({ [ERROR_TYPE]: 'TypeError', [HTTP_RESPONSE_STATUS_CODE]: 0 }));
+});
+
+test('an answered fetch has no error type', async ({ page }) => {
+  await echo(page);
+  await page.goto('/');
+
+  await page.getByTestId('go').click();
+
+  await expect.poll(() => fetchSpans(page)).toHaveLength(1);
+  const [fetched] = await fetchSpans(page);
+  expect(fetched.attributes).not.toHaveProperty(ERROR_TYPE);
 });
 
 test('flush waits for a fetch still in flight', async ({ page }) => {
@@ -205,6 +253,24 @@ test('export requests to the reporter are not traced', async ({ page, context })
   expect(received).toHaveLength(1);
   expect(received[0]).not.toHaveProperty('traceparent');
   expect(received[0]).not.toHaveProperty('baggage');
+});
+
+test('export requests are not traced when the reporter url is written differently', async ({ page, context }) => {
+  await tagRun(page);
+  const received = await routedReporter(context);
+  await echo(page);
+  // The same reporter as REPORTER, with an upper-case host, the default port and a trailing slash.
+  await page.goto(`/?reporter=${encodeURIComponent('http://REPORTER.test:80/')}`);
+
+  const status = await page.evaluate((url) => fetch(url, { method: 'POST' }).then((response) => response.status), TRACES);
+  expect(status).toBe(200);
+  await page.getByTestId('go').click();
+  await expect.poll(() => fetchSpans(page)).toHaveLength(1);
+
+  const [fetched] = await fetchSpans(page);
+  expect(fetched.attributes[URL_FULL]).not.toContain(REPORTER);
+  expect(received).toHaveLength(1);
+  expect(received[0]).not.toHaveProperty('traceparent');
 });
 
 test('the real exporter posts protobuf to the reporter', async ({ page, reporter }) => {

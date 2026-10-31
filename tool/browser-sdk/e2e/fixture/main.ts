@@ -16,6 +16,7 @@ startStackRecording({
 const plain = (span: ReadableSpan): PlainSpan => ({
   name: span.name,
   kind: SpanKind[span.kind],
+  startMillis: span.startTime[0] * 1000 + span.startTime[1] / 1_000_000,
   attributes: { ...span.attributes },
   resource: { ...span.resource.attributes },
 });
@@ -32,4 +33,10 @@ document.querySelector('[data-testid=go]')?.addEventListener('click', async () =
   const response = await fetch('/api/echo');
   await response.text();
   document.querySelector('[data-testid=echo-status]')!.textContent = `echoed ${++echoes}`;
+});
+
+// Sends the form as an app does: the submit handler starts the fetch at once.
+document.querySelector('[data-testid=order]')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void fetch('/api/echo', { method: 'POST' });
 });

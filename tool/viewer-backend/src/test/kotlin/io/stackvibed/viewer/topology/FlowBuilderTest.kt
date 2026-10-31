@@ -488,6 +488,37 @@ class FlowBuilderTest {
             .steps.single { it.stepId == "server" }.parentStepId shouldBe "two"
     }
 
+    /**
+     * The POSTs of the two browser runs recorded on 2026-10-31 at 18:04, with the ui spans on the fetch's clock (whole
+     * milliseconds, as the browser package now records them): in the out-of-stock run the click on the submit button,
+     * the submit it triggers and the POST the submit handler starts all fall in one millisecond.
+     */
+    @Test
+    fun `a POST its submit handler starts nests under the submit, on the timestamps of real runs`() {
+        fun parentOfPost(load: Long, click: Long, submit: Long, post: Long): String? = builder.build(
+            emptyManifest(),
+            listOf(
+                navigation("load", load),
+                action("click", click, target = "order-form"),
+                action("submit", submit, event = UiActionKind.SUBMIT, target = "order-form"),
+                client("post", "frontend", post, 24_000_000, url = "http://localhost:3000/orders", serverAddress = "localhost"),
+                http("server", "orders-service", post + 3_000_000, 18_000_000, parent = "post", method = "POST"),
+            ),
+            emptyMap(),
+        ).steps.single { it.stepId == "server" }.parentStepId
+
+        // place-order-in-browser_68773d2f
+        parentOfPost(
+            load = 1_793_469_863_650_899_902, click = 1_793_469_863_827_000_000, submit = 1_793_469_863_828_000_000,
+            post = 1_793_469_863_828_000_000,
+        ) shouldBe "submit"
+        // place-order-out-of-stock-in-browser_1524df0c
+        parentOfPost(
+            load = 1_793_469_864_631_300_049, click = 1_793_469_864_728_000_000, submit = 1_793_469_864_728_000_000,
+            post = 1_793_469_864_728_000_000,
+        ) shouldBe "submit"
+    }
+
     @Test
     fun `a frontend fetch before any ui step has no parent`() {
         val fetch = client("fetch", "frontend", 100, 50, url = "http://localhost:3000/orders", serverAddress = "localhost")
@@ -533,9 +564,11 @@ class FlowBuilderTest {
         repository.manifests().first { it.runId == "run-6" }, repository.events("run-6"), emptyMap(),
     )
 
-    private fun action(id: String, start: Long, parent: String? = null): RecordingEvent = UiActionEvent(
+    private fun action(
+        id: String, start: Long, parent: String? = null, event: UiActionKind = UiActionKind.CLICK, target: String = "button",
+    ): RecordingEvent = UiActionEvent(
         eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = parent, component = "frontend",
-        startEpochNanos = start, durationNanos = 1, event = UiActionKind.CLICK, target = "button", route = "/",
+        startEpochNanos = start, durationNanos = 0, event = event, target = target, route = "/",
     )
 
     private fun navigation(id: String, start: Long): RecordingEvent = UiNavigationEvent(
