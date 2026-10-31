@@ -1,0 +1,2 @@
+id: browse-stock
+description: A customer opens the shop front in the browser (GET /stock) and sees the stock list inventory-service answers with.

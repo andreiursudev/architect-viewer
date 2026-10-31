@@ -1,10 +1,12 @@
 # The sandbox stack: orders-service and inventory-service (both under the OpenTelemetry agent with the stack
-# extension), their Postgres databases, and the stack reporter that writes what the agent exports into ./recordings.
+# extension), their Postgres databases, the stack reporter that writes what the agent exports into ./recordings, and
+# the frontend (a React app served by nginx, which proxies its API calls to the two services).
 # orders-service reserves stock at inventory-service (HTTP) before it stores an order.
 #
 # Before `docker compose up -d --build --wait` (see README.md):
 #   tool/gradlew -p tool publishToMavenLocal :reporter:dockerImage
 #   sandbox/gradlew -p sandbox stackAgent assemble
+# `assemble` also builds the frontend into services/frontend/dist, which its image copies.
 # On Podman, add docker-compose.podman.yml (see README.md, "With Podman").
 #
 # Ports are published on 127.0.0.1 only: recorded traffic is not redacted, and nothing here needs to be reachable
@@ -117,3 +119,19 @@ services:
       timeout: 5s
       start_period: 120s
       start_interval: 1s
+
+  frontend:
+    build: ./services/frontend
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      orders-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+    # Static, so not a traced request. `docker compose up --wait` returns once nginx serves the app.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

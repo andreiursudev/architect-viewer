@@ -24,6 +24,7 @@ configurations.named(acceptanceTest.runtimeOnlyConfigurationName) {
 dependencies {
     implementation(libs.stack.test.harness)
     implementation(libs.rest.assured)
+    implementation(libs.playwright)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -66,6 +67,6 @@ tasks.register<Test>("acceptanceTest") {
     group = "verification"
     testClassesDirs = acceptanceTest.output.classesDirs
     classpath = acceptanceTest.runtimeClasspath
-    // docker-compose.yml builds both services from their jars and mounts the agent jars.
-    dependsOn(":services:orders-service:bootJar", ":services:inventory-service:bootJar", ":stackAgent")
+    // docker-compose.yml builds the services from their jars (the frontend from its dist/) and mounts the agent jars.
+    dependsOn(":services:orders-service:bootJar", ":services:inventory-service:bootJar", ":services:frontend:assemble", ":stackAgent")
 }

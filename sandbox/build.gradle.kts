@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.spring) apply false
     alias(libs.plugins.spring.boot) apply false
+    alias(libs.plugins.node.gradle) apply false
 }
 
 // The OpenTelemetry Java agent and the tool's extension, under fixed names: docker-compose.yml mounts

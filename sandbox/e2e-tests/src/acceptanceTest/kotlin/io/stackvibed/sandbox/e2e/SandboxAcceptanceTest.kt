@@ -1,14 +1,21 @@
 package io.stackvibed.sandbox.e2e
 
+import com.microsoft.playwright.Browser
+import com.microsoft.playwright.Page
+import com.microsoft.playwright.Playwright
+import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldStartWith
+import io.stackvibed.harness.StackBrowser
 import io.stackvibed.harness.StackContext
 import io.stackvibed.harness.StackScenario
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.testcontainers.DockerClientFactory
@@ -34,9 +41,9 @@ import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readLines
 
 /**
- * Sandbox acceptance: the whole stack (both services under the agent, their Postgres databases, the reporter) comes
- * up with Docker Compose, the tagged scenarios run against it, and the reporter's recordings describe the expected
- * flow across both services.
+ * Sandbox acceptance: the whole stack (both services under the agent, their Postgres databases, the reporter, the
+ * frontend) comes up with Docker Compose, the tagged scenarios run against it (the browser ones in Chromium), and the
+ * reporter's recordings describe the expected flow across the frontend and both services.
  */
 @Testcontainers
 class SandboxAcceptanceTest {
@@ -135,6 +142,96 @@ class SandboxAcceptanceTest {
         }
     }
 
+    @Test
+    @StackScenario("browse-stock")
+    fun `browsing stock is recorded from the browser`() {
+        inBrowser { FrontendScenarios(it, FRONTEND_URL).browseStock() }
+
+        val run = awaitRecording(scenario = "browse-stock", minEvents = 4)
+
+        (run.manifest["componentsSeen"] as List<*>) shouldContainAll listOf("frontend", "inventory-service")
+        val navigation = run.events.single { it["type"] == "ui.navigation" }
+        navigation["component"] shouldBe "frontend"
+        navigation["kind"] shouldBe "load"
+        navigation["route"] shouldBe "/"
+        val fetch = run.events.single { it["type"] == "http.client" }
+        fetch["component"] shouldBe "frontend"
+        fetch["method"] shouldBe "GET"
+        (fetch["url"] as String) shouldEndWith "/stock"
+        // The service-side span of the browser's fetch is its child.
+        val server = run.events.single { it["type"] == "http.server" && it["component"] == "inventory-service" }
+        server["method"] shouldBe "GET"
+        server["route"] shouldBe "/stock"
+        server["status"] shouldBe 200
+        (server["responseBody"] as String) shouldContain "sku-1"
+        server["parentSpanId"] shouldBe fetch["spanId"]
+    }
+
+    @Test
+    @StackScenario("place-order-in-browser")
+    fun `placing an order is recorded from the browser`() {
+        var orderId = ""
+        inBrowser { orderId = FrontendScenarios(it, FRONTEND_URL).placeOrder() }
+
+        // 3 ui navigations, 2+ ui actions, 3 frontend fetches, their server spans, orders-service's call to
+        // inventory-service and the databases and methods below them.
+        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 16)
+
+        val navigations = run.events.filter { it["type"] == "ui.navigation" }.sortedBy { it["startEpochNanos"] as Long }
+        navigations.map { it["route"] } shouldBe listOf("/", "/order", "/orders/$orderId")
+        navigations.map { it["kind"] } shouldBe listOf("load", "route", "route")
+        val actions = run.events.filter { it["type"] == "ui.action" }
+        actions.map { it["component"] }.toSet() shouldBe setOf("frontend")
+        actions.map { it["event"] to it["target"] } shouldContain ("click" to "to-order")
+        actions.map { it["event"] to it["target"] } shouldContain ("submit" to "order-form")
+
+        val fetches = run.events.filter { it["type"] == "http.client" && it["component"] == "frontend" }.sortedBy { it["startEpochNanos"] as Long }
+        fetches.map { it["method"] } shouldBe listOf("GET", "POST", "GET")
+        (fetches[0]["url"] as String) shouldEndWith "/stock"
+        (fetches[1]["url"] as String) shouldEndWith "/orders"
+        fetches[1]["status"] shouldBe 201
+        (fetches[2]["url"] as String) shouldEndWith "/orders/$orderId"
+        fetches[2]["status"] shouldBe 200
+
+        val servers = run.events.filter { it["type"] == "http.server" }
+        servers.single { it["component"] == "orders-service" && it["method"] == "POST" }["parentSpanId"] shouldBe fetches[1]["spanId"]
+        servers.single { it["component"] == "inventory-service" && it["route"] == "/reservations" }["status"] shouldBe 201
+    }
+
+    @Test
+    @StackScenario("place-order-out-of-stock-in-browser")
+    fun `an out-of-stock order is recorded from the browser`() {
+        inBrowser { FrontendScenarios(it, FRONTEND_URL).placeOrderOutOfStock() }
+
+        val run = awaitRecording(scenario = "place-order-out-of-stock-in-browser", minEvents = 8)
+
+        val fetch = run.events.single { it["type"] == "http.client" && it["component"] == "frontend" }
+        fetch["method"] shouldBe "POST"
+        (fetch["url"] as String) shouldEndWith "/orders"
+        fetch["status"] shouldBe 409
+        run.events.single { it["type"] == "http.server" && it["component"] == "orders-service" }["status"] shouldBe 409
+        run.events.filter { it["type"] == "db.client" }.map { it["statement"] as String }.none { it.startsWith("insert into orders") } shouldBe true
+    }
+
+    /** Untagged: nginx must hand a browser reload of /orders/<id> the app, whose own fetch then reaches orders-service. */
+    @Test
+    fun `order page survives a reload`() {
+        inBrowser { page ->
+            FrontendScenarios(page, FRONTEND_URL).placeOrder()
+            page.reload()
+            assertThat(page.getByTestId("order")).isVisible()
+        }
+    }
+
+    /** Runs [block] with a page of a fresh browser context, tagged with the current scenario when there is one. */
+    private fun inBrowser(block: (Page) -> Unit) {
+        browser.newContext().use { context ->
+            val page = context.newPage()
+            if (StackContext.current() != null) StackBrowser.tag(page)
+            block(page)
+        }
+    }
+
     /** A recorded run: its manifest and its events, both as plain JSON maps (no dependency on tool internals). */
     private data class Recording(val manifest: Map<String, Any?>, val events: List<Map<String, Any?>>)
 
@@ -184,6 +281,7 @@ class SandboxAcceptanceTest {
 
     companion object {
         private const val BASE_URL = "http://localhost:8080"
+        private const val FRONTEND_URL = "http://localhost:3000"
 
         private val STARTUP_TIMEOUT: Duration = Duration.ofMinutes(3)
 
@@ -214,11 +312,14 @@ class SandboxAcceptanceTest {
                     withExposedService("reporter", 4318, Wait.forHttp("/api/recordings/active").forStatusCodeMatching { it < 500 })
                     withExposedService("orders-service", 8080, Wait.forHttp("/actuator/health"))
                     withExposedService("inventory-service", 8081, Wait.forHttp("/actuator/health"))
+                    withExposedService("frontend", 80, Wait.forHttp("/"))
                 }
             }
             .withStartupTimeout(STARTUP_TIMEOUT)
 
         private lateinit var seededOrderId: String
+        private lateinit var playwright: Playwright
+        private lateinit var browser: Browser
 
         /**
          * get-order needs an existing order. It is created here, outside any @StackScenario, so the request is
@@ -231,8 +332,17 @@ class SandboxAcceptanceTest {
                 awaitHttp("http://localhost:4318/api/recordings/active")
                 awaitHttp("$BASE_URL/actuator/health")
                 awaitHttp("http://localhost:8081/actuator/health")
+                awaitHttp(FRONTEND_URL)
             }
             seededOrderId = OrdersScenarios(BASE_URL).createOrder()
+            playwright = Playwright.create() // downloads Chromium on the first run
+            browser = playwright.chromium().launch()
+        }
+
+        @JvmStatic
+        @AfterAll
+        fun closeBrowser() {
+            if (::playwright.isInitialized) playwright.close()
         }
 
         /**

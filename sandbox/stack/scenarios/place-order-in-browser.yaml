@@ -1,0 +1,2 @@
+id: place-order-in-browser
+description: A customer opens the shop front, follows the link to the order form and submits an order for sku-1 (POST /orders), then sees the order page.

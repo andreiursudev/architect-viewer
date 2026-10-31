@@ -27,4 +27,5 @@ rootProject.name = "stack-sandbox"
 
 include("services:orders-service")
 include("services:inventory-service")
+include("services:frontend")
 include("e2e-tests")

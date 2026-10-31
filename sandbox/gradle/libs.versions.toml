@@ -12,6 +12,11 @@ opentelemetry-javaagent = "2.33.1"
 # The version the Spring Boot 4.1.2 BOM manages; pinned here because e2e-tests is not a Spring Boot project.
 testcontainers = "2.0.5"
 slf4j = "2.0.20"
+# The frontend is built with a Node that Gradle downloads (same versions as tool/gradle/libs.versions.toml).
+node-gradle = "7.1.0"
+nodejs = "22.23.4"
+# The e2e tests drive the frontend in Chromium; same version as the tool's test harness is compiled against.
+playwright = "1.64.0"
 # The tool, consumed from mavenLocal (`tool/gradlew -p tool publishToMavenLocal`).
 stack-tool = "0.1.0-SNAPSHOT"
 
@@ -42,9 +47,11 @@ slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+node-gradle = { id = "com.github.node-gradle.node", version.ref = "node-gradle" }

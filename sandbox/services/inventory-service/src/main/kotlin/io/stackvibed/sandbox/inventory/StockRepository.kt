@@ -12,4 +12,10 @@ class StockRepository(private val jdbc: JdbcClient) {
         jdbc.sql("update stock set available = available - ? where sku = ? and available >= ?")
             .params(quantity, sku, quantity)
             .update() == 1
+
+    /** Every sku with its available quantity, ordered by sku. */
+    fun findAll(): List<Stock> =
+        jdbc.sql("select sku, available from stock order by sku")
+            .query { rs, _ -> Stock(rs.getString("sku"), rs.getInt("available")) }
+            .list()
 }

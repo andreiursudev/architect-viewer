@@ -1,0 +1,2 @@
+id: place-order-out-of-stock-in-browser
+description: A customer opens the order form and submits an order for sku-out; orders-service answers 409 and the form says the item is out of stock.
