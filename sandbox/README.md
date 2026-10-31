@@ -6,6 +6,13 @@ calls over HTTP to reserve stock before it stores an order, so orders-service ne
 stack starts it first). Three tagged e2e scenarios: `create-order`, `create-order-out-of-stock` (the `sku-out` item
 has no stock, inventory-service answers `409` and orders-service stores nothing) and `get-order`.
 
+Since step 4 the sandbox also has `frontend`, a React single-page app served by nginx on http://localhost:3000: a stock
+list, an order form and an order page. nginx proxies its API calls to the two services, so the browser talks to one
+origin. The app records what happens inside the browser (page loads, route changes, clicks, form submits and the
+fetches they trigger) through the tool's `@stackvibed/browser` package and sends it to the reporter. Three more tagged
+scenarios drive it with Playwright (Chromium): `browse-stock`, `place-order-in-browser` and
+`place-order-out-of-stock-in-browser`.
+
 The sandbox is a separate Gradle build and uses the tool like any outside project would: the OpenTelemetry agent
 extension and the test harness come from `mavenLocal`, the reporter from its Docker image. It never depends on
 `tool/` sources.
@@ -13,9 +20,10 @@ extension and the test harness come from `mavenLocal`, the reporter from its Doc
 | Path | What it is |
 |---|---|
 | `services/orders-service` | `POST /orders` (reserves stock at inventory-service first; `409` when it is short), `GET /orders/{id}`; knows nothing about the tool |
-| `services/inventory-service` | `POST /reservations` (`201`, or `409` when the stock is short); seeded SKUs `sku-1` (plenty) and `sku-out` (none) |
-| `e2e-tests` | `OrdersScenarios` (the user journeys), `OrdersE2ETest` (tagged with `@StackScenario`), `SandboxAcceptanceTest` |
-| `docker-compose.yml` | `postgres` (15432), `inventory-db` (15433), `reporter` (4318, writes `./recordings`), `orders-service` (8080) and `inventory-service` (8081) under the agent |
+| `services/inventory-service` | `POST /reservations` (`201`, or `409` when the stock is short), `GET /stock` (`[{"sku": …, "available": …}]` by SKU, read by the frontend's stock list); seeded SKUs `sku-1` (plenty) and `sku-out` (none) |
+| `services/frontend` | React + TypeScript + Vite app (`/` stock list, `/order` form, `/orders/:id` order page), built to static files and served by nginx; knows the tool only through `startStackRecording({ component: 'frontend' })` |
+| `e2e-tests` | `OrdersScenarios` and `FrontendScenarios` (the user journeys), `OrdersE2ETest` and `FrontendE2ETest` (tagged with `@StackScenario`), `SandboxAcceptanceTest` |
+| `docker-compose.yml` | `postgres` (15432), `inventory-db` (15433), `reporter` (4318, writes `./recordings`), `orders-service` (8080) and `inventory-service` (8081) under the agent, and `frontend` (3000) |
 | `stack/` | the committed workspace the viewer opens (`workspace.yaml`, `scenarios/`, and later components, connections, notes) |
 | `recordings/` | what the reporter recorded; gitignored |
 
@@ -55,7 +63,8 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    ```
 
 4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`, and the
-   two orders-service scenarios that reserve stock also record the hop to inventory-service:
+   two orders-service scenarios that reserve stock also record the hop to inventory-service. The three browser
+   scenarios run in Chromium, which Playwright downloads on the first `e2eTest`:
 
    ```sh
    sandbox/gradlew -p sandbox e2eTest
@@ -85,8 +94,21 @@ run the exception thrown by inventory-service's controller shows as failed arrow
 capture off, remove the `-Dstack.methods.packages=...` option from the two `JAVA_TOOL_OPTIONS` in
 `docker-compose.yml` (without it the agent records the service level only, as before step 3) and start the stack again.
 
-All published ports (8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres, 15433
-inventory Postgres) are bound to `127.0.0.1` only.
+All published ports (3000 frontend, 8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres,
+15433 inventory Postgres) are bound to `127.0.0.1` only.
+
+The frontend is built through Gradle (`sandbox/gradlew -p sandbox stackAgent stackBrowser assemble`, step 2), not with a
+plain `npm install` in `services/frontend`: `@stackvibed/browser` is installed from the tarball `stackBrowser` copies
+to `sandbox/build/stack-browser/` with `npm install --no-save`, because the tarball changes on every tool build and
+is not listed in `package.json`, so a later plain `npm install` prunes it and the build fails to resolve the package.
+After a change under `tool/browser-sdk`, run step 1 and then step 2 again.
+
+The viewer shows `frontend` as its own node (type `frontend`) once you accept it, with a `ui` connection from
+`e2e-client` and `http` connections to `orders-service` and `inventory-service`. In the sequence view a browser run
+reads as the user would: `load /`, `click to-order`, `→ /order`, `click order-form`, `submit order-form`,
+`→ /orders/<id>`, with the fetch each action triggered nested under it (as the hop to the service and on down to the
+databases, and, expanded, the classes). A fetch that started before any ui step is a top-level hop. A clicked element
+is named by its `data-testid` (the app sets them), else its `aria-label` or text, else its tag name.
 
 The viewer discovers `inventory-service`, `postgresql-inventory` and the connections `orders-service` to
 `inventory-service` (`POST /reservations`) and `inventory-service` to `postgresql-inventory` from the recordings;
@@ -113,6 +135,22 @@ Invoke-RestMethod -Method Post http://localhost:4318/api/recordings/start -Conte
 Invoke-RestMethod -Method Post http://localhost:8080/orders -ContentType application/json -Body '{"customerId":"c-1","sku":"sku-1","quantity":2}'
 Invoke-RestMethod -Method Post http://localhost:4318/api/recordings/stop
 ```
+
+### Recording your own clicks
+
+Open http://localhost:3000 in your own browser and click through the app inside a recording window, the same way as
+with `curl` above, with the scenario `place-order-in-browser`:
+
+```sh
+curl -X POST localhost:4318/api/recordings/start -H 'Content-Type: application/json' -d '{"scenarioId":"place-order-in-browser"}'
+# ... use the app in the browser: open /, follow the link, submit the order form ...
+curl -X POST localhost:4318/api/recordings/stop
+```
+
+The page tells the reporter nothing about the run (only the tagged Playwright tests set `window.__STACK__`), so the
+reporter assigns the browser's spans and the services' spans to the window. Wait about a second after your last click
+before you stop it: the browser exports in batches (200 ms) and when you leave the page. The reporter accepts these
+browser exports from `http://localhost:<port>` and `http://127.0.0.1:<port>` only, so open the app on one of those.
 
 ## With Podman
 
@@ -141,11 +179,12 @@ classic builder itself.
 sandbox/gradlew -p sandbox stackAgent stackBrowser assemble acceptanceTest
 ```
 
-It starts its own copy of the stack with Docker Compose (Testcontainers), runs all its scenarios (the three service ones and the browser ones), checks the
-recordings the reporter wrote, and tears the stack down. On Podman it uses `docker-compose.podman.yml` and the classic
-builder (see [With Podman](#with-podman)), and waits for the services on their published ports instead of through
-Testcontainers' ambassador container, which needs container links that Podman does not support. It uses the same fixed ports (4318, 15432, 15433, 8080, 8081), so stop a
-stack started by hand first. Neither `e2eTest` nor `acceptanceTest` is part of `build`.
+It starts its own copy of the stack with Docker Compose (Testcontainers), runs all its scenarios (the three service
+ones and the three browser ones), checks the recordings the reporter wrote, and tears the stack down. On Podman it
+uses `docker-compose.podman.yml` and the classic builder (see [With Podman](#with-podman)), and waits for the services
+on their published ports instead of through Testcontainers' ambassador container, which needs container links that
+Podman does not support. It uses the same fixed ports (3000, 4318, 15432, 15433, 8080, 8081), so stop a stack started
+by hand first. Neither `e2eTest` nor `acceptanceTest` is part of `build`.
 
 ## Running orders-service from IntelliJ
 
@@ -200,7 +239,7 @@ above.
 - **Podman: the first request right after `up --wait` fails (`connection reset`, `connection was aborted`).** The
   services are up, but Podman forwards the published ports to them only some seconds later; retry.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
-  15432, 15433, 8080 or 8081: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
+  15432, 15433, 8080, 8081 or 3000: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
   to move it).
 - **`POST /orders` answers `5xx` and the hop to inventory-service is marked failed.** orders-service cannot reach
   inventory-service, so no inventory-service server span is recorded; the orders-service to inventory-service hop

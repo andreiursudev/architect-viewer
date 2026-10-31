@@ -138,8 +138,8 @@ Recordings themselves live outside the workspace (default `recordings/` next to 
 
 ## 9. Data model (outline — builder refines)
 
-- **Component**: id, type (`service | database | kafka-cluster | topic | external-mock | client`), display name, aliases, tags.
-- **Interaction event** (level 1): id, recording id, trace/span ids, parent id, timestamp, duration, source component, target component, kind (`http | kafka-produce | kafka-consume | db | ...`), protocol details (method/route/status, topic/partition/offset/key, SQL/params/rows), request/response payload (inline or payload ref), headers, facts (for layers).
+- **Component**: id, type (`service | database | frontend | kafka-cluster | topic | external-mock | client`), display name, aliases, tags.
+- **Interaction event** (level 1): id, recording id, trace/span ids, parent id, timestamp, duration, source component, target component, kind (`http | ui | kafka-produce | kafka-consume | db | ...`), protocol details (method/route/status, topic/partition/offset/key, SQL/params/rows), request/response payload (inline or payload ref), headers, facts (for layers).
 - **Method event** (level 2): id, parent interaction or parent method, component, class, method, args, return or exception, duration, thread, annotations.
 - **Recording manifest**: run id, scenario id, kind (`e2e | manual | test`), test identity when kind=test, start/stop, reporter version, schemaVersion, components seen.
 - Kafka topics are modelled so the board can show them either as a node or as a labelled channel between producer and consumer (presentation is a builder/UI call).
@@ -197,6 +197,10 @@ Claude's calls in this step (owner to check):
 ### Step 3 — methods inside services (level 2) in the sequence view
 
 See `2026-10-30-step-3-method-capture-design.md`.
+
+### Step 4 — a browser frontend, recorded inside the browser
+
+See `2026-10-31-step-4-frontend-design.md`.
 
 ### Explicitly later (each when the sandbox needs it)
 

@@ -434,7 +434,8 @@ const api = await playwright.request.newContext({
 ```
 
 For browser tests, don't add headers to everything the browser sends: they also reach the frontend and third
-parties, and can trigger CORS preflights. Open a recording window around each test instead:
+parties, and can trigger CORS preflights. For a frontend that records through `@stackvibed/browser` (see
+[Frontends](#frontends)) tag the page instead. For one that doesn't, open a recording window around each test:
 `POST http://localhost:4318/api/recordings/start` with body `{"scenarioId":"<id>"}`, wait about 1 s after the test
 so late spans arrive, then `POST http://localhost:4318/api/recordings/stop`. Only one window can be open at a time,
 so set `workers: 1`.
@@ -484,6 +485,53 @@ Report to the user:
 - Anything you couldn't verify, and anything the tool would need. Name the tool gap; don't patch around it.
 - That `git status` in every service repository is unchanged.
 
+## Frontends
+
+A browser app can be recorded too: page loads, route changes, clicks, form submits and the fetches they trigger become
+steps of the run, with the fetch nested under the action that caused it and the services' hops below it. Unlike the
+JVM agent this needs **one line in the frontend's source**, so it breaks ground rule 0 for that repository: ask the
+user first, and skip it if they say no (the services are then recorded as before, with their callers as the entry
+points). `<TOOL_REPO>/sandbox/services/frontend` is the working example (React + Vite, served by nginx).
+
+1. **Install the package.** `tool/gradlew -p tool publishToMavenLocal` builds the npm tarball
+   `<TOOL_REPO>/tool/browser-sdk/build/npm/stackvibed-browser-0.1.0.tgz` (also in `~/.m2` as
+   `io/stackvibed/stack-browser`). Copy it into the stack repo and install it with `npm install --no-save <path to the tarball>`: not into
+   `package.json`, as the tarball changes on every tool build and a locked `file:` dependency then fails npm's
+   integrity check. A later plain `npm install` prunes it again, so do the install in the frontend's local build
+   step (the sandbox does it in a Gradle task, after `npmInstall`).
+2. **Start the recording before the app renders**, in the entry file:
+
+   ```ts
+   import { startStackRecording } from '@stackvibed/browser';
+
+   startStackRecording({ component: 'frontend' }); // before createRoot(...).render(...)
+   ```
+
+   `component` is the box's name on the board (as `OTEL_SERVICE_NAME` for a service). `reporterUrl` defaults to
+   `http://localhost:4318`, the compose reporter. If the reporter is unreachable the page only logs one
+   `console.warn`; the app is not affected.
+3. **Call the services on the page's own origin.** Only same-origin fetches get the `traceparent` and `baggage`
+   headers that join the services' spans to the browser's, so serve the app and proxy its API calls (nginx, or the
+   dev server's proxy), as the sandbox's `nginx.conf` does. A fetch to another origin still goes through, without those
+   headers, and the service's spans do not join the run. The package adds no other header, so it triggers no extra
+   CORS preflight.
+4. **The reporter allows the export.** It answers CORS on `POST /v1/traces` only: origins `http://localhost:<any
+   port>` and `http://127.0.0.1:<any port>`, method `POST`, request header `Content-Type`. Open the app on one of
+   those; from another origin (a host name, `https`) the browser blocks the export and nothing is recorded.
+5. **Playwright tests.** With the Java harness, call `StackBrowser.tag(page)` inside a `@StackScenario` test before the
+   first `page.navigate(...)`: it sets `window.__STACK__ = { scenario, run }` on every page load, so the spans carry
+   the run (and the fetches carry it as `baggage`, so the services' spans join it). Call `StackBrowser.flush(page)`
+   before the test returns: it waits up to one second for spans still open (a fetch ends some 100 to 300 ms after its
+   response) and exports them, because a closed page loses what it has not sent yet. The package also exports when
+   the page is hidden, but the test may close it first. With another Playwright flavour do the same by hand:
+   `page.addInitScript` to set `window.__STACK__`, and `await page.evaluate(() => window.__STACK_FLUSH__())` at the end.
+6. **Manual clicking** needs neither: open a recording window on the reporter
+   (`POST /api/recordings/start`), use the app, wait a second, close it (`POST /api/recordings/stop`).
+
+Chromium is the only browser tried, and a React SPA the only framework (the package itself is framework-neutral).
+The viewer shows what a click did by the element's `data-testid`, else its `aria-label` or text, so add
+`data-testid` to the elements the flows go through; it reads better and survives text changes.
+
 ## Troubleshooting
 
 - **The service exits with `Error opening zip file` / agent not found**: `build/stack-agent/` is empty; run
@@ -494,5 +542,8 @@ Report to the user:
 - **A run is missing right after a test**: spans are exported every 200 ms; it appears a moment later.
 - **A hop to another service shows only a host name**: that service doesn't run under the agent (or has no
   `OTEL_SERVICE_NAME`), so only the caller's view of the call is recorded.
+- **A frontend shows no steps, or its fetches are missing**: the app is not opened on `localhost` or `127.0.0.1`
+  (CORS), `startStackRecording` runs after the first render or fetch, or the test closed the page without
+  `StackBrowser.flush(page)`.
 - **Podman: the first request after `up --wait` fails** (`connection reset`): the ports are forwarded a few
   seconds late; retry.
