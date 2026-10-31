@@ -147,7 +147,8 @@ class SandboxAcceptanceTest {
     fun `browsing stock is recorded from the browser`() {
         inBrowser { FrontendScenarios(it, FRONTEND_URL).browseStock() }
 
-        val run = awaitRecording(scenario = "browse-stock", minEvents = 4)
+        // Real recording: 1 ui navigation and 1 fetch (frontend), then inventory-service's server span, its database call and 2 methods.
+        val run = awaitRecording(scenario = "browse-stock", minEvents = 6)
 
         (run.manifest["componentsSeen"] as List<*>) shouldContainAll listOf("frontend", "inventory-service")
         val navigation = run.events.single { it["type"] == "ui.navigation" }
@@ -173,9 +174,9 @@ class SandboxAcceptanceTest {
         var orderId = ""
         inBrowser { orderId = FrontendScenarios(it, FRONTEND_URL).placeOrder() }
 
-        // 3 ui navigations, 2+ ui actions, 3 frontend fetches, their server spans, orders-service's call to
-        // inventory-service and the databases and methods below them.
-        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 16)
+        // Real recording: 3 ui navigations, 3 ui actions, 3 frontend fetches, 4 server spans, orders-service's call to
+        // inventory-service, 4 database calls and 11 methods (7 in orders-service, 4 in inventory-service).
+        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 29)
 
         val navigations = run.events.filter { it["type"] == "ui.navigation" }.sortedBy { it["startEpochNanos"] as Long }
         navigations.map { it["route"] } shouldBe listOf("/", "/order", "/orders/$orderId")
@@ -203,7 +204,9 @@ class SandboxAcceptanceTest {
     fun `an out-of-stock order is recorded from the browser`() {
         inBrowser { FrontendScenarios(it, FRONTEND_URL).placeOrderOutOfStock() }
 
-        val run = awaitRecording(scenario = "place-order-out-of-stock-in-browser", minEvents = 8)
+        // Real recording: 1 ui navigation, 2 ui actions, 1 frontend fetch, 2 server spans, orders-service's failed call to
+        // inventory-service, 1 database call and 5 methods.
+        val run = awaitRecording(scenario = "place-order-out-of-stock-in-browser", minEvents = 13)
 
         val fetch = run.events.single { it["type"] == "http.client" && it["component"] == "frontend" }
         fetch["method"] shouldBe "POST"

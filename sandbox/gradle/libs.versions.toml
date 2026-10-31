@@ -23,6 +23,7 @@ stack-tool = "0.1.0-SNAPSHOT"
 [libraries]
 # The tool
 stack-agent-extension = { module = "io.stackvibed:stack-agent-extension", version.ref = "stack-tool" }
+stack-browser = { module = "io.stackvibed:stack-browser", version.ref = "stack-tool" }
 stack-test-harness = { module = "io.stackvibed:stack-test-harness", version.ref = "stack-tool" }
 opentelemetry-javaagent = { module = "io.opentelemetry.javaagent:opentelemetry-javaagent", version.ref = "opentelemetry-javaagent" }
 

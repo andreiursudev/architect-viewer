@@ -16,9 +16,16 @@ val stackExtensionJar = configurations.create("stackExtensionJar") {
     isTransitive = false
 }
 
+// The browser SDK (@stackvibed/browser) as the tarball the tool publishes to mavenLocal; the frontend installs it.
+val stackBrowserTgz = configurations.create("stackBrowserTgz") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+
 dependencies {
     otelAgentJar(libs.opentelemetry.javaagent)
     stackExtensionJar(libs.stack.agent.extension)
+    stackBrowserTgz(libs.stack.browser) { artifact { type = "tgz" } }
 }
 
 tasks.register<Sync>("stackAgent") {
@@ -27,4 +34,12 @@ tasks.register<Sync>("stackAgent") {
     from(otelAgentJar) { rename { "opentelemetry-javaagent.jar" } }
     from(stackExtensionJar) { rename { "stack-agent-extension.jar" } }
     into(layout.buildDirectory.dir("stack-agent"))
+}
+
+// The tarball under a fixed name, for services/frontend (`npm install ../../build/stack-browser/stack-browser.tgz`).
+tasks.register<Sync>("stackBrowser") {
+    group = "stack"
+    description = "Copies the @stackvibed/browser tarball into build/stack-browser/stack-browser.tgz."
+    from(stackBrowserTgz) { rename { "stack-browser.tgz" } }
+    into(layout.buildDirectory.dir("stack-browser"))
 }

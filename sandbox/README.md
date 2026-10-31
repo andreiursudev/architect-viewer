@@ -40,10 +40,11 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    least `tool/gradlew -p tool :reporter:dockerImage` for a reporter change), then steps 2 and 3, so the stack picks
    up the new reporter image and agent extension.
 
-2. Put the agent jars in `sandbox/build/stack-agent/` and build the service jars:
+2. Put the agent jars in `sandbox/build/stack-agent/`, the browser SDK tarball in `sandbox/build/stack-browser/`, and
+   build the service jars and the frontend bundle:
 
    ```sh
-   sandbox/gradlew -p sandbox stackAgent assemble
+   sandbox/gradlew -p sandbox stackAgent stackBrowser assemble
    ```
 
 3. Start the stack. `--wait` returns once both services report healthy (their `/actuator/health`; orders-service
@@ -137,10 +138,10 @@ classic builder itself.
 ## Acceptance test
 
 ```sh
-sandbox/gradlew -p sandbox stackAgent acceptanceTest
+sandbox/gradlew -p sandbox stackAgent stackBrowser assemble acceptanceTest
 ```
 
-It starts its own copy of the stack with Docker Compose (Testcontainers), runs all three scenarios, checks the
+It starts its own copy of the stack with Docker Compose (Testcontainers), runs all its scenarios (the three service ones and the browser ones), checks the
 recordings the reporter wrote, and tears the stack down. On Podman it uses `docker-compose.podman.yml` and the classic
 builder (see [With Podman](#with-podman)), and waits for the services on their published ports instead of through
 Testcontainers' ambassador container, which needs container links that Podman does not support. It uses the same fixed ports (4318, 15432, 15433, 8080, 8081), so stop a
