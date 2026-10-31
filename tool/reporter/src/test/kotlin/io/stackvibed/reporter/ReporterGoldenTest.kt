@@ -108,6 +108,14 @@ class ReporterGoldenTest {
         folder.resolve("manifest.json").readText() shouldBe golden("create-order-methods/manifest.json")
     }
 
+    @Test fun `browser run matches golden recording`() {
+        postProtobuf("/v1/traces", OtlpFixtures.browserPlaceOrderRun()).statusCode() shouldBe 200
+
+        val folder = recordingFolder("_place-order-in-browser_run-6")
+        folder.resolve("events.jsonl").readText() shouldBe golden("place-order-in-browser/events.jsonl")
+        folder.resolve("manifest.json").readText() shouldBe golden("place-order-in-browser/manifest.json")
+    }
+
     @Test fun `malformed protobuf is a 400`() {
         val response = http.send(
             HttpRequest.newBuilder(url("/v1/traces")).header("Content-Type", "application/x-protobuf")

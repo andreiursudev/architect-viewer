@@ -12,6 +12,10 @@ import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
+import io.stackvibed.model.UiActionEvent
+import io.stackvibed.model.UiActionKind
+import io.stackvibed.model.UiNavigationEvent
+import io.stackvibed.model.UiNavigationKind
 import tools.jackson.core.JacksonException
 import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.json.JsonMapper
@@ -27,9 +31,10 @@ fun interface EventDraft {
 data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
 
 /**
- * Maps OTLP spans to recording events: HTTP server spans, DB client spans, HTTP client spans and the INTERNAL spans the agent
- * writes for method calls (those carrying `stack.method.class`). Every other span is dropped, and so are DB client spans
- * without a statement.
+ * Maps OTLP spans to recording events: HTTP server spans, DB client spans, HTTP client spans (the browser's fetch spans among
+ * them), the INTERNAL spans the agent writes for method calls (those carrying `stack.method.class`) and the INTERNAL
+ * navigation and action spans of the browser package, recognised by their span name. Every other span is dropped, and so are
+ * DB client spans without a statement and ui spans with an unknown kind.
  */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
@@ -44,7 +49,11 @@ class SpanEventMapper {
                         Span.SpanKind.SPAN_KIND_SERVER -> httpDraft(span, attrs, component)
                         Span.SpanKind.SPAN_KIND_CLIENT ->
                             if (isDb(attrs)) dbDraft(span, attrs, component) else clientDraft(span, attrs, component)
-                        Span.SpanKind.SPAN_KIND_INTERNAL -> methodDraft(span, attrs, component)
+                        Span.SpanKind.SPAN_KIND_INTERNAL -> when (span.name) {
+                            StackAttributes.NAVIGATION_SPAN -> navigationDraft(span, attrs, component)
+                            StackAttributes.ACTION_SPAN -> actionDraft(span, attrs, component)
+                            else -> methodDraft(span, attrs, component)
+                        }
                         else -> null
                     } ?: continue
                     add(MappedSpan(SpanTags(attrs.string(StackAttributes.SCENARIO), attrs.string(StackAttributes.RUN)), draft))
@@ -153,6 +162,52 @@ class SpanEventMapper {
                 exceptionType = attrs.string(StackAttributes.METHOD_EXCEPTION_TYPE),
                 exceptionMessage = attrs.string(StackAttributes.METHOD_EXCEPTION_MESSAGE),
                 thread = attrs.string(StackAttributes.METHOD_THREAD),
+            )
+        }
+    }
+
+    private fun navigationDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        val kind = when (attrs.string(StackAttributes.UI_NAVIGATION_KIND)) {
+            "load" -> UiNavigationKind.LOAD
+            "route" -> UiNavigationKind.ROUTE
+            else -> return null
+        }
+        return EventDraft { runId ->
+            UiNavigationEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                url = attrs.string(StackAttributes.UI_URL) ?: "",
+                route = attrs.string(StackAttributes.UI_ROUTE) ?: "",
+                kind = kind,
+            )
+        }
+    }
+
+    private fun actionDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        val event = when (attrs.string(StackAttributes.UI_ACTION_EVENT)) {
+            "click" -> UiActionKind.CLICK
+            "submit" -> UiActionKind.SUBMIT
+            else -> return null
+        }
+        return EventDraft { runId ->
+            UiActionEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                event = event,
+                target = attrs.string(StackAttributes.UI_ACTION_TARGET) ?: "",
+                route = attrs.string(StackAttributes.UI_ROUTE) ?: "",
             )
         }
     }

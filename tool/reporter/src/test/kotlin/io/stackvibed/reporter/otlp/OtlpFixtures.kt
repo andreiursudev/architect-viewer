@@ -31,6 +31,20 @@ object OtlpFixtures {
     const val CLIENT_START_NANOS = SERVER_START_NANOS + 2_000_000L
     const val CLIENT_END_NANOS = CLIENT_START_NANOS + 28_000_000L
 
+    const val BROWSER_LOAD_SPAN_ID = "9a8b7c6d5e4f3021"
+    const val BROWSER_DOCUMENT_FETCH_SPAN_ID = "8b7c6d5e4f302192"
+    const val BROWSER_STOCK_FETCH_SPAN_ID = "7c6d5e4f302192a3"
+    const val BROWSER_CLICK_SPAN_ID = "6d5e4f302192a3b4"
+    const val BROWSER_ORDER_ROUTE_SPAN_ID = "5e4f302192a3b4c5"
+    const val BROWSER_SUBMIT_SPAN_ID = "4f302192a3b4c5d6"
+    const val BROWSER_POST_FETCH_SPAN_ID = "302192a3b4c5d6e7"
+    const val BROWSER_ORDER_PAGE_ROUTE_SPAN_ID = "2192a3b4c5d6e7f8"
+    const val BROWSER_GET_FETCH_SPAN_ID = "192a3b4c5d6e7f80"
+
+    const val BROWSER_START_NANOS = 1_760_000_100_000_000_000L
+    const val FRONTEND_ORIGIN = "http://localhost:3000"
+    const val ORDER_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
     const val REQUEST_BODY = """{"customerId":"c-1","items":[{"sku":"A-1","quantity":2}]}"""
     const val RESPONSE_BODY = """{"id":1,"status":"CREATED"}"""
     const val INSERT_STATEMENT = "insert into orders (customer_id, status, total, created_at) values (?, ?, ?, ?)"
@@ -148,8 +162,86 @@ object OtlpFixtures {
             }
             .build()
 
-    fun request(serviceName: String?, spans: List<Span>): ExportTraceServiceRequest {
-        val resource = Resource.newBuilder()
+    /**
+     * The sandbox frontend's place-order scenario as the browser package exports it: a page load and its stock fetch, a click
+     * that leads to the order form, the form submit with its POST, and the route change to the new order's page with its GET.
+     * Spans are listed in time order; the `documentFetch` span the OTel web SDK adds carries no stack name and must be dropped.
+     */
+    fun browserPlaceOrderRun(scenario: String = "place-order-in-browser", run: String = "run-6"): ExportTraceServiceRequest {
+        val t = BROWSER_START_NANOS
+        val orderPath = "/orders/$ORDER_ID"
+        return request(
+            "frontend",
+            listOf(
+                navigationSpan(BROWSER_LOAD_SPAN_ID, scenario, run, "load", "$FRONTEND_ORIGIN/", "/", t, t + 120_000_000L),
+                span(BROWSER_DOCUMENT_FETCH_SPAN_ID, parent = BROWSER_LOAD_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_INTERNAL, name = "documentFetch", t + 5_000_000L, t + 15_000_000L)
+                    .addAllAttributes(tags(scenario, run))
+                    .build(),
+                fetchSpan(BROWSER_STOCK_FETCH_SPAN_ID, scenario, run, "GET", "$FRONTEND_ORIGIN/stock", 200, t + 30_000_000L, t + 55_000_000L),
+                actionSpan(BROWSER_CLICK_SPAN_ID, scenario, run, "click", "to-order", "/", t + 500_000_000L, t + 501_000_000L),
+                navigationSpan(BROWSER_ORDER_ROUTE_SPAN_ID, scenario, run, "route", "$FRONTEND_ORIGIN/order", "/order", t + 502_000_000L, t + 504_000_000L),
+                actionSpan(BROWSER_SUBMIT_SPAN_ID, scenario, run, "submit", "order-form", "/order", t + 2_000_000_000L, t + 2_001_000_000L),
+                fetchSpan(BROWSER_POST_FETCH_SPAN_ID, scenario, run, "POST", "$FRONTEND_ORIGIN/orders", 201, t + 2_001_000_000L, t + 2_061_000_000L),
+                navigationSpan(BROWSER_ORDER_PAGE_ROUTE_SPAN_ID, scenario, run, "route", "$FRONTEND_ORIGIN$orderPath", orderPath, t + 2_070_000_000L, t + 2_072_000_000L),
+                fetchSpan(BROWSER_GET_FETCH_SPAN_ID, scenario, run, "GET", "$FRONTEND_ORIGIN$orderPath", 200, t + 2_072_000_000L, t + 2_090_000_000L),
+            ),
+            resourceAttributes = listOf(str("telemetry.sdk.language", "webjs")),
+        )
+    }
+
+    /** A `stack.navigation` INTERNAL span as the browser package writes it; a null [kind], [url] or [route] leaves the attribute out. */
+    fun navigationSpan(
+        spanId: String,
+        scenario: String?,
+        run: String?,
+        kind: String?,
+        url: String?,
+        route: String?,
+        startNanos: Long,
+        endNanos: Long,
+    ): Span =
+        span(spanId, parent = null, kind = Span.SpanKind.SPAN_KIND_INTERNAL, name = "stack.navigation", startNanos, endNanos)
+            .addAllAttributes(tags(scenario, run))
+            .apply {
+                if (kind != null) addAttributes(str("stack.ui.navigation.kind", kind))
+                if (url != null) addAttributes(str("stack.ui.url", url))
+                if (route != null) addAttributes(str("stack.ui.route", route))
+            }
+            .build()
+
+    /** A `stack.action` INTERNAL span as the browser package writes it; a null [event], [target] or [route] leaves the attribute out. */
+    fun actionSpan(
+        spanId: String,
+        scenario: String?,
+        run: String?,
+        event: String?,
+        target: String?,
+        route: String?,
+        startNanos: Long,
+        endNanos: Long,
+    ): Span =
+        span(spanId, parent = null, kind = Span.SpanKind.SPAN_KIND_INTERNAL, name = "stack.action", startNanos, endNanos)
+            .addAllAttributes(tags(scenario, run))
+            .apply {
+                if (event != null) addAttributes(str("stack.ui.action.event", event))
+                if (target != null) addAttributes(str("stack.ui.action.target", target))
+                if (route != null) addAttributes(str("stack.ui.route", route))
+            }
+            .build()
+
+    /** A fetch as the browser's instrumentation exports it: a CLIENT span with stable HTTP semantic convention attributes. */
+    private fun fetchSpan(spanId: String, scenario: String?, run: String?, method: String, url: String, status: Long, startNanos: Long, endNanos: Long): Span =
+        span(spanId, parent = null, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = method, startNanos, endNanos)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("http.request.method", method))
+            .addAttributes(str("url.full", url))
+            .addAttributes(str("server.address", "localhost"))
+            .addAttributes(long("server.port", 3000))
+            .addAttributes(long("http.response.status_code", status))
+            .build()
+
+    fun request(serviceName: String?, spans: List<Span>, resourceAttributes: List<KeyValue> = emptyList()): ExportTraceServiceRequest {
+        val resource = Resource.newBuilder().addAllAttributes(resourceAttributes)
         if (serviceName != null) resource.addAttributes(str("service.name", serviceName))
         return ExportTraceServiceRequest.newBuilder()
             .addResourceSpans(

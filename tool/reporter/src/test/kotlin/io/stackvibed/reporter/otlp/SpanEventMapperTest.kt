@@ -1,6 +1,7 @@
 package io.stackvibed.reporter.otlp
 
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.opentelemetry.proto.trace.v1.Span
@@ -9,6 +10,10 @@ import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
+import io.stackvibed.model.UiActionEvent
+import io.stackvibed.model.UiActionKind
+import io.stackvibed.model.UiNavigationEvent
+import io.stackvibed.model.UiNavigationKind
 import org.junit.jupiter.api.Test
 
 class SpanEventMapperTest {
@@ -242,5 +247,96 @@ class SpanEventMapperTest {
 
     @Test fun `component id is the slug of the service name`() {
         http(OtlpFixtures.request("Orders Service", listOf(OtlpFixtures.serverSpan()))).component shouldBe "orders-service"
+    }
+
+    @Test fun `browser navigation and action spans map to ui events`() {
+        val ui = events(OtlpFixtures.browserPlaceOrderRun()).filter { it is UiNavigationEvent || it is UiActionEvent }
+        ui.map { it.spanId } shouldBe listOf(
+            OtlpFixtures.BROWSER_LOAD_SPAN_ID,
+            OtlpFixtures.BROWSER_CLICK_SPAN_ID,
+            OtlpFixtures.BROWSER_ORDER_ROUTE_SPAN_ID,
+            OtlpFixtures.BROWSER_SUBMIT_SPAN_ID,
+            OtlpFixtures.BROWSER_ORDER_PAGE_ROUTE_SPAN_ID,
+        )
+
+        val load = ui[0] as UiNavigationEvent
+        load.component shouldBe "frontend"
+        load.kind shouldBe UiNavigationKind.LOAD
+        load.url shouldBe "http://localhost:3000/"
+        load.route shouldBe "/"
+        load.eventId shouldBe "${OtlpFixtures.TRACE_ID}-${OtlpFixtures.BROWSER_LOAD_SPAN_ID}"
+        load.parentSpanId shouldBe null
+        load.runId shouldBe "r"
+        load.startEpochNanos shouldBe OtlpFixtures.BROWSER_START_NANOS
+        load.durationNanos shouldBe 120_000_000L
+
+        val click = ui[1] as UiActionEvent
+        click.component shouldBe "frontend"
+        click.event shouldBe UiActionKind.CLICK
+        click.target shouldBe "to-order"
+        click.route shouldBe "/"
+        click.durationNanos shouldBe 1_000_000L
+
+        val route = ui[2] as UiNavigationEvent
+        route.kind shouldBe UiNavigationKind.ROUTE
+        route.url shouldBe "http://localhost:3000/order"
+        route.route shouldBe "/order"
+
+        val submit = ui[3] as UiActionEvent
+        submit.event shouldBe UiActionKind.SUBMIT
+        submit.target shouldBe "order-form"
+        submit.route shouldBe "/order"
+
+        (ui[4] as UiNavigationEvent).route shouldBe "/orders/${OtlpFixtures.ORDER_ID}"
+    }
+
+    @Test fun `ui spans without url route or target map to empty strings`() {
+        val navigation = OtlpFixtures.navigationSpan("1111111111111111", null, null, "load", url = null, route = null, 1, 2)
+        val action = OtlpFixtures.actionSpan("2222222222222222", null, null, "click", target = null, route = null, 3, 4)
+        val mapped = events(OtlpFixtures.request("frontend", listOf(navigation, action)))
+        (mapped[0] as UiNavigationEvent).apply {
+            url shouldBe ""
+            route shouldBe ""
+        }
+        (mapped[1] as UiActionEvent).apply {
+            target shouldBe ""
+            route shouldBe ""
+        }
+    }
+
+    @Test fun `browser fetch maps to http client event of the frontend`() {
+        val fetches = events(OtlpFixtures.browserPlaceOrderRun()).filterIsInstance<HttpClientEvent>()
+        fetches.map { it.spanId } shouldBe listOf(
+            OtlpFixtures.BROWSER_STOCK_FETCH_SPAN_ID,
+            OtlpFixtures.BROWSER_POST_FETCH_SPAN_ID,
+            OtlpFixtures.BROWSER_GET_FETCH_SPAN_ID,
+        )
+        fetches.forEach { it.component shouldBe "frontend" }
+        fetches.map { it.method to it.url } shouldBe listOf(
+            "GET" to "http://localhost:3000/stock",
+            "POST" to "http://localhost:3000/orders",
+            "GET" to "http://localhost:3000/orders/${OtlpFixtures.ORDER_ID}",
+        )
+        fetches.map { it.status } shouldBe listOf(200, 201, 200)
+        fetches[0].serverAddress shouldBe "localhost"
+        fetches[0].serverPort shouldBe 3000
+    }
+
+    @Test fun `unknown web spans are dropped`() {
+        val request = OtlpFixtures.browserPlaceOrderRun()
+        request.resourceSpansList.single().scopeSpansList.single().spansList.map { it.name }.contains("documentFetch") shouldBe true
+        val mapped = events(request)
+        mapped shouldHaveSize 8
+        mapped.map { it.spanId } shouldNotContain OtlpFixtures.BROWSER_DOCUMENT_FETCH_SPAN_ID
+    }
+
+    @Test fun `ui span with an unknown kind is dropped`() {
+        val spans = listOf(
+            OtlpFixtures.navigationSpan("1111111111111111", "s", "r", "reload", "http://localhost:3000/", "/", 1, 2),
+            OtlpFixtures.navigationSpan("2222222222222222", "s", "r", kind = null, "http://localhost:3000/", "/", 1, 2),
+            OtlpFixtures.actionSpan("3333333333333333", "s", "r", "hover", "to-order", "/", 1, 2),
+            OtlpFixtures.actionSpan("4444444444444444", "s", "r", event = null, "to-order", "/", 1, 2),
+        )
+        events(OtlpFixtures.request("frontend", spans)) shouldBe emptyList()
     }
 }
