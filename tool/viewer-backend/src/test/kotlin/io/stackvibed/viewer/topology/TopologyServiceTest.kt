@@ -166,6 +166,23 @@ class TopologyServiceTest {
     }
 
     @Test
+    fun `frontend seen only in componentsSeen with a curated ui connection is a frontend`() {
+        recordingsDir.resolve("run-9").createDirectories()
+        recordingsDir.resolve("run-9/manifest.json").writeText(
+            """{"schemaVersion":4,"runId":"run-9","scenarioId":"browse","kind":"e2e","startedAt":"2026-10-28T10:00:00Z","lastEventAt":null,"stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["web"]}""",
+        )
+        recordingsDir.resolve("run-9/events.jsonl").writeText("")
+        store.saveConnection(definition("e2e-client", "web", ConnectionKind.UI, ConnectionState.MANUAL))
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "web" to ComponentType.FRONTEND,
+        )
+    }
+
+    @Test
     fun `method events add no components or connections`() {
         Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, recordingsDir)
         val withoutMethodsDir = tmp.resolve("without-methods")

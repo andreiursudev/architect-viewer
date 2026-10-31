@@ -88,7 +88,8 @@ class TopologyService(
             FlowStepKind.METHOD -> return
             FlowStepKind.UI -> ConnectionKind.UI
         }
-        // Only the e2e client calls from outside; every other caller, of an HTTP hop or a database, is a service.
+        // The e2e client calls from outside; the caller of an HTTP hop or a database is a service (a frontend once it is seen
+        // with ui steps); a ui step's target is the frontend.
         val toType = when (kind) {
             ConnectionKind.DB -> ComponentType.DATABASE
             ConnectionKind.UI -> ComponentType.FRONTEND
@@ -129,7 +130,7 @@ class TopologyService(
         }
         val known = curated.map { it.id }.toSet()
         val types = LinkedHashMap(observed.componentTypes)
-        curatedEndpoints(loaded).forEach { (id, type) -> types.putIfAbsent(id, type) }
+        curatedEndpoints(loaded).forEach { (id, type) -> types.merge(id, type, ::stronger) }
         val discovered = types
             .filterKeys { it !in known }
             .toSortedMap()
