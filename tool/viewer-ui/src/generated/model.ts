@@ -9,12 +9,12 @@
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ComponentType".
  */
-export type ComponentType = "service" | "database" | "client";
+export type ComponentType = "service" | "database" | "client" | "frontend";
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ConnectionKind".
  */
-export type ConnectionKind = "http" | "db";
+export type ConnectionKind = "http" | "db" | "ui";
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ConnectionState".
@@ -52,11 +52,11 @@ export interface ModelSchema {
     steps: {
       connectionId?: string | null;
       durationNanos: number;
-      event: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent;
+      event: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent | UiNavigationEvent | UiActionEvent;
       from: string;
       fromUnit?: string | null;
       handler?: null | MethodEvent;
-      kind: "http" | "db" | "method";
+      kind: "http" | "db" | "method" | "ui";
       label: string;
       parentStepId?: string | null;
       startEpochNanos: number;
@@ -66,7 +66,7 @@ export interface ModelSchema {
       toUnit?: string | null;
     }[];
   };
-  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent;
+  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent | UiNavigationEvent | UiActionEvent;
   recordingManifest: {
     componentsSeen: string[];
     kind: "e2e" | "manual" | "test";
@@ -225,6 +225,44 @@ export interface MethodEvent {
   thread?: string | null;
   traceId: string;
   type: "method";
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "UiNavigationEvent".
+ */
+export interface UiNavigationEvent {
+  component: string;
+  durationNanos: number;
+  eventId: string;
+  kind: "load" | "route";
+  parentSpanId?: string | null;
+  route: string;
+  runId: string;
+  schemaVersion: number;
+  spanId: string;
+  startEpochNanos: number;
+  traceId: string;
+  type: "ui.navigation";
+  url: string;
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "UiActionEvent".
+ */
+export interface UiActionEvent {
+  component: string;
+  durationNanos: number;
+  event: "click" | "submit";
+  eventId: string;
+  parentSpanId?: string | null;
+  route: string;
+  runId: string;
+  schemaVersion: number;
+  spanId: string;
+  startEpochNanos: number;
+  target: string;
+  traceId: string;
+  type: "ui.action";
 }
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema

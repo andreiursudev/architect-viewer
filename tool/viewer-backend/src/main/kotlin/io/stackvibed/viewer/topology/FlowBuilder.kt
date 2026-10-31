@@ -7,6 +7,8 @@ import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.UiActionEvent
+import io.stackvibed.model.UiNavigationEvent
 import io.stackvibed.model.view.Flow
 import io.stackvibed.model.view.FlowStep
 import io.stackvibed.model.view.FlowStepKind
@@ -73,6 +75,8 @@ class FlowBuilder {
                         fromUnit = (tree.owner(event) ?: tree.handlerOf(request))?.className, toUnit = event.className,
                     )
                 }
+                // Browser events become steps in a later change.
+                is UiNavigationEvent, is UiActionEvent -> null
             }
         }
         return Flow(manifest.runId, manifest.scenarioId, steps)

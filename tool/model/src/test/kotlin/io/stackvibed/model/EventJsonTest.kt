@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.stackvibed.model.view.FlowStepKind
+import io.stackvibed.model.workspace.ConnectionKind
 import org.junit.jupiter.api.Test
 import tools.jackson.module.kotlin.jacksonMapperBuilder
 import tools.jackson.module.kotlin.readValue
@@ -38,8 +39,44 @@ class EventJsonTest {
     fun `method event round-trips with type discriminator`() {
         val json = mapper.writeValueAsString(sampleMethodEvent)
         json shouldContain "\"type\":\"method\""
-        json shouldContain "\"schemaVersion\":3"
+        json shouldContain "\"schemaVersion\":$SCHEMA_VERSION"
         mapper.readValue<RecordingEvent>(json) shouldBe sampleMethodEvent
+    }
+
+    @Test
+    fun `ui navigation event round-trips with type discriminator`() {
+        val json = mapper.writeValueAsString(sampleUiNavigationEvent)
+        json shouldContain "\"type\":\"ui.navigation\""
+        json shouldContain "\"kind\":\"route\""
+        json shouldContain "\"schemaVersion\":4"
+        mapper.readValue<RecordingEvent>(json) shouldBe sampleUiNavigationEvent
+    }
+
+    @Test
+    fun `ui action event round-trips with type discriminator`() {
+        val json = mapper.writeValueAsString(sampleUiActionEvent)
+        json shouldContain "\"type\":\"ui.action\""
+        json shouldContain "\"event\":\"submit\""
+        json shouldContain "\"schemaVersion\":4"
+        mapper.readValue<RecordingEvent>(json) shouldBe sampleUiActionEvent
+    }
+
+    @Test
+    fun `version 3 lines still read`() {
+        // A literal method line from the reporter golden file recorded before schema version 4.
+        val line = """{"type":"method","schemaVersion":3,"eventId":"0af7651916cd43dd8448eb211c80319c-1a2b3c4d5e6f7081","runId":"run-3","traceId":"0af7651916cd43dd8448eb211c80319c","spanId":"1a2b3c4d5e6f7081","parentSpanId":"b7ad6b7169203331","component":"orders-service","startEpochNanos":1760000000001000000,"durationNanos":40000000,"className":"io.stackvibed.sandbox.orders.OrdersController","methodName":"create","parameterNames":["newOrder"],"arguments":["{\"customerId\":\"c-1\",\"sku\":\"sku-1\",\"quantity\":2}"],"returnValue":null,"exceptionType":null,"exceptionMessage":null,"thread":"http-nio-8080-exec-1"}"""
+        val event = mapper.readValue<RecordingEvent>(line)
+        event.schemaVersion shouldBe 3
+        event.shouldBeInstanceOf<MethodEvent>()
+    }
+
+    @Test
+    fun `frontend type and ui kinds serialise lowercase`() {
+        mapper.writeValueAsString(ComponentType.FRONTEND) shouldBe "\"frontend\""
+        mapper.writeValueAsString(FlowStepKind.UI) shouldBe "\"ui\""
+        mapper.writeValueAsString(ConnectionKind.UI) shouldBe "\"ui\""
+        mapper.writeValueAsString(UiNavigationKind.LOAD) shouldBe "\"load\""
+        mapper.writeValueAsString(UiActionKind.CLICK) shouldBe "\"click\""
     }
 
     @Test

@@ -63,7 +63,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        ) : (
+        ) : event.type === 'method' ? (
           <>
             <dt>Class</dt>
             <dd>{event.className}</dd>
@@ -76,7 +76,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
               </>
             )}
           </>
-        )}
+        ) : null /* ui events get their details in a later change */}
       </dl>
 
       {event.type === 'http.server' ? (
@@ -113,7 +113,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
         <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
           <p className="muted md-note">{clientCallNote(step)}</p>
         </Section>
-      ) : (
+      ) : event.type === 'method' ? (
         <>
           <Section title="Arguments" selected={kind === 'request'}>
             <Arguments method={event} titled={false} />
@@ -122,7 +122,7 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
             <Outcome method={event} titled={false} />
           </Section>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

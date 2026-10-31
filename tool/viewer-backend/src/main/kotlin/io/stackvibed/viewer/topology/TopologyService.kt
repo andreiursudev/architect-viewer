@@ -79,6 +79,7 @@ class TopologyService(
             FlowStepKind.HTTP -> ConnectionKind.HTTP
             FlowStepKind.DB -> ConnectionKind.DB
             FlowStepKind.METHOD -> return
+            FlowStepKind.UI -> return
         }
         // Only the e2e client calls from outside; every other caller, of an HTTP hop or a database, is a service.
         val toType = if (kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE

@@ -14,6 +14,11 @@ package io.stackvibed.agent.contract;
  * strings: each element of {@code args} is one argument rendered as JSON (e.g. {@code ["\"a\"","3"]}),
  * and {@link #METHOD_RETURN} is the rendered return value, absent for {@code void} methods and when
  * the method threw.
+ *
+ * <p>The browser package ({@code @stackvibed/browser}) writes the UI spans: {@link #NAVIGATION_SPAN}
+ * (page load or route change; {@link #UI_NAVIGATION_KIND} is {@code load} or {@code route}, with
+ * {@link #UI_URL} and {@link #UI_ROUTE}) and {@link #ACTION_SPAN} ({@link #UI_ACTION_EVENT} is {@code
+ * click} or {@code submit}, with {@link #UI_ACTION_TARGET} and {@link #UI_ROUTE}). Both are INTERNAL spans.
  */
 public final class StackAttributes {
 
@@ -38,6 +43,14 @@ public final class StackAttributes {
     public static final String METHOD_EXCEPTION_TYPE = "stack.method.exception.type";
     public static final String METHOD_EXCEPTION_MESSAGE = "stack.method.exception.message";
     public static final String METHOD_THREAD = "stack.method.thread";
+
+    public static final String NAVIGATION_SPAN = "stack.navigation";
+    public static final String ACTION_SPAN = "stack.action";
+    public static final String UI_NAVIGATION_KIND = "stack.ui.navigation.kind";
+    public static final String UI_URL = "stack.ui.url";
+    public static final String UI_ROUTE = "stack.ui.route";
+    public static final String UI_ACTION_EVENT = "stack.ui.action.event";
+    public static final String UI_ACTION_TARGET = "stack.ui.action.target";
 
     public static final int MAX_BODY_CHARS = 262_144;
 

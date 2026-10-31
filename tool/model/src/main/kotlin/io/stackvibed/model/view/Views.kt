@@ -47,6 +47,7 @@ enum class FlowStepKind {
     @JsonProperty("http") HTTP,
     @JsonProperty("db") DB,
     @JsonProperty("method") METHOD,
+    @JsonProperty("ui") UI,
 }
 
 data class FlowStep(

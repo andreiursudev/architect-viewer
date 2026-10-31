@@ -1,11 +1,11 @@
 {
   "$defs" : {
     "ComponentType" : {
-      "enum" : [ "service", "database", "client" ],
+      "enum" : [ "service", "database", "client", "frontend" ],
       "type" : "string"
     },
     "ConnectionKind" : {
-      "enum" : [ "http", "db" ],
+      "enum" : [ "http", "db", "ui" ],
       "type" : "string"
     },
     "ConnectionState" : {
@@ -299,6 +299,104 @@
       },
       "required" : [ "name" ],
       "type" : "object"
+    },
+    "UiActionEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "event" : {
+          "enum" : [ "click", "submit" ],
+          "type" : "string"
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "route" : {
+          "type" : "string"
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "target" : {
+          "type" : "string"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "ui.action"
+        }
+      },
+      "required" : [ "component", "durationNanos", "event", "eventId", "route", "runId", "schemaVersion", "spanId", "startEpochNanos", "target", "traceId", "type" ],
+      "type" : "object"
+    },
+    "UiNavigationEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "kind" : {
+          "enum" : [ "load", "route" ],
+          "type" : "string"
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "route" : {
+          "type" : "string"
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "ui.navigation"
+        },
+        "url" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "component", "durationNanos", "eventId", "kind", "route", "runId", "schemaVersion", "spanId", "startEpochNanos", "traceId", "type", "url" ],
+      "type" : "object"
     }
   },
   "$schema" : "https://json-schema.org/draft/2020-12/schema",
@@ -405,6 +503,10 @@
                   "$ref" : "#/$defs/HttpClientEvent"
                 }, {
                   "$ref" : "#/$defs/MethodEvent"
+                }, {
+                  "$ref" : "#/$defs/UiNavigationEvent"
+                }, {
+                  "$ref" : "#/$defs/UiActionEvent"
                 } ]
               },
               "from" : {
@@ -421,7 +523,7 @@
                 } ]
               },
               "kind" : {
-                "enum" : [ "http", "db", "method" ],
+                "enum" : [ "http", "db", "method", "ui" ],
                 "type" : "string"
               },
               "label" : {
@@ -466,6 +568,10 @@
         "$ref" : "#/$defs/HttpClientEvent"
       }, {
         "$ref" : "#/$defs/MethodEvent"
+      }, {
+        "$ref" : "#/$defs/UiNavigationEvent"
+      }, {
+        "$ref" : "#/$defs/UiActionEvent"
       } ]
     },
     "recordingManifest" : {

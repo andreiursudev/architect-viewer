@@ -21,6 +21,7 @@ data class ComponentDefinition(
 enum class ConnectionKind {
     @JsonProperty("http") HTTP,
     @JsonProperty("db") DB,
+    @JsonProperty("ui") UI,
 }
 
 enum class ConnectionState {

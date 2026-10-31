@@ -70,3 +70,31 @@ val sampleMethodEvent = MethodEvent(
     exceptionMessage = null,
     thread = "http-nio-8080-exec-1",
 )
+
+val sampleUiNavigationEvent = UiNavigationEvent(
+    eventId = "ev-5",
+    runId = "run-1",
+    traceId = "0af7651916cd43dd8448eb211c80319c",
+    spanId = "f1e2d3c4b5a69788",
+    parentSpanId = null,
+    component = "storefront",
+    startEpochNanos = 1_700_000_000_004_000_000L,
+    durationNanos = 0L,
+    url = "http://localhost:5173/orders",
+    route = "/orders",
+    kind = UiNavigationKind.ROUTE,
+)
+
+val sampleUiActionEvent = UiActionEvent(
+    eventId = "ev-6",
+    runId = "run-1",
+    traceId = "0af7651916cd43dd8448eb211c80319c",
+    spanId = "a9b8c7d6e5f40312",
+    parentSpanId = null,
+    component = "storefront",
+    startEpochNanos = 1_700_000_000_005_000_000L,
+    durationNanos = 0L,
+    event = UiActionKind.SUBMIT,
+    target = "place-order",
+    route = "/orders",
+)

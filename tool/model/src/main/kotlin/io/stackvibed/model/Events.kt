@@ -6,14 +6,16 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 /**
  * Version of the recorded-event / manifest JSON format. Any change to the schema snapshot is deliberate.
- * Version 2 added [HttpClientEvent], version 3 added [MethodEvent]; older recordings still deserialise unchanged.
+ * Version 2 added [HttpClientEvent], version 3 added [MethodEvent], version 4 added [UiNavigationEvent] and
+ * [UiActionEvent]; older recordings still deserialise unchanged.
  */
-const val SCHEMA_VERSION = 3
+const val SCHEMA_VERSION = 4
 
 enum class ComponentType {
     @JsonProperty("service") SERVICE,
     @JsonProperty("database") DATABASE,
     @JsonProperty("client") CLIENT,
+    @JsonProperty("frontend") FRONTEND,
 }
 
 enum class RecordingKind {
@@ -28,6 +30,8 @@ enum class RecordingKind {
     JsonSubTypes.Type(value = DbClientEvent::class, name = "db.client"),
     JsonSubTypes.Type(value = HttpClientEvent::class, name = "http.client"),
     JsonSubTypes.Type(value = MethodEvent::class, name = "method"),
+    JsonSubTypes.Type(value = UiNavigationEvent::class, name = "ui.navigation"),
+    JsonSubTypes.Type(value = UiActionEvent::class, name = "ui.action"),
 )
 sealed interface RecordingEvent {
     val schemaVersion: Int
@@ -129,4 +133,52 @@ data class MethodEvent(
     val exceptionType: String?,
     val exceptionMessage: String?,
     val thread: String?,
+) : RecordingEvent
+
+enum class UiNavigationKind {
+    @JsonProperty("load") LOAD,
+    @JsonProperty("route") ROUTE,
+}
+
+enum class UiActionKind {
+    @JsonProperty("click") CLICK,
+    @JsonProperty("submit") SUBMIT,
+}
+
+/** A page load or a client-side route change in a frontend, recorded by the browser package. */
+data class UiNavigationEvent(
+    override val schemaVersion: Int = SCHEMA_VERSION,
+    override val eventId: String,
+    override val runId: String,
+    override val traceId: String,
+    override val spanId: String,
+    override val parentSpanId: String?,
+    /** The frontend. */
+    override val component: String,
+    override val startEpochNanos: Long,
+    override val durationNanos: Long,
+    /** `location.href` after the navigation; empty when the span carried none. */
+    val url: String,
+    /** The pathname the navigation landed on; empty when the span carried none. */
+    val route: String,
+    val kind: UiNavigationKind,
+) : RecordingEvent
+
+/** A user click or form submit in a frontend, recorded by the browser package. */
+data class UiActionEvent(
+    override val schemaVersion: Int = SCHEMA_VERSION,
+    override val eventId: String,
+    override val runId: String,
+    override val traceId: String,
+    override val spanId: String,
+    override val parentSpanId: String?,
+    /** The frontend. */
+    override val component: String,
+    override val startEpochNanos: Long,
+    override val durationNanos: Long,
+    val event: UiActionKind,
+    /** A short description of the element acted on (its `data-testid`, id, text or tag). */
+    val target: String,
+    /** The route the page was on when the action happened. */
+    val route: String,
 ) : RecordingEvent
