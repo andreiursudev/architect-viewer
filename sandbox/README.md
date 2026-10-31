@@ -14,8 +14,8 @@ scenarios drive it with Playwright (Chromium): `browse-stock`, `place-order-in-b
 `place-order-out-of-stock-in-browser`.
 
 The sandbox is a separate Gradle build and uses the tool like any outside project would: the OpenTelemetry agent
-extension and the test harness come from `mavenLocal`, the reporter from its Docker image. It never depends on
-`tool/` sources.
+extension, the test harness and the browser package (an npm tarball) come from `mavenLocal`, the reporter from its
+Docker image. It never depends on `tool/` sources.
 
 | Path | What it is |
 |---|---|
@@ -55,8 +55,9 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    sandbox/gradlew -p sandbox stackAgent stackBrowser assemble
    ```
 
-3. Start the stack. `--wait` returns once both services report healthy (their `/actuator/health`; orders-service
-   waits for inventory-service), so the tests below never race their startup:
+3. Start the stack. `--wait` returns once the two services and the frontend report healthy (the services'
+   `/actuator/health`, and a `wget` of the frontend's `/`; orders-service waits for inventory-service, the frontend for
+   both), so the tests below never race their startup:
 
    ```sh
    docker compose -f sandbox/docker-compose.yml up -d --build --wait

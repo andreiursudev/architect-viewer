@@ -15,7 +15,8 @@ Read the whole file before you start. Steps 3 and 7 end in a stop: report to the
 - **Never change the service repositories.** Don't add, edit, commit or push anything there: no Gradle or Maven
   changes, no `application*.yaml` edits, no `.run/` or `.idea/` files, no `.gitignore` entries. You may read them,
   and you may build them with their own build (`gradlew bootJar`, `mvn package -DskipTests`), which only writes to
-  their ignored build output. Afterwards, `git status` in every service repository must be as clean as before.
+  their ignored build output. Afterwards, `git status` in every service repository must be as clean as before. The
+  only exception is the frontend change in [Frontends](#frontends), when the user approves it.
 - **Never change the stack tool's repository** (`<TOOL_REPO>`). If the tool lacks something the project needs,
   write it down for the user (step 9) instead of working around it in the tool.
 - **Local only.** The agent and reporter run on this machine against local containers. Never point a service under
@@ -63,7 +64,8 @@ a workspace. When this file and the sandbox disagree, the sandbox is what was te
 
 ## 3. Survey the project and report (then stop)
 
-Read the service repositories and find out, for each service, how it fits what the tool records today:
+Read the service repositories and find out, for each service, how it fits what the tool records today (if the project
+has a browser frontend, see [Frontends](#frontends)):
 
 | The tool records | The tool does not record (yet) |
 |---|---|
@@ -483,15 +485,20 @@ Report to the user:
 - The scenarios, and which ones pass.
 - What the tool can't show for this project (messaging, WebFlux bodies, gRPC…), with the flows it affects.
 - Anything you couldn't verify, and anything the tool would need. Name the tool gap; don't patch around it.
-- That `git status` in every service repository is unchanged.
+- That `git status` in every service repository is unchanged, except the frontend change the user approved (list its
+  files), which is left uncommitted.
 
 ## Frontends
 
 A browser app can be recorded too: page loads, route changes, clicks, form submits and the fetches they trigger become
 steps of the run, with the fetch nested under the action that caused it and the services' hops below it. Unlike the
-JVM agent this needs **one line in the frontend's source**, so it breaks ground rule 0 for that repository: ask the
-user first, and skip it if they say no (the services are then recorded as before, with their callers as the entry
-points). `<TOOL_REPO>/sandbox/services/frontend` is the working example (React + Vite, served by nginx).
+JVM agent this changes the frontend repository, so it is the one exception to ground rule 0: an import and a call in
+the entry file, and the tarball installed in the frontend's local build (steps 1 and 2 below). **Ask the user first,
+and skip it if they say no** (the services are then recorded as before, with their callers as the entry points). If
+they agree, leave the change uncommitted and unpushed unless they explicitly say otherwise, and warn them that the
+frontend then needs the tarball to build: anyone without it (a colleague, CI) gets a failing build until the change is
+reverted. List the changed files in the hand-over report. `<TOOL_REPO>/sandbox/services/frontend` is the working
+example (React + Vite, served by nginx).
 
 1. **Install the package.** `tool/gradlew -p tool publishToMavenLocal` builds the npm tarball
    `<TOOL_REPO>/tool/browser-sdk/build/npm/stackvibed-browser-0.1.0.tgz` (also in `~/.m2` as
