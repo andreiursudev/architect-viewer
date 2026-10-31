@@ -18,6 +18,13 @@ object Fixtures {
      */
     const val CREATE_ORDER_METHODS_5 = "2026-10-30T10-00-00_create-order_run-5"
 
+    /**
+     * A schema version 4 run: the reporter's golden `place-order-in-browser` frontend events, with the service side of
+     * a create-order run re-parented under the frontend's fetches (same trace), plus a `GET /stock` and a
+     * `GET /orders/{id}` server event under the other two fetches.
+     */
+    const val PLACE_ORDER_IN_BROWSER_6 = "2026-10-31T10-00-00_place-order-in-browser_run-6"
+
     val recordings: Path = Path.of(Fixtures::class.java.getResource("/fixtures/recordings")!!.toURI())
 
     /** Copies one fixture run folder into [targetRoot] (created if needed) and returns the copy. */

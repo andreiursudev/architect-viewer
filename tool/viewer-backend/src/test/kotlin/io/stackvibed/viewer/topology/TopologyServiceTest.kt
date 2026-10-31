@@ -111,6 +111,61 @@ class TopologyServiceTest {
     }
 
     @Test
+    fun `browser run discovers frontend and its connections`() {
+        Fixtures.copyRun(Fixtures.PLACE_ORDER_IN_BROWSER_6, recordingsDir)
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "frontend" to ComponentType.FRONTEND,
+            "orders-service" to ComponentType.SERVICE,
+            "inventory-service" to ComponentType.SERVICE,
+            "postgresql-orders" to ComponentType.DATABASE,
+            "postgresql-inventory" to ComponentType.DATABASE,
+        )
+        view.connection("e2e-client--frontend").kind shouldBe ConnectionKind.UI
+        view.connection("e2e-client--frontend").label shouldBe "/, /order, /orders/{id}"
+        view.connection("frontend--inventory-service").kind shouldBe ConnectionKind.HTTP
+        view.connection("frontend--inventory-service").label shouldBe "GET /stock"
+        view.connection("frontend--orders-service").label shouldBe "POST /orders, GET /orders/{id}"
+        view.connections.none { it.id == httpConnection } shouldBe true
+    }
+
+    @Test
+    fun `frontend stays frontend whatever is observed first`() {
+        val fetch = """{"type":"http.client","schemaVersion":4,"eventId":"t-c","runId":"run-9","traceId":"t","spanId":"c","parentSpanId":null,"component":"frontend","startEpochNanos":1,"durationNanos":1,"method":"GET","url":"http://localhost:3000/orders","serverAddress":"localhost","serverPort":3000,"status":null,"errorType":"TypeError"}"""
+        val load = """{"type":"ui.navigation","schemaVersion":4,"eventId":"t-n","runId":"run-9","traceId":"t","spanId":"n","parentSpanId":null,"component":"frontend","startEpochNanos":5,"durationNanos":1,"url":"http://localhost:3000/","route":"/","kind":"load"}"""
+        recordingsDir.resolve("run-9").createDirectories()
+        recordingsDir.resolve("run-9/manifest.json").writeText(
+            """{"schemaVersion":4,"runId":"run-9","scenarioId":"browse","kind":"e2e","startedAt":"2026-10-28T10:00:00Z","lastEventAt":null,"stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["frontend"]}""",
+        )
+        recordingsDir.resolve("run-9/events.jsonl").writeText(fetch + "\n" + load + "\n")
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "frontend" to ComponentType.FRONTEND,
+            "orders" to ComponentType.SERVICE,
+        )
+    }
+
+    @Test
+    fun `the target of a curated ui connection is a frontend`() {
+        store.saveConnection(definition("e2e-client", "web", ConnectionKind.UI, ConnectionState.MANUAL))
+        store.saveConnection(definition("web", "orders-service", ConnectionKind.HTTP, ConnectionState.MANUAL))
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "e2e-client" to ComponentType.CLIENT,
+            "web" to ComponentType.FRONTEND,
+            "orders-service" to ComponentType.SERVICE,
+        )
+    }
+
+    @Test
     fun `method events add no components or connections`() {
         Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, recordingsDir)
         val withoutMethodsDir = tmp.resolve("without-methods")
@@ -306,6 +361,7 @@ class TopologyServiceTest {
             ScenarioSummary("create-order", "Create it", "run-5", 3),
             ScenarioSummary("create-order-out-of-stock", null, "run-4", 1),
             ScenarioSummary("get-order", null, "run-3", 1),
+            ScenarioSummary("place-order-in-browser", null, "run-6", 1),
         )
     }
 

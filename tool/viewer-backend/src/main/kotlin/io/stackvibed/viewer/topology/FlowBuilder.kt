@@ -9,11 +9,13 @@ import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
 import io.stackvibed.model.UiActionEvent
 import io.stackvibed.model.UiNavigationEvent
+import io.stackvibed.model.UiNavigationKind
 import io.stackvibed.model.view.Flow
 import io.stackvibed.model.view.FlowStep
 import io.stackvibed.model.view.FlowStepKind
 import org.springframework.stereotype.Component
 import java.net.URI
+import java.util.Locale
 
 /** Turns the events of one run into the ordered steps shown on the flow board. */
 @Component
@@ -34,6 +36,14 @@ class FlowBuilder {
      *   no owner) to its own, nested under the owner's step; a method inside no request adds no step,
      * - database and client calls leave from their owner's class and nest under its step, a called server under the
      *   step of its caller's owner; without an owner they nest under the enclosing request as before.
+     *
+     * Browser events (spec §4) are steps from the e2e client to the frontend, which no request answers:
+     * - a page load or route change is the step `load <route>` or `→ <route>`, a click or submit `<event> <target>`;
+     *   both are of kind `UI`, have no status and no parent,
+     * - a fetch of a frontend (a client event of a component with ui events) nests like any call: the step of the server
+     *   that answers it nests under the ui step the fetch belongs to ([CallTree.parentStepOf]); the fetch adds no step,
+     * - an unanswered fetch of a frontend is a hop to the first segment of its path (`unknown-host` when it has none);
+     *   a frontend reaches its API through the host that serves it, so the host says nothing.
      *
      * Without method events every unit and handler is null and the steps are those of a run recorded before step 3.
      */
@@ -61,7 +71,7 @@ class FlowBuilder {
                 )
                 is HttpClientEvent -> if (tree.isAnswered(event)) null else step(
                     event, parent = tree.parentStepOf(event),
-                    from = alias(event.component), to = alias(ComponentIds.service(event.serverAddress.orEmpty()).ifEmpty { UNKNOWN_HOST }), // "" or "..." slug to nothing
+                    from = alias(event.component), to = alias(calleeOf(event, tree)),
                     kind = FlowStepKind.HTTP, label = "${event.method} ${pathOf(event.url)}", status = event.status,
                     fromUnit = tree.owner(event)?.className,
                 )
@@ -75,11 +85,34 @@ class FlowBuilder {
                         fromUnit = (tree.owner(event) ?: tree.handlerOf(request))?.className, toUnit = event.className,
                     )
                 }
-                // Browser events become steps in a later change.
-                is UiNavigationEvent, is UiActionEvent -> null
+                is UiNavigationEvent -> step(
+                    event, parent = null, from = ComponentIds.E2E_CLIENT, to = alias(event.component), kind = FlowStepKind.UI,
+                    label = when (event.kind) {
+                        UiNavigationKind.LOAD -> "load ${event.route}"
+                        UiNavigationKind.ROUTE -> "→ ${event.route}"
+                    },
+                    status = null,
+                )
+                is UiActionEvent -> step(
+                    event, parent = null, from = ComponentIds.E2E_CLIENT, to = alias(event.component), kind = FlowStepKind.UI,
+                    label = "${event.event.name.lowercase(Locale.ROOT)} ${event.target}", status = null,
+                )
             }
         }
         return Flow(manifest.runId, manifest.scenarioId, steps)
+    }
+
+    /**
+     * The component an unanswered call goes to: the called host; for a frontend, whose fetches go to the host that
+     * serves it, the first path segment of the url (the API it addresses).
+     */
+    private fun calleeOf(call: HttpClientEvent, tree: CallTree): String {
+        val raw = if (tree.hasUi(call.component)) {
+            runCatching { URI(call.url).path }.getOrNull().orEmpty().split('/').firstOrNull { it.isNotEmpty() }.orEmpty()
+        } else {
+            call.serverAddress.orEmpty()
+        }
+        return ComponentIds.service(raw).ifEmpty { UNKNOWN_HOST } // "" or "..." slug to nothing
     }
 
     /** The path of [url] as the label of a call; the raw [url] when it does not parse. */
@@ -114,12 +147,17 @@ class FlowBuilder {
     }
 }
 
-/** Who calls whom inside one run: the callers of requests, the owners of events and the handlers of requests. */
+/**
+ * Who calls whom inside one run: the callers of requests, the owners of events, the handlers of requests and the ui
+ * steps fetches belong to.
+ */
 private class CallTree(events: List<RecordingEvent>) {
     private val bySpan = events.associateBy { it.traceId to it.spanId }
     private val requests = events.filterIsInstance<HttpServerEvent>().groupBy { it.component to it.traceId }
     private val methods = events.filterIsInstance<MethodEvent>()
     private val methodsByScope = methods.groupBy { it.component to it.traceId }
+    private val uiEvents: Map<String, List<RecordingEvent>> =
+        events.filter { it is UiNavigationEvent || it is UiActionEvent }.groupBy { it.component }
     private val answered = requests.values.flatten().mapNotNullTo(HashSet()) { callerOf(it)?.eventId }
     private val owners: Map<String, MethodEvent?> =
         events.filter { it !is HttpServerEvent }.associate { it.eventId to findOwner(it) }
@@ -151,9 +189,26 @@ private class CallTree(events: List<RecordingEvent>) {
      */
     fun owner(event: RecordingEvent): MethodEvent? = owners[event.eventId]
 
-    /** The step [event] nests under: its owner's step when it has one, else its enclosing request's. */
+    fun hasUi(component: String): Boolean = component in uiEvents
+
+    /**
+     * The step [event] nests under: its owner's step when it has one, else its enclosing request's. A fetch of a
+     * frontend nests under the ui event it belongs to ([uiStepOf]).
+     */
     fun parentStepOf(event: RecordingEvent): String? =
-        owner(event)?.let { stepOf(it) } ?: enclosingRequest(event)?.eventId
+        if (event is HttpClientEvent && hasUi(event.component)) uiStepOf(event)
+        else owner(event)?.let { stepOf(it) } ?: enclosingRequest(event)?.eventId
+
+    /**
+     * The ui event whose span is the parent span of [fetch]; else the latest ui event of its component that started
+     * no later than the fetch (the later one in the list of two starting together); else none.
+     */
+    private fun uiStepOf(fetch: HttpClientEvent): String? {
+        val candidates = uiEvents[fetch.component].orEmpty()
+        val parent = fetch.parentSpanId?.let { bySpan[fetch.traceId to it] }
+        if (parent != null && parent in candidates) return parent.eventId
+        return candidates.filter { it.startEpochNanos <= fetch.startEpochNanos }.sortedBy { it.startEpochNanos }.lastOrNull()?.eventId
+    }
 
     /**
      * The innermost request of the same component and trace whose time interval contains [event] (a method, a database

@@ -2,7 +2,10 @@ package io.stackvibed.viewer.topology
 
 import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.ComponentType
+import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.UiActionEvent
+import io.stackvibed.model.UiNavigationEvent
 import io.stackvibed.model.view.BoardComponent
 import io.stackvibed.model.view.BoardConnection
 import io.stackvibed.model.view.Flow
@@ -60,16 +63,20 @@ class TopologyService(
         val connections = linkedMapOf<String, ObservedConnection>()
     }
 
-    /** [labels]: the distinct step labels of an HTTP connection (its routes), in first-seen order; none for a database. */
+    /**
+     * [labels]: the distinct step labels of an HTTP connection (its routes), in first-seen order; none for a database.
+     * For a ui connection, the distinct routes of its ui events, sorted.
+     */
     private class ObservedConnection(val from: String, val to: String, val kind: ConnectionKind) {
         val labels = linkedSetOf<String>()
-        val label: String? get() = labels.joinToString(", ").ifEmpty { null }
+        val label: String?
+            get() = (if (kind == ConnectionKind.UI) labels.sorted() else labels.toList()).joinToString(", ").ifEmpty { null }
     }
 
     private fun observe(manifest: RecordingManifest, aliases: Map<String, String>, into: Observed) {
         val flow = flowBuilder.build(manifest, recordings.events(manifest.runId), aliases)
         flow.steps.forEach { step -> observe(step, into) }
-        manifest.componentsSeen.forEach { into.componentTypes.putIfAbsent(aliases[it] ?: it, ComponentType.SERVICE) }
+        manifest.componentsSeen.forEach { into.componentTypes.merge(aliases[it] ?: it, ComponentType.SERVICE, ::stronger) }
     }
 
     private fun observe(step: FlowStep, into: Observed) {
@@ -79,16 +86,41 @@ class TopologyService(
             FlowStepKind.HTTP -> ConnectionKind.HTTP
             FlowStepKind.DB -> ConnectionKind.DB
             FlowStepKind.METHOD -> return
-            FlowStepKind.UI -> return
+            FlowStepKind.UI -> ConnectionKind.UI
         }
         // Only the e2e client calls from outside; every other caller, of an HTTP hop or a database, is a service.
-        val toType = if (kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE
-        // A database is not downgraded to a service.
-        into.componentTypes.putIfAbsent(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else ComponentType.SERVICE)
-        into.componentTypes.merge(step.to, toType) { known, new -> if (new == ComponentType.DATABASE) new else known }
+        val toType = when (kind) {
+            ConnectionKind.DB -> ComponentType.DATABASE
+            ConnectionKind.UI -> ComponentType.FRONTEND
+            else -> ComponentType.SERVICE
+        }
+        // A database is not downgraded to a service, a frontend neither (it calls out before its first ui step too).
+        into.componentTypes.merge(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else ComponentType.SERVICE, ::stronger)
+        into.componentTypes.merge(step.to, toType, ::stronger)
         val connection = into.connections.getOrPut(connectionId) { ObservedConnection(step.from, step.to, kind) }
         // A database call's label is its SQL, which says nothing about the connection as a whole.
         if (kind == ConnectionKind.HTTP) connection.labels += step.label
+        if (kind == ConnectionKind.UI) uiRouteOf(step.event)?.let { connection.labels += it }
+    }
+
+    /** The type that wins when a component is seen as both: a database over a frontend over anything else. */
+    private fun stronger(known: ComponentType, new: ComponentType): ComponentType =
+        if (rank(new) > rank(known)) new else known
+
+    private fun rank(type: ComponentType) = when (type) {
+        ComponentType.DATABASE -> 2
+        ComponentType.FRONTEND -> 1
+        else -> 0
+    }
+
+    /** The route a ui event happened on, its id segments (digits or a UUID) replaced by `{id}`; none for a blank route. */
+    private fun uiRouteOf(event: RecordingEvent): String? {
+        val route = when (event) {
+            is UiNavigationEvent -> event.route
+            is UiActionEvent -> event.route
+            else -> null
+        }
+        return route?.takeIf { it.isNotBlank() }?.split('/')?.joinToString("/") { if (ID_SEGMENT.matches(it)) "{id}" else it }
     }
 
     private fun components(loaded: LoadedWorkspace, observed: Observed): List<BoardComponent> {
@@ -107,17 +139,25 @@ class TopologyService(
 
     /**
      * The endpoints of the non-hidden curated connections, typed from the connections alone: the e2e client is a
-     * client, the target of a database connection a database, anything else a service.
+     * client, the target of a database connection a database, the target of a ui connection a frontend, anything else
+     * a service.
      */
     private fun curatedEndpoints(loaded: LoadedWorkspace): Map<String, ComponentType> {
         val types = linkedMapOf<String, ComponentType>()
         fun add(id: String, type: ComponentType) {
             val inferred = if (id == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else type
-            types.merge(id, inferred) { known, new -> if (new == ComponentType.DATABASE) new else known }
+            types.merge(id, inferred, ::stronger)
         }
         loaded.connections.filter { it.state != ConnectionState.HIDDEN }.forEach {
             add(it.from, ComponentType.SERVICE)
-            add(it.to, if (it.kind == ConnectionKind.DB) ComponentType.DATABASE else ComponentType.SERVICE)
+            add(
+                it.to,
+                when (it.kind) {
+                    ConnectionKind.DB -> ComponentType.DATABASE
+                    ConnectionKind.UI -> ComponentType.FRONTEND
+                    else -> ComponentType.SERVICE
+                },
+            )
         }
         return types
     }
@@ -150,5 +190,9 @@ class TopologyService(
         val known = curated.map { it.id }.toSet()
         val recorded = runsByScenario.keys.filter { it !in known }.sorted().map { summary(it, null) }
         return curated + recorded
+    }
+
+    private companion object {
+        val ID_SEGMENT = Regex("\\d+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }

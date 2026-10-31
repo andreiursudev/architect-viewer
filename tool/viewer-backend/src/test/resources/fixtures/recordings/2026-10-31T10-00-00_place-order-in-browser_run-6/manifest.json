@@ -1,0 +1,1 @@
+{"schemaVersion":4,"runId":"run-6","scenarioId":"place-order-in-browser","kind":"e2e","startedAt":"2026-10-31T10:00:00Z","lastEventAt":"2026-10-31T10:00:00Z","stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["frontend","inventory-service","orders-service"]}

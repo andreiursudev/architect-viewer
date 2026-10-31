@@ -10,6 +10,10 @@ import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.UiActionEvent
+import io.stackvibed.model.UiActionKind
+import io.stackvibed.model.UiNavigationEvent
+import io.stackvibed.model.UiNavigationKind
 import io.stackvibed.model.view.FlowStep
 import io.stackvibed.model.view.FlowStepKind
 import io.stackvibed.viewer.Fixtures
@@ -421,6 +425,123 @@ class FlowBuilderTest {
         steps.map { it.parentStepId } shouldBe listOf(null, ids[0], ids[1], ids[2], ids[3], ids[4], ids[1], ids[6])
         steps.map { it.label }[2] shouldBe "reserve"
     }
+
+    @Test
+    fun `browser run starts with ui steps from the e2e client`() {
+        val flow = browserRun()
+
+        val first = flow.steps.first()
+        first.label shouldBe "load /"
+        first.kind shouldBe FlowStepKind.UI
+        first.from shouldBe ComponentIds.E2E_CLIENT
+        first.to shouldBe "frontend"
+        first.connectionId shouldBe "e2e-client--frontend"
+        first.parentStepId shouldBe null
+        first.status shouldBe null
+        first.event.shouldBeInstanceOf<UiNavigationEvent>()
+        flow.steps.filter { it.kind == FlowStepKind.UI }.map { it.label } shouldBe
+            listOf("load /", "click to-order", "→ /order", "submit order-form", "→ /orders/7c9e6679-7425-40de-944b-e07fc1f90ae7")
+    }
+
+    @Test
+    fun `fetch callee nests under the latest ui step before it`() {
+        val steps = browserRun().steps
+        val load = steps.first { it.label == "load /" }
+        val submit = steps.first { it.label == "submit order-form" }
+        val route = steps.first { it.label.startsWith("→ /orders/") }
+
+        val stock = steps.single { it.label == "GET /stock" }
+        stock.from shouldBe "frontend"
+        stock.to shouldBe "inventory-service"
+        stock.status shouldBe 200
+        stock.parentStepId shouldBe load.stepId
+        val post = steps.single { it.label == "POST /orders" }
+        post.from shouldBe "frontend"
+        post.to shouldBe "orders-service"
+        post.parentStepId shouldBe submit.stepId
+        steps.single { it.label == "GET /orders/{id}" }.parentStepId shouldBe route.stepId
+        // the answered fetches add no steps of their own, and the service side still nests under the post
+        steps.none { it.event is HttpClientEvent && (it.event as HttpClientEvent).component == "frontend" } shouldBe true
+        steps.single { it.label == "POST /reservations" }.from shouldBe "orders-service"
+    }
+
+    @Test
+    fun `fetch callee nests under its parent ui span when there is one`() {
+        val first = action("first", 0, parent = null)
+        val second = action("second", 100)
+        val fetch = client("fetch", "frontend", 200, 50, url = "http://localhost:3000/orders", parent = "first", serverAddress = "localhost")
+        val server = http("server", "orders-service", 210, 30, parent = "fetch")
+
+        val steps = builder.build(emptyManifest(), listOf(first, second, fetch, server), emptyMap()).steps.associateBy { it.stepId }
+
+        steps.getValue("server").parentStepId shouldBe "first"
+    }
+
+    @Test
+    fun `of two ui steps starting together the later one in the list parents the fetch`() {
+        val one = action("one", 100)
+        val two = action("two", 100)
+        val fetch = client("fetch", "frontend", 100, 50, url = "http://localhost:3000/orders", serverAddress = "localhost")
+        val server = http("server", "orders-service", 110, 30, parent = "fetch")
+
+        builder.build(emptyManifest(), listOf(one, two, fetch, server), emptyMap())
+            .steps.single { it.stepId == "server" }.parentStepId shouldBe "two"
+    }
+
+    @Test
+    fun `a frontend fetch before any ui step has no parent`() {
+        val fetch = client("fetch", "frontend", 100, 50, url = "http://localhost:3000/orders", serverAddress = "localhost")
+        val server = http("server", "orders-service", 110, 30, parent = "fetch")
+        val later = action("later", 500)
+
+        val steps = builder.build(emptyManifest(), listOf(fetch, server, later), emptyMap()).steps.associateBy { it.stepId }
+
+        steps.getValue("server").parentStepId shouldBe null
+        steps.getValue("server").from shouldBe "frontend"
+    }
+
+    @Test
+    fun `unanswered frontend fetch is a failed hop to its path`() {
+        val load = navigation("load", 0)
+        val fetch = client(
+            "fetch", "frontend", 100, 50, url = "http://localhost:3000/orders", serverAddress = "localhost",
+            status = null, errorType = "TypeError",
+        )
+        val root = client("root", "frontend", 200, 50, url = "http://localhost:3000/", serverAddress = "localhost")
+
+        val steps = builder.build(emptyManifest(), listOf(load, fetch, root), emptyMap()).steps.associateBy { it.stepId }
+
+        with(steps.getValue("fetch")) {
+            to shouldBe "orders"
+            from shouldBe "frontend"
+            status shouldBe null
+            parentStepId shouldBe "load"
+            connectionId shouldBe "frontend--orders"
+            label shouldBe "POST /orders"
+        }
+        steps.getValue("root").to shouldBe "unknown-host"
+    }
+
+    @Test
+    fun `a client event of a component without ui events keeps the host as its callee`() {
+        val call = client("call", "orders-service", 0, 10, url = "http://localhost:3000/orders", serverAddress = "localhost")
+
+        builder.build(emptyManifest(), listOf(call), emptyMap()).steps.single().to shouldBe "localhost"
+    }
+
+    private fun browserRun() = builder.build(
+        repository.manifests().first { it.runId == "run-6" }, repository.events("run-6"), emptyMap(),
+    )
+
+    private fun action(id: String, start: Long, parent: String? = null): RecordingEvent = UiActionEvent(
+        eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = parent, component = "frontend",
+        startEpochNanos = start, durationNanos = 1, event = UiActionKind.CLICK, target = "button", route = "/",
+    )
+
+    private fun navigation(id: String, start: Long): RecordingEvent = UiNavigationEvent(
+        eventId = id, runId = "r", traceId = "t1", spanId = id, parentSpanId = null, component = "frontend",
+        startEpochNanos = start, durationNanos = 1, url = "http://localhost:3000/", route = "/", kind = UiNavigationKind.LOAD,
+    )
 
     private fun step2(
         event: RecordingEvent, parent: String?, from: String, to: String, kind: FlowStepKind, label: String, status: Int?,
