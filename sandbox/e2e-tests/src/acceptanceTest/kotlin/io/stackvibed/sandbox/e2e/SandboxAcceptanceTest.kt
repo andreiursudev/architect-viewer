@@ -167,6 +167,8 @@ class SandboxAcceptanceTest {
         server["status"] shouldBe 200
         (server["responseBody"] as String) shouldContain "sku-1"
         server["parentSpanId"] shouldBe fetch["spanId"]
+
+        assertScreenshots(run, listOf(listOf("load /")))
     }
 
     @Test
@@ -201,6 +203,16 @@ class SandboxAcceptanceTest {
         val servers = run.events.filter { it["type"] == "http.server" }
         servers.single { it["component"] == "orders-service" && it["method"] == "POST" }["parentSpanId"] shouldBe fetches[1]["spanId"]
         servers.single { it["component"] == "inventory-service" && it["route"] == "/reservations" }["status"] shouldBe 201
+
+        // The shield holds each click until the screenshot of the steps before it is taken, so the load is shot alone.
+        assertScreenshots(
+            run,
+            listOf(
+                listOf("load /"),
+                listOf("click to-order", "→ /order"),
+                listOf("click place-order", "submit order-form", "→ /orders/$orderId"),
+            ),
+        )
     }
 
     @Test
@@ -221,6 +233,8 @@ class SandboxAcceptanceTest {
         startOf(fetch) shouldBeGreaterThanOrEqual startOf(actions.single { it["event"] == "submit" })
         run.events.single { it["type"] == "http.server" && it["component"] == "orders-service" }["status"] shouldBe 409
         run.events.filter { it["type"] == "db.client" }.map { it["statement"] as String }.none { it.startsWith("insert into orders") } shouldBe true
+
+        assertScreenshots(run, listOf(listOf("load /order"), listOf("click place-order", "submit order-form")))
     }
 
     /** Untagged: nginx must hand a browser reload of /orders/<id> the app, whose own fetch then reaches orders-service. */
@@ -245,8 +259,51 @@ class SandboxAcceptanceTest {
     /** The start of a recorded event; Jackson reads the epoch nanos as a Long. */
     private fun startOf(event: Map<String, Any?>): Long = event["startEpochNanos"] as Long
 
-    /** A recorded run: its manifest and its events, both as plain JSON maps (no dependency on tool internals). */
-    private data class Recording(val manifest: Map<String, Any?>, val events: List<Map<String, Any?>>)
+    /** A recorded run: its folder, its manifest and its events, both as plain JSON maps (no dependency on tool internals). */
+    private data class Recording(val folder: Path, val manifest: Map<String, Any?>, val events: List<Map<String, Any?>>)
+
+    /**
+     * Every ui step of [run] is in exactly one screenshot record, the records group the steps as [groups] (labelled as
+     * the viewer labels them, in the order each record lists them), and each record's file is a PNG.
+     */
+    private fun assertScreenshots(run: Recording, groups: List<List<String>>) {
+        val records = awaitScreenshots(run, records = groups.size)
+        val labels = run.events.filter { (it["type"] as String).startsWith("ui.") }.associate { it["spanId"] to uiLabel(it) }
+        records.map { record -> (record["spanIds"] as List<*>).map { labels[it] ?: "unknown span $it" } } shouldBe groups
+        records.flatMap { it["spanIds"] as List<*> }.sortedBy { it.toString() } shouldBe labels.keys.sortedBy { it.toString() }
+        for (record in records) {
+            record["id"] shouldBe (record["spanIds"] as List<*>).first()
+            record["file"] shouldBe "screenshots/${record["id"]}.png"
+            val png = run.folder.resolve(record["file"] as String)
+            png.exists() shouldBe true
+            Files.readAllBytes(png).take(8) shouldBe PNG_SIGNATURE
+        }
+    }
+
+    /** Waits until the run's `screenshots.jsonl` holds [records] whole lines. */
+    private fun awaitScreenshots(run: Recording, records: Int, timeout: Duration = Duration.ofSeconds(10)): List<Map<String, Any?>> {
+        val file = run.folder.resolve("screenshots.jsonl")
+        val deadline = Instant.now().plus(timeout)
+        var lines = emptyList<String>()
+        while (Instant.now().isBefore(deadline)) {
+            lines = if (file.exists()) file.readLines().filter { it.isNotBlank() } else emptyList()
+            if (lines.size >= records) {
+                try {
+                    return lines.map(::readMap)
+                } catch (_: JacksonException) {
+                    // A line still being written; read it whole on the next poll.
+                }
+            }
+            Thread.sleep(200)
+        }
+        throw AssertionError("expected $records screenshot records in $file within $timeout, found ${lines.size}: $lines")
+    }
+
+    /** A ui event labelled as the viewer labels its step. */
+    private fun uiLabel(event: Map<String, Any?>): String = when (event["type"]) {
+        "ui.navigation" -> if (event["kind"] == "load") "load ${event["route"]}" else "→ ${event["route"]}"
+        else -> "${event["event"]} ${event["target"]}"
+    }
 
     /**
      * Waits for the reporter to write the recording of the current test's run (the run id the harness put into
@@ -280,7 +337,7 @@ class SandboxAcceptanceTest {
                 val manifest = readMap(Files.readString(manifestFile))
                 if (manifest["runId"] != runId) continue
                 val events = if (eventsFile.exists()) eventsFile.readLines().filter { it.isNotBlank() }.map(::readMap) else emptyList()
-                return Recording(manifest, events)
+                return Recording(folder, manifest, events)
             } catch (_: JacksonException) {
                 // The reporter is mid-write (a partial last line); the next poll reads it whole.
                 return null
@@ -295,6 +352,7 @@ class SandboxAcceptanceTest {
     companion object {
         private const val BASE_URL = "http://localhost:8080"
         private const val FRONTEND_URL = "http://localhost:3000"
+        private val PNG_SIGNATURE = listOf(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A).map { it.toByte() }
 
         private val STARTUP_TIMEOUT: Duration = Duration.ofMinutes(3)
 
