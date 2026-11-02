@@ -3,6 +3,11 @@ import { responseText } from '../status';
 
 export const COLUMN_GAP = 220;
 export const ROW_GAP = 48;
+/** A screenshot thumbnail beside its ui arrow, in the margin left of the first lifeline. */
+export const THUMB_WIDTH = 96;
+export const THUMB_HEIGHT = 54;
+/** The gap between two rows when either carries a thumbnail, so thumbnails never overlap. */
+export const SHOT_ROW_GAP = 76;
 /** Room above the first message for the participant headers; the diagram draws them there. */
 export const HEADER_HEIGHT = 64;
 /** The extra header height while a service is expanded: the band with its name and collapse button. */
@@ -29,6 +34,8 @@ export interface SequenceMessage {
   toX: number;
   y: number;
   label: string;
+  /** On the request row of a ui step with a screenshot: its id; null on every other row. */
+  screenshot: string | null;
 }
 
 /** The band above the class lifelines of an expanded service. */
@@ -110,7 +117,13 @@ export function layoutSequence(flow: Flow, expanded: ReadonlySet<string> = new S
   });
   const headerHeight = HEADER_HEIGHT + (groups.length > 0 ? GROUP_BAND : 0);
 
-  const messages = rows.map(({ step, kind, from, to }, i): SequenceMessage => {
+  const shotOf = (row: (typeof rows)[number] | undefined) =>
+    row && row.kind === 'request' && row.step.kind === 'ui' ? (row.step.screenshot ?? null) : null;
+  // a row is SHOT_ROW_GAP below the one before when either of the two has a thumbnail
+  let y = headerHeight + FIRST_ROW_OFFSET;
+  const messages = rows.map((row, i): SequenceMessage => {
+    const { step, kind, from, to } = row;
+    if (i > 0) y += shotOf(row) != null || shotOf(rows[i - 1]) != null ? SHOT_ROW_GAP : ROW_GAP;
     const caller = x.get(from)!;
     const callee = x.get(to)!;
     return {
@@ -118,10 +131,11 @@ export function layoutSequence(flow: Flow, expanded: ReadonlySet<string> = new S
       kind,
       fromX: kind === 'request' ? caller : callee,
       toX: kind === 'request' ? callee : caller,
-      y: headerHeight + FIRST_ROW_OFFSET + i * ROW_GAP,
+      y,
       label: kind === 'request' ? step.label : responseText(step),
+      screenshot: shotOf(row),
     };
   });
-  const height = participants.length === 0 ? 0 : headerHeight + FIRST_ROW_OFFSET + Math.max(rows.length - 1, 0) * ROW_GAP + BOTTOM_PADDING;
+  const height = participants.length === 0 ? 0 : y + BOTTOM_PADDING;
   return { participants, groups, headerHeight, messages, height };
 }

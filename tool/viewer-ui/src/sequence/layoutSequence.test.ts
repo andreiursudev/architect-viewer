@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { Flow, FlowStep } from '../api/types';
-import { createOrderFlow, methodFlow, methodStep, submitStep, unrecordedHostStep } from '../board/testData';
-import { GROUP_BAND, HEADER_HEIGHT, MARGIN_X, classCounts, layoutSequence } from './layoutSequence';
+import { createOrderFlow, loadStep, methodFlow, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
+import { GROUP_BAND, HEADER_HEIGHT, MARGIN_X, SHOT_ROW_GAP, classCounts, layoutSequence } from './layoutSequence';
 
 test('sequence rows are request, nested request, nested response, response', () => {
   const l = layoutSequence(createOrderFlow);
@@ -212,4 +212,37 @@ test('ui step has a request arrow and no response', () => {
   expect(l.messages[0].label).toBe('submit order-form');
   expect(l.messages.map((m) => `${m.kind}:${m.stepId}`)).toEqual(['request:submit', 'request:' + http.stepId, 'response:' + http.stepId]);
   expect(l.participants.map((p) => p.id)).toEqual(['e2e-client', 'frontend', 'orders-service']);
+});
+
+const shotA = '9a8b7c6d5e4f3021';
+const shotB = '6d5e4f302192a3b4';
+const flowOf = (steps: FlowStep[]): Flow => ({ ...createOrderFlow, runId: 'run-6', steps });
+/** The POST a submit sends, nested under the ui step before it. */
+const fetchUnder = (parent: FlowStep) =>
+  step({ stepId: 'post', from: 'frontend', to: 'orders-service', startEpochNanos: parent.startEpochNanos + 1, parentStepId: parent.stepId });
+
+test('a ui row with a screenshot is taller', () => {
+  const load = { ...loadStep, screenshot: shotA };
+  const l = layoutSequence(flowOf([load, fetchUnder(load)]));
+  expect(SHOT_ROW_GAP).toBe(76);
+  expect(l.messages.map((m) => `${m.kind}:${m.stepId}`)).toEqual(['request:load', 'request:post', 'response:post']);
+  expect(l.messages.map((m) => m.y)).toEqual([100, 176, 224]);
+  expect(l.height).toBe(264);
+});
+
+test('a row after a screenshot row is also kept apart', () => {
+  const l = layoutSequence(flowOf([{ ...loadStep, screenshot: shotA }, { ...routeStep, screenshot: shotB }, submitStep]));
+  expect(l.messages.map((m) => m.y)).toEqual([100, 176, 252]);
+});
+
+test('a run without screenshots keeps its rows', () => {
+  const l = layoutSequence(flowOf([loadStep, routeStep, submitStep]));
+  expect(l.messages.map((m) => m.y)).toEqual([100, 148, 196]);
+  expect(l.messages.map((m) => m.screenshot)).toEqual([null, null, null]);
+});
+
+test('only the request row of a ui step carries its screenshot', () => {
+  const load = { ...loadStep, screenshot: shotA };
+  const l = layoutSequence(flowOf([load, fetchUnder(load)]));
+  expect(l.messages.map((m) => m.screenshot)).toEqual([shotA, null, null]);
 });

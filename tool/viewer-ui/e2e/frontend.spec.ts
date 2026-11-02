@@ -68,3 +68,37 @@ test('frontend has no class toggle', async ({ page }) => {
   await expect(frontend.getByRole('button')).toHaveCount(0);
   await expect(page.locator('.seq-head[title="orders-service"]').getByRole('button', { name: '▸ 4 classes' })).toBeVisible();
 });
+
+test('sequence shows a screenshot beside each browser step and in the details', async ({ page }) => {
+  await page.goto('/sequence/run-6');
+  await expect(diagram(page)).toBeVisible();
+
+  const thumbnails = diagram(page).getByRole('button', { name: /^screenshot / });
+  await expect(thumbnails).toHaveCount(5); // one per ui step: three screenshots, two of them shared by two steps
+  const loaded = await thumbnails.locator('image').evaluateAll((images) =>
+    Promise.all(
+      images.map(
+        (image) =>
+          new Promise<number>((resolve) => {
+            const probe = new Image();
+            probe.onload = () => resolve(probe.naturalWidth);
+            probe.onerror = () => resolve(0);
+            probe.src = image.getAttribute('href')!;
+          }),
+      ),
+    ),
+  );
+  expect(loaded.every((width) => width > 0)).toBe(true);
+
+  await diagram(page).getByRole('button', { name: 'screenshot load /' }).click();
+  await expect(diagram(page).getByRole('button', { name: 'request load /' })).toHaveAttribute('aria-pressed', 'true');
+  const details = page.getByRole('complementary', { name: 'Message details' });
+  const image = details.getByRole('img', { name: 'Screenshot after load /' });
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+
+  await image.click();
+  await expect(page.getByRole('dialog', { name: 'Screenshot' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Screenshot' })).toBeHidden();
+});

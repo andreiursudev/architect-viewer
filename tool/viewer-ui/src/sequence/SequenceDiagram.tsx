@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ComponentType, Flow, FlowStep } from '../api/types';
 import { isFailedStep, statusTone } from '../status';
-import { MARGIN_X, classCounts, layoutSequence, type SequenceMessage } from './layoutSequence';
+import { MARGIN_X, THUMB_HEIGHT, THUMB_WIDTH, classCounts, layoutSequence, type SequenceMessage } from './layoutSequence';
+import { screenshotUrl } from './Screenshot';
 import { SequenceHeads } from './SequenceHeads';
 
 export interface ParticipantInfo {
@@ -53,6 +54,8 @@ export function SequenceDiagram({
   const steps = useMemo(() => new Map(flow.steps.map((s) => [s.stepId, s])), [flow]);
   const { participants, messages, height, headerHeight } = layout;
   const width = participants.length === 0 ? 0 : participants[participants.length - 1].x + MARGIN_X;
+  // screenshots whose image did not load: their thumbnail is an empty, dashed frame
+  const [missing, setMissing] = useState<ReadonlySet<string>>(new Set());
 
   // each step's activation bar: the callee is busy from the request until the response
   const bars = useMemo(() => {
@@ -147,6 +150,55 @@ export function SequenceDiagram({
               >
                 {label}
               </text>
+            </g>
+          );
+        })}
+
+        {/* after the arrows, so that keyboard and screen reader reach a row's arrow before its thumbnail */}
+        {messages.map((m) => {
+          if (m.screenshot == null) return null;
+          const id = m.screenshot;
+          const isSelected = selected?.stepId === m.stepId && selected.kind === 'request';
+          const failed = missing.has(id);
+          const select = () => onSelect({ stepId: m.stepId, kind: 'request' });
+          const x = (MARGIN_X - THUMB_WIDTH) / 2;
+          const y = m.y - THUMB_HEIGHT / 2;
+          return (
+            <g
+              key={`shot:${m.stepId}`}
+              className="seq-thumb"
+              role="button"
+              tabIndex={0}
+              aria-label={`screenshot ${m.label}`}
+              aria-pressed={isSelected}
+              onClick={select}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  select();
+                }
+              }}
+            >
+              <title>{failed ? 'Screenshot not available' : m.label}</title>
+              {!failed && (
+                <image
+                  href={screenshotUrl(flow.runId, id)}
+                  x={x}
+                  y={y}
+                  width={THUMB_WIDTH}
+                  height={THUMB_HEIGHT}
+                  preserveAspectRatio="xMidYMid slice"
+                  onError={() => setMissing((before) => new Set(before).add(id))}
+                />
+              )}
+              <rect
+                className={['seq-thumb-frame', isSelected ? 'is-selected' : '', failed ? 'is-missing' : ''].join(' ').trim()}
+                x={x}
+                y={y}
+                width={THUMB_WIDTH}
+                height={THUMB_HEIGHT}
+                rx={3}
+              />
             </g>
           );
         })}

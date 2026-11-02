@@ -1,6 +1,7 @@
 import type { FlowStep, MethodEvent } from '../api/types';
 import { clientCallNote, formatMillis, UiFacts } from '../board/HopDetails';
 import { statusTone } from '../status';
+import { ScreenshotImage } from './Screenshot';
 
 type Kind = 'request' | 'response';
 
@@ -14,7 +15,7 @@ export function prettyBody(text: string): string {
 }
 
 /** Everything recorded about one step of the run, with the section of the clicked message marked. */
-export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
+export function MessageDetails({ runId, step, kind }: { runId: string; step: FlowStep; kind: Kind }) {
   const event = step.event;
   return (
     <div className="message-details">
@@ -22,6 +23,10 @@ export function MessageDetails({ step, kind }: { step: FlowStep; kind: Kind }) {
         <h2 title={step.label}>{step.label}</h2>
         {step.status != null && <span className={`hop-status ${statusTone(step.status)}`}>{step.status}</span>}
       </header>
+
+      {step.kind === 'ui' && step.screenshot != null && (
+        <ScreenshotImage key={step.screenshot} runId={runId} id={step.screenshot} alt={`Screenshot after ${step.label}`} />
+      )}
 
       <dl className="facts md-facts">
         <dt>From</dt>

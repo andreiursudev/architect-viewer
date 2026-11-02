@@ -1,9 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { FlowStep } from '../api/types';
 import userEvent from '@testing-library/user-event';
-import { createOrderFlow, methodFlow, unrecordedHostStep } from '../board/testData';
-import { SequenceDiagram } from './SequenceDiagram';
+import { createOrderFlow, loadStep, methodFlow, unrecordedHostStep } from '../board/testData';
+import { SequenceDiagram, type MessageSelection } from './SequenceDiagram';
 
 function renderSteps(steps: FlowStep[], expanded: string[] = [], onToggle: (component: string) => void = () => {}) {
   render(
@@ -78,4 +78,50 @@ test('a class lifeline is headed by its simple name and titled with the full one
   const head = screen.getByText('OrdersController').closest('.seq-head');
   expect(head).toHaveAttribute('title', 'x.OrdersController');
   expect(screen.getAllByText(/^Order(s?Controller|Service|Repository)$|^InventoryClient$/)).toHaveLength(4);
+});
+
+const shot = '9a8b7c6d5e4f3021';
+
+function renderBrowserRun(selected: MessageSelection | null = null, onSelect: (s: MessageSelection) => void = () => {}) {
+  render(
+    <SequenceDiagram
+      flow={{ ...createOrderFlow, runId: 'run-6', steps: [{ ...loadStep, screenshot: shot }] }}
+      components={{}}
+      expanded={new Set()}
+      onToggle={() => {}}
+      selected={selected}
+      onSelect={onSelect}
+    />,
+  );
+  return within(screen.getByRole('group', { name: /sequence diagram/i })).getByRole('button', { name: 'screenshot load /' });
+}
+
+test('a thumbnail sits beside its ui arrow and selects the step', async () => {
+  const onSelect = vi.fn();
+  const thumbnail = renderBrowserRun(null, onSelect);
+  const image = thumbnail.querySelector('image')!;
+  expect(image.getAttribute('href')).toBe(`/api/runs/run-6/screenshots/${shot}`);
+  expect(image.getAttribute('x')).toBe('7');
+  expect(image.getAttribute('y')).toBe('73'); // the arrow's row (100) minus half a thumbnail
+  expect(image.getAttribute('width')).toBe('96');
+  expect(image.getAttribute('height')).toBe('54');
+
+  await userEvent.click(thumbnail);
+  expect(onSelect).toHaveBeenCalledWith({ stepId: 'load', kind: 'request' });
+});
+
+test("an unselected step's thumbnail is not outlined", () => {
+  expect(renderBrowserRun().querySelector('rect')).not.toHaveClass('is-selected');
+});
+
+test("a selected step's thumbnail is outlined", () => {
+  expect(renderBrowserRun({ stepId: 'load', kind: 'request' }).querySelector('rect')).toHaveClass('is-selected');
+});
+
+test('a thumbnail that fails to load says so', () => {
+  const thumbnail = renderBrowserRun();
+  fireEvent.error(thumbnail.querySelector('image')!);
+  expect(thumbnail.querySelector('image')).toBeNull();
+  expect(thumbnail.querySelector('rect')).toHaveClass('is-missing');
+  expect(thumbnail.querySelector('title')).toHaveTextContent('Screenshot not available');
 });

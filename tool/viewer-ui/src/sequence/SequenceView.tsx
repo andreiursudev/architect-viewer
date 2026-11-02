@@ -87,7 +87,7 @@ export function SequenceView() {
       </div>
       <aside className="side-panel sequence-details" aria-label="Message details">
         {step && selected ? (
-          <MessageDetails step={step} kind={selected.kind} />
+          <MessageDetails runId={runId} step={step} kind={selected.kind} />
         ) : (
           <p className="muted sequence-hint">Select a message to see its payload.</p>
         )}
