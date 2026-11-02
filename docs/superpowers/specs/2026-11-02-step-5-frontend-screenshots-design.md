@@ -40,8 +40,16 @@ Decided with the owner:
   `__STACK_FLUSH__` already uses), then two animation frames so React has painted, capped at 2 s in all.
 - Then it calls `window.__STACK_SCREENSHOT__(spanIds)` with every span id in the batch, and starts a new batch. Steps
   that settle together share one screenshot: `click to-order` and `→ /order` both get the order form.
+- **The shield.** A Playwright test does not wait for anything: it clicks `to-order` milliseconds after the stock table
+  shows, long before `load /` settles, and the screenshot (taken by the test JVM, asynchronously) would race the
+  click. So from the moment a ui step ends until the screenshot of its batch is taken, the package lays a transparent
+  element over the whole viewport (`position: fixed; inset: 0; z-index: 2147483647; background: transparent`,
+  `data-stack-shield`). Playwright's click sees that another element would receive it and retries until the shield
+  is gone, so the next step starts only after the screenshot, with scenario code untouched. The shield is invisible
+  in the screenshot. It does not hold keyboard-only steps (a submit by Enter in a field), which the sandbox does not
+  use; such a step joins the pending batch.
 - Only when `window.__STACK_SCREENSHOT__` is a function, which only the harness defines (§2.2). Without it nothing
-  waits and nothing is called: manual runs and the app in production are unchanged.
+  waits, no shield is laid and nothing is called: manual runs and the app in production are unchanged.
 - The package keeps the promises of the calls still in flight; `__STACK_FLUSH__` waits for them, and for a batch still
   settling, before it exports. Scenarios already end with `StackBrowser.flush`, so the last screenshot is stored before
   the test (and the run) ends.
@@ -110,6 +118,8 @@ Decided with the owner:
 
 - **Reporter unreachable from the harness**: one warning per page, the test goes on, the steps have no images.
 - **Page never settles** (a polling fetch, a span left open): the 2 s cap; the screenshot shows the page as it is then.
+- **The screenshot call never answers** (the harness is stuck): the shield comes down after 10 s anyway, so a test is
+  held up, never blocked; that batch has no image.
 - **Screenshot arrives before the run's first span**: the reporter creates the run (§2.3).
 - **Invalid upload**: `400`, logged by the harness.
 - **Missing or unreadable image in a run**: the step's thumbnail and panel image say so; the run still opens.
@@ -117,14 +127,16 @@ Decided with the owner:
 ## 6. Testing (test-first)
 
 1. **Spike first** (throwaway, results in the step-5 notes): can the `exposeFunction` handler call
-   `page.screenshot()` from Playwright Java while the test thread is inside a `click`/`fill`, without deadlocking? If
-   not, the handler queues the request and the harness shoots it on the test thread at the next Playwright call or
-   at `flush`; the spike picks one.
+   `page.screenshot()` from Playwright Java while the test thread is inside a `click` that the shield holds, without
+   deadlocking? And does that `click` wait (retrying, not failing) while the shield covers the page, and go through
+   once it is removed? The design needs both: a handler that queued the screenshot for later would wait behind the
+   very click the shield holds. If either fails, stop and take it to the owner.
 2. **Acceptance**: `SandboxAcceptanceTest` checks that the three browser scenarios recorded a screenshot for each of
-   their ui steps (one record per settle, every ui span id covered), red first.
+   their ui steps, grouped as they settle (`load /` alone, not with the click after it), red first.
 3. **browser-sdk**: Vitest for the batching (steps that settle together share one call; a step after the call starts
-   a new batch), the 2 s cap, flush waiting for calls in flight, and no wait without `__STACK_SCREENSHOT__`; the
-   Playwright fixture test asserts the calls the page makes.
+   a new batch), the 2 s cap, the shield (laid at a step, down once the call answers or after 10 s), flush waiting for
+   calls in flight, and no wait and no shield without `__STACK_SCREENSHOT__`; the Playwright fixture test asserts the
+   calls the page makes and that a Playwright click waits for the shield.
 4. **Harness**: `StackBrowserTest` against a fake reporter (the request, the PNG, `screenshots = false`, upload failure
    not failing the test).
 5. **Reporter**: controller tests (validation, `201`), store tests (folder created by a screenshot, record lines,
