@@ -18,3 +18,15 @@ button under the shield at once.
   that thread was inside the held `click`, and returned a 4995-byte PNG to the page. No deadlock.
 
 So the design stands: the handler shoots directly, and a held click is what lets it.
+
+## Acceptance (Task 7)
+
+All 7 acceptance tests pass. Browser test durations with screenshots (Testcontainers stack, macOS, Chromium headless):
+`browse-stock` 0.80 s, `place-order-in-browser` 1.01 s, `place-order-out-of-stock-in-browser` 0.61 s; the untagged
+`order page survives a reload` (no screenshots, also places an order) 0.62 s. No timing from before step 5 survived
+(the red run of Task 2 waits out its 10 s timeouts), so the reload test is the nearest baseline: settling and shooting
+add roughly 0.4 s to a journey with three batches. Screenshots are 16–21 KB each (1280 × 720 viewport PNG).
+
+The first green attempt found `[click place-order, submit order-form]` shot before `→ /orders/<id>`: the settle began in
+the click's capture-phase listener, before the submit handler opened its `POST`, so "no span open" held at once.
+Ruling G7 (below) fixes it.
