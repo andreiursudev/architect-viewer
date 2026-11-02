@@ -10,6 +10,7 @@ import com.github.victools.jsonschema.module.jackson.JacksonOption
 import com.github.victools.jsonschema.module.jackson.JacksonSchemaModule
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.model.view.Flow
 import io.stackvibed.model.view.WorkspaceView
 import io.stackvibed.model.workspace.BoardLayout
@@ -38,6 +39,7 @@ class ModelSchemaRoot(
     val boardLayout: BoardLayout,
     val workspaceView: WorkspaceView,
     val flow: Flow,
+    val screenshotRecord: ScreenshotRecord,
 )
 
 /** Generates the JSON schema of the model. Output is pretty-printed with sorted keys so it is stable across runs. */

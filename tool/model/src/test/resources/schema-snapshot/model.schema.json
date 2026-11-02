@@ -532,6 +532,9 @@
               "parentStepId" : {
                 "type" : [ "string", "null" ]
               },
+              "screenshot" : {
+                "type" : [ "string", "null" ]
+              },
               "startEpochNanos" : {
                 "format" : "int64",
                 "type" : "integer"
@@ -625,6 +628,28 @@
         }
       },
       "required" : [ "id" ],
+      "type" : "object"
+    },
+    "screenshotRecord" : {
+      "properties" : {
+        "file" : {
+          "type" : "string"
+        },
+        "id" : {
+          "type" : "string"
+        },
+        "spanIds" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "takenAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        }
+      },
+      "required" : [ "file", "id", "spanIds", "takenAt" ],
       "type" : "object"
     },
     "workspaceConfig" : {
@@ -743,6 +768,6 @@
       "type" : "object"
     }
   },
-  "required" : [ "boardLayout", "componentDefinition", "connectionDefinition", "flow", "recordingEvent", "recordingManifest", "scenarioDefinition", "workspaceConfig", "workspaceView" ],
+  "required" : [ "boardLayout", "componentDefinition", "connectionDefinition", "flow", "recordingEvent", "recordingManifest", "scenarioDefinition", "screenshotRecord", "workspaceConfig", "workspaceView" ],
   "type" : "object"
 }

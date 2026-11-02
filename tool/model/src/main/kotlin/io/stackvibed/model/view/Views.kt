@@ -69,6 +69,8 @@ data class FlowStep(
     val event: RecordingEvent,
     /** On an http step: the method its request landed on. */
     val handler: MethodEvent?,
+    /** On a ui step: the id of the screenshot of its result; null on other steps and when none was taken. */
+    val screenshot: String? = null,
 )
 
 data class Flow(

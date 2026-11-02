@@ -59,6 +59,7 @@ export interface ModelSchema {
       kind: "http" | "db" | "method" | "ui";
       label: string;
       parentStepId?: string | null;
+      screenshot?: string | null;
       startEpochNanos: number;
       status?: number | null;
       stepId: string;
@@ -81,6 +82,12 @@ export interface ModelSchema {
   scenarioDefinition: {
     description?: string | null;
     id: string;
+  };
+  screenshotRecord: {
+    file: string;
+    id: string;
+    spanIds: string[];
+    takenAt: string;
   };
   workspaceConfig: {
     aliases: {
