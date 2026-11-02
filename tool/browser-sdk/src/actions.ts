@@ -2,6 +2,7 @@ import { SpanKind, type Tracer } from '@opentelemetry/api';
 import { ACTION_SPAN, UI_ACTION_EVENT, UI_ACTION_TARGET, UI_ROUTE } from './attributes.js';
 import { describeTarget } from './describeTarget.js';
 import { routeOf } from './navigation.js';
+import { SHIELD_ATTRIBUTE } from './screenshots.js';
 
 /**
  * Records every click and form submit as a zero-length `stack.action` span. The listeners sit on the document in the
@@ -13,6 +14,8 @@ import { routeOf } from './navigation.js';
  */
 export function recordActions(tracer: Tracer): void {
   const record = (event: Event) => {
+    // input the screenshot shield caught never reached the app: it is no step of the user's
+    if (event.target instanceof Element && event.target.hasAttribute(SHIELD_ATTRIBUTE)) return;
     const at = Date.now();
     tracer
       .startSpan(ACTION_SPAN, {

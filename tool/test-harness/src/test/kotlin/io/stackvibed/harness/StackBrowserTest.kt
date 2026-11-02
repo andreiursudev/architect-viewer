@@ -107,4 +107,38 @@ class StackBrowserTest {
             reporter.uploads.size shouldBe 1
         }
     }
+
+    @Test
+    fun `tagging a page again exposes the function once and shoots for the latest run`() {
+        FakeReporter().use { reporter ->
+            System.setProperty("stack.reporter.url", reporter.url)
+            every { page.screenshot() } returns png
+            val callback = tagAndCapture()
+            val next = ScenarioRun("place-order-in-browser", "0d9fe9b6-1c2a-4f3e-8a6b-2c4d5e6f7a8b")
+            StackContext.begin(next)
+            try {
+                StackBrowser.tag(page)
+            } finally {
+                StackContext.end()
+            }
+
+            verify(exactly = 1) { page.exposeFunction(any(), any()) }
+            callback.call(listOf("04b7ffff7cd2b57d")) shouldBe true
+            reporter.uploads.single().path shouldBe "/api/runs/${next.runId}/screenshots"
+        }
+    }
+
+    @Test
+    fun `tagging a page again without screenshots stops them`() {
+        val callback = tagAndCapture()
+        StackContext.begin(run)
+        try {
+            StackBrowser.tag(page, screenshots = false)
+        } finally {
+            StackContext.end()
+        }
+
+        callback.call(listOf("04b7ffff7cd2b57d")) shouldBe false
+        verify(exactly = 0) { page.screenshot() }
+    }
 }

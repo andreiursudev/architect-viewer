@@ -537,8 +537,12 @@ example (React + Vite, served by nginx).
    which shoots the viewport and sends it to the reporter (`-Dstack.reporter.url=<url>` on the test JVM when the
    reporter is not on `http://localhost:4318`). The viewer shows them beside the ui steps of the sequence view. Until
    a screenshot is taken an invisible shield covers the page, so the test's next click waits for it (up to about 2 s
-   after a step): the screenshot shows the result of the steps before the click, not of the click. A step started from
-   the keyboard alone (Enter in a field) is not held. `StackBrowser.flush(page)` also waits for the last screenshot.
+   after a step): the screenshot shows the result of the steps before the click, not of the click. What the shield does
+   not hold: a step started from the keyboard alone (Enter in a field), and anything inside a native modal `<dialog>`,
+   a `popover` or a fullscreen element (they sit above it). Input that skips Playwright's hit-test (a double click, a
+   `force` click, `page.mouse`) within about 2 s of a step lands on the shield and is dropped, with one
+   `console.warn`: tag such tests with `screenshots = false`. Tagging the same page again (a page reused across tests)
+   only switches the run its screenshots go to. `StackBrowser.flush(page)` also waits for the last screenshot.
    `StackBrowser.tag(page, screenshots = false)` turns them off; a failed screenshot is logged once and never fails the
    test. With another Playwright flavour, expose `window.__STACK_SCREENSHOT__(spanIds)` yourself and POST the PNG to
    the reporter's `/api/runs/<runId>/screenshots?scenarioId=<id>&spanIds=<a>,<b>` (`Content-Type: image/png`).

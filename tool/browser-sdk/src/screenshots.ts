@@ -10,6 +10,10 @@ export const SHIELD_TIMEOUT_MILLIS = 10_000;
 export const SHIELD_ATTRIBUTE = 'data-stack-shield';
 
 const SHIELD_STYLE = 'position: fixed; inset: 0; z-index: 2147483647; background: transparent';
+const SHIELD_WARNING =
+  '@stackvibed/browser: a click reached the screenshot shield and was dropped. Playwright waits for the shield before ' +
+  'a plain click, but not for a double click, a forced click or page.mouse within about 2 s of a ui step; tag such ' +
+  'tests with StackBrowser.tag(page, screenshots = false).';
 
 /** The spans of the page that are still open (StackSpanProcessor). */
 export interface OpenSpans {
@@ -33,6 +37,7 @@ export class ScreenshotRequester implements SpanProcessor {
   private settling: Promise<void> | null = null;
   private readonly inFlight = new Set<Promise<void>>();
   private shield: HTMLElement | null = null;
+  private warned = false;
 
   constructor(private readonly spans: OpenSpans) {}
 
@@ -92,6 +97,12 @@ export class ScreenshotRequester implements SpanProcessor {
     const shield = document.createElement('div');
     shield.setAttribute(SHIELD_ATTRIBUTE, '');
     shield.style.cssText = SHIELD_STYLE;
+    // only input that skips Playwright's hit-test lands here; say so once, as the app never sees it
+    shield.addEventListener('mousedown', () => {
+      if (this.warned) return;
+      this.warned = true;
+      console.warn(SHIELD_WARNING);
+    });
     document.documentElement.appendChild(shield);
     this.shield = shield;
   }

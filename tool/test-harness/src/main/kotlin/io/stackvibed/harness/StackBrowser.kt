@@ -1,6 +1,8 @@
 package io.stackvibed.harness
 
 import com.microsoft.playwright.Page
+import java.util.Collections
+import java.util.WeakHashMap
 
 /** Playwright counterpart of [StackBaggageFilter]: puts the active scenario into a page so the recorder can attribute its events. */
 object StackBrowser {
@@ -17,16 +19,22 @@ object StackBrowser {
         val run = checkNotNull(StackContext.current()) { "StackBrowser.tag needs an active @StackScenario" }
         // Plain interpolation is safe: scenario ids are slugs and run ids are UUIDs, both validated by StackScenarioExtension.
         page.addInitScript("""window.__STACK__ = {"scenario":"${run.scenarioId}","run":"${run.runId}"};""")
-        if (screenshots) exposeScreenshots(page, run)
+        // A page is exposed once: tagging it again (a page reused across tests) only changes the run it shoots for.
+        if (page in screenshotRuns) screenshotRuns[page] = if (screenshots) run else null
+        else if (screenshots) {
+            screenshotRuns[page] = run
+            exposeScreenshots(page)
+        }
     }
 
     // The page calls it while the test thread waits inside a Playwright call (a click the recorder's shield holds),
     // which is when Playwright runs the callback; shooting the page from inside it is safe (step-5 notes, spike).
-    private fun exposeScreenshots(page: Page, run: ScenarioRun) {
+    private fun exposeScreenshots(page: Page) {
         val uploader = ScreenshotUploader()
         var warned = false
         // Answers the page's call with whether the screenshot was stored; the page ignores it either way.
         page.exposeFunction(SCREENSHOT_FUNCTION) { args ->
+            val run = screenshotRuns[page] ?: return@exposeFunction false
             try {
                 val spanIds = (args[0] as List<*>).map { it as String }
                 uploader.upload(run, spanIds, page.screenshot())
@@ -40,6 +48,9 @@ object StackBrowser {
             }
         }
     }
+
+    /** The run each tagged page shoots for (null: screenshots turned off); weak, so a closed page is forgotten. */
+    private val screenshotRuns: MutableMap<Page, ScenarioRun?> = Collections.synchronizedMap(WeakHashMap())
 
     private const val SCREENSHOT_FUNCTION = "__STACK_SCREENSHOT__"
     private val log: System.Logger = System.getLogger(StackBrowser::class.java.name)

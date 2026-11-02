@@ -18,6 +18,20 @@ Source: the execution ledger (deleted after completion). Branch `step-5-screensh
 - Ruling G9: Docker builds ran with `DOCKER_CONFIG` pointing at a config without `credsStore` (README troubleshooting): the desktop credential helper hung `buildx` on the `eclipse-temurin:25-jre` pull — cost if wrong: none; the owner's `~/.docker/config.json` is untouched.
 - Ruling G10: the viewer-ui e2e test was written after the code; its power was checked by switching the panel image off (that test failed, the other 17 passed) and restoring it. Thumbnails are drawn after the arrows in the SVG, so a row's arrow comes first for keyboard and screen reader (the existing e2e `sequence shows the browser steps first` relies on it) — cost if wrong: none.
 - Ruling G11: the run-6 fixtures (viewer-backend and viewer-ui) use three real screenshots from an acceptance run, renamed to run-6's span ids; the order page shows another order id than run-6's events — cost if wrong: a cosmetic mismatch in a fixture.
+- Ruling G12 (final review): input that skips Playwright's hit-test (a double click's second click, a `force` click, `page.mouse`) within ~2 s of a ui step lands on the shield; the app never sees it. The recorder no longer records such a click as a ui step (it was a phantom `click div`), the shield warns once on the console naming `screenshots = false`, and the integration guide documents it — why: the shield cannot tell these apart from a click it must hold; forwarding them to the element underneath would mean re-dispatching untrusted events into the app — cost if wrong: an integrator's tagged test with a double click breaks until it opts out (the warning says how). Pinned by `a click that lands on the shield is no ui step and warns once`.
+- Ruling G13 (final review): elements in the browser's top layer (a native modal `<dialog>`, a `popover`, fullscreen) sit above the shield, so clicks inside them are not held and their screenshots can race the next click; documented, not fixed — why: making the shield a popover would not help inside a modal dialog, which makes everything outside it inert — cost if wrong: screenshots of steps inside such dialogs may show the state after the next click. The sandbox has none.
+- Ruling G14 (final review, a Minor re-graded Important): `StackBrowser.tag` on a page already tagged no longer throws ("already registered") and no longer shoots for the first test's run: a page exposes the function once and a weak page→run map says which run it shoots for (`screenshots = false` on a re-tag stops them) — why: a suite reusing one page across tests broke on upgrade — pinned by `tagging a page again exposes the function once and shoots for the latest run` and `tagging a page again without screenshots stops them`.
+
+## Deferred minors (final review)
+
+- The `whenNoSpanOpen` doc comment sits above `hasOpenSpan` in `StackSpanProcessor.ts` (two comments back to back).
+- More than 20 ui steps settling in one batch exceed the reporter's limit and lose that screenshot (the page neither caps nor splits a batch).
+- The reporter reads the whole upload into memory before its 5 MB check (no `Content-Length` check first); loopback only.
+- A wrong `Content-Type` gets 415 from Spring, not the spec's 400.
+- Each screenshot GET rescans every run's manifest and the run's `screenshots.jsonl` (O(runs) per image; the immutable cache hides repeats).
+- `ScreenshotUploader` makes an `HttpClient` per tagged page and never closes it.
+- An over-long comment line in `screenshots.ts`.
+- A navigation while the harness is shooting may label the new page's screenshot with the old steps' ids.
 
 ## Deferred follow-ups
 

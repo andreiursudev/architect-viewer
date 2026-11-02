@@ -1,4 +1,5 @@
-import { type Span, TracerProvider } from '@opentelemetry/sdk-trace';
+import { InMemorySpanExporter, SimpleSpanProcessor, type Span, TracerProvider } from '@opentelemetry/sdk-trace';
+import { recordActions } from './actions.js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ACTION_SPAN, NAVIGATION_SPAN } from './attributes.js';
 import { ScreenshotRequester, SETTLE_CAP_MILLIS, SHIELD_ATTRIBUTE } from './screenshots.js';
@@ -174,4 +175,27 @@ it('whenTaken waits for a batch settling and a call in flight', async () => {
 
   call.resolve();
   await vi.waitFor(() => expect(taken).toBe(true));
+});
+
+it('a click that lands on the shield is no ui step and warns once', async () => {
+  const { requester, step } = setUp();
+  const exporter = new InMemorySpanExporter();
+  const provider = new TracerProvider({ spanProcessors: [new SimpleSpanProcessor({ exporter })] });
+  recordActions(provider.getTracer('actions'));
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    step(); // lays the shield
+    const cover = shield()!;
+    cover.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    cover.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    cover.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    cover.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(exporter.getFinishedSpans()).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('screenshots = false');
+  } finally {
+    warn.mockRestore();
+    await requester.whenTaken();
+  }
 });
