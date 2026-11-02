@@ -9,6 +9,11 @@ declare global {
     __STACK__?: StackRun;
     /** Set by startStackRecording: exports every finished span now. */
     __STACK_FLUSH__?: () => Promise<void>;
+    /**
+     * Exposed by the test harness (StackBrowser.tag): shoots the page as it is now for the ui steps with these span
+     * ids, and answers once the screenshot is stored (or has failed).
+     */
+    __STACK_SCREENSHOT__?: (spanIds: string[]) => Promise<unknown>;
   }
 }
 

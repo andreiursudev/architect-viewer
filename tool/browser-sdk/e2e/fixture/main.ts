@@ -15,6 +15,7 @@ startStackRecording({
 
 const plain = (span: ReadableSpan): PlainSpan => ({
   name: span.name,
+  spanId: span.spanContext().spanId,
   kind: SpanKind[span.kind],
   startMillis: span.startTime[0] * 1000 + span.startTime[1] / 1_000_000,
   attributes: { ...span.attributes },

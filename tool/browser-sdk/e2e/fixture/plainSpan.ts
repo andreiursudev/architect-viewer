@@ -1,6 +1,7 @@
 /** A finished span as the fixture page hands it to the test. */
 export interface PlainSpan {
   name: string;
+  spanId: string;
   kind: string;
   /** The span's start, in milliseconds since the epoch. */
   startMillis: number;

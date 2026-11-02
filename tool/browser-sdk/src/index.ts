@@ -14,6 +14,7 @@ import {
 import { recordActions } from './actions.js';
 import { ERROR_TYPE, SERVICE_NAME } from './attributes.js';
 import { recordNavigations } from './navigation.js';
+import { ScreenshotRequester, SETTLE_CAP_MILLIS } from './screenshots.js';
 import { StackBaggagePropagator } from './StackBaggagePropagator.js';
 import { StackSpanProcessor } from './StackSpanProcessor.js';
 
@@ -56,9 +57,11 @@ export function startStackRecording(options: StackRecordingOptions): void {
   const exporter = new WarnOnFailure(options.exporter ?? new OTLPTraceExporter({ url: tracesUrl }), tracesUrl);
 
   const stackProcessor = new StackSpanProcessor();
+  // Under the test harness only: a screenshot of the page once its ui steps have settled.
+  const screenshots = new ScreenshotRequester(() => stackProcessor.whenNoSpanOpen(SETTLE_CAP_MILLIS));
   const provider = new TracerProvider({
     resource: resourceFromAttributes({ [SERVICE_NAME]: options.component }),
-    spanProcessors: [stackProcessor, new BatchSpanProcessor({ exporter, scheduledDelayMillis: 200 })],
+    spanProcessors: [stackProcessor, screenshots, new BatchSpanProcessor({ exporter, scheduledDelayMillis: 200 })],
   });
   // No zone.js: the stack context manager keeps a span active only through synchronous code, which is all the fetch
   // instrumentation needs to put the span's traceparent on the request.
@@ -90,7 +93,12 @@ export function startStackRecording(options: StackRecordingOptions): void {
 
   // A failed export has already warned (WarnOnFailure); flushing never rejects, so callers need not care.
   const flushNow = () => provider.forceFlush().catch(() => undefined);
-  window.__STACK_FLUSH__ = () => stackProcessor.whenNoSpanOpen(FLUSH_WAIT_FOR_OPEN_SPANS_MILLIS).then(flushNow);
+  // The last screenshot of a journey is taken before the test ends, as its spans are exported.
+  window.__STACK_FLUSH__ = () =>
+    screenshots
+      .whenTaken()
+      .then(() => stackProcessor.whenNoSpanOpen(FLUSH_WAIT_FOR_OPEN_SPANS_MILLIS))
+      .then(flushNow);
   // The browser batch processor also flushes when the page is hidden; this keeps the flush on unload independent of it.
   // An unloading page cannot wait (its timers may never fire), so it exports what has ended, in a keepalive request.
   window.addEventListener('pagehide', () => void flushNow());

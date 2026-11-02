@@ -115,6 +115,7 @@ test('page load is one navigation span', async ({ page }) => {
   expect(navigations).toEqual([
     {
       name: NAVIGATION_SPAN,
+      spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
       kind: 'INTERNAL',
       startMillis: expect.any(Number),
       attributes: { [UI_NAVIGATION_KIND]: 'load', [UI_URL]: page.url(), [UI_ROUTE]: '/' },
@@ -326,4 +327,61 @@ test('a failing reporter only warns', async ({ page, reporter }) => {
     `stack recording: export to ${reporter.url}/v1/traces failed`,
   ]);
   expect(errors).toEqual([]);
+});
+
+/** Exposes the harness's screenshot function: keeps each call's span ids and when it answered, `millis` after the call. */
+async function screenshotHarness(page: Page, millis = 300): Promise<{ spanIds: string[]; answeredAt: number }[]> {
+  const calls: { spanIds: string[]; answeredAt: number }[] = [];
+  await page.exposeFunction('__STACK_SCREENSHOT__', async (spanIds: string[]) => {
+    await new Promise((resolve) => setTimeout(resolve, millis));
+    calls.push({ spanIds, answeredAt: Date.now() });
+  });
+  return calls;
+}
+
+test('screenshot calls group the steps as they settle', async ({ page }) => {
+  await echo(page);
+  const calls = await screenshotHarness(page);
+  await page.goto('/');
+
+  await page.getByTestId('go').click();
+  await expect(page.getByTestId('echo-status')).toHaveText('echoed 1');
+
+  await expect.poll(() => calls.length).toBe(2);
+  const recorded = await spans(page);
+  const load = recorded.find((span) => span.attributes[UI_NAVIGATION_KIND] === 'load')!;
+  const click = recorded.find((span) => span.name === ACTION_SPAN)!;
+  const route = recorded.find((span) => span.attributes[UI_NAVIGATION_KIND] === 'route')!;
+  expect(calls.map((call) => call.spanIds)).toEqual([[load.spanId], [click.spanId, route.spanId]]);
+});
+
+test('a Playwright click waits for the shield', async ({ page }) => {
+  await echo(page);
+  const calls = await screenshotHarness(page, 500);
+  await page.goto('/');
+
+  await page.getByTestId('go').click();
+
+  const click = (await spans(page)).find((span) => span.name === ACTION_SPAN)!;
+  expect(calls[0].spanIds).toHaveLength(1);
+  expect(click.startMillis).toBeGreaterThanOrEqual(calls[0].answeredAt);
+});
+
+test('flush waits for a screenshot in flight', async ({ page }) => {
+  await echo(page);
+  const calls = await screenshotHarness(page, 500);
+  await page.goto('/');
+  await page.getByTestId('go').click();
+
+  await page.evaluate(() => window.__STACK_FLUSH__!());
+  expect(calls).toHaveLength(2);
+});
+
+test('navigating away while a screenshot is pending neither hangs nor fails', async ({ page }) => {
+  await page.exposeFunction('__STACK_SCREENSHOT__', () => new Promise<void>(() => undefined));
+  await page.goto('/');
+  await expect(page.locator('[data-stack-shield]')).toHaveCount(1);
+
+  await page.goto('/?again', { timeout: 5000 });
+  expect(page.url()).toContain('again');
 });
