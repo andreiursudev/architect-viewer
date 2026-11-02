@@ -24,7 +24,7 @@ afterEach(() => {
 
 function setUp() {
   const stack = new StackSpanProcessor();
-  const requester = new ScreenshotRequester(() => stack.whenNoSpanOpen(SETTLE_CAP_MILLIS));
+  const requester = new ScreenshotRequester(stack);
   const tracer = new TracerProvider({ spanProcessors: [stack, requester] }).getTracer('test');
   /** A ui step: a zero-length span ended at once, as the package records clicks and route changes. */
   const step = (name = ACTION_SPAN) => {
@@ -53,6 +53,20 @@ it('steps that settle together share one screenshot call', async () => {
   expect(calls).toEqual([]);
 
   fetch.end();
+  await vi.waitFor(() => expect(calls).toEqual([[click, route]]));
+});
+
+it("a fetch the step's own handler starts holds the batch", async () => {
+  const { step, open } = setUp();
+  // A click runs the capture-phase listener (the step) first; the submit handler then starts its fetch in the same task.
+  const click = step();
+  const fetch = open();
+  await sleep(100);
+  const route = step(NAVIGATION_SPAN); // the app navigates on the response
+  await sleep(20);
+  expect(calls).toEqual([]);
+
+  fetch.end(); // the fetch span ends a little after its response
   await vi.waitFor(() => expect(calls).toEqual([[click, route]]));
 });
 

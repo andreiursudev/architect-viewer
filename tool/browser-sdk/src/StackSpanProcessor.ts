@@ -27,6 +27,11 @@ export class StackSpanProcessor implements SpanProcessor {
   }
 
   /** Resolves once no span is open, or after maxWaitMillis, whichever comes first. Never rejects. */
+  /** Whether some span has started and not ended yet. */
+  hasOpenSpan(): boolean {
+    return this.open.size > 0;
+  }
+
   whenNoSpanOpen(maxWaitMillis: number): Promise<void> {
     if (this.open.size === 0) return Promise.resolve();
     return new Promise((resolve) => {

@@ -11,13 +11,21 @@ export const SHIELD_ATTRIBUTE = 'data-stack-shield';
 
 const SHIELD_STYLE = 'position: fixed; inset: 0; z-index: 2147483647; background: transparent';
 
+/** The spans of the page that are still open (StackSpanProcessor). */
+export interface OpenSpans {
+  /** Resolves once no span is open, or after [maxWaitMillis]. */
+  whenNoSpanOpen(maxWaitMillis: number): Promise<void>;
+  hasOpenSpan(): boolean;
+}
+
 /**
  * Asks the test harness for one screenshot per settle of the page's ui steps (page loads, route changes, clicks and
  * submits), through `window.__STACK_SCREENSHOT__`, which only `StackBrowser.tag` defines: without it this does nothing.
  *
- * The first step of a batch starts the settle: once no span is open (the fetches the steps started have ended) and two
- * frames have been painted, at most 2 s after that step, the batch is closed and shot; a step after that starts the
- * next batch. Meanwhile a transparent shield covers the page, so that Playwright's next click waits (another element
+ * The first step of a batch starts the settle: once no span is open (the fetches the steps started have ended) and still
+ * none after two painted frames, at most 2 s after that step, the batch is closed and shot; a step after that starts
+ * the next batch. The frames matter twice: the app paints what it fetched, and a fetch a submit handler starts only
+ * opens after the click's step (the capture-phase listener runs first), so it is seen on the second look. Meanwhile a transparent shield covers the page, so that Playwright's next click waits (another element
  * would receive it) until the screenshot is taken and the page it shows is the result of the steps before the click.
  */
 export class ScreenshotRequester implements SpanProcessor {
@@ -26,8 +34,7 @@ export class ScreenshotRequester implements SpanProcessor {
   private readonly inFlight = new Set<Promise<void>>();
   private shield: HTMLElement | null = null;
 
-  /** `settled` resolves once the page has no span open; it may resolve late, the cap is applied here. */
-  constructor(private readonly settled: () => Promise<void>) {}
+  constructor(private readonly spans: OpenSpans) {}
 
   onStart(_span: Span, _parentContext: Context): void {}
 
@@ -53,7 +60,14 @@ export class ScreenshotRequester implements SpanProcessor {
   }
 
   private async settle(): Promise<void> {
-    await withTimeout(this.settled().then(twoFrames), SETTLE_CAP_MILLIS);
+    const deadline = Date.now() + SETTLE_CAP_MILLIS;
+    const quiet = async () => {
+      do {
+        await this.spans.whenNoSpanOpen(SETTLE_CAP_MILLIS);
+        await twoFrames();
+      } while (this.spans.hasOpenSpan() && Date.now() < deadline);
+    };
+    await withTimeout(quiet(), SETTLE_CAP_MILLIS);
     const spanIds = this.pending;
     this.pending = [];
     this.settling = null;

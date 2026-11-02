@@ -14,7 +14,7 @@ import {
 import { recordActions } from './actions.js';
 import { ERROR_TYPE, SERVICE_NAME } from './attributes.js';
 import { recordNavigations } from './navigation.js';
-import { ScreenshotRequester, SETTLE_CAP_MILLIS } from './screenshots.js';
+import { ScreenshotRequester } from './screenshots.js';
 import { StackBaggagePropagator } from './StackBaggagePropagator.js';
 import { StackSpanProcessor } from './StackSpanProcessor.js';
 
@@ -58,7 +58,7 @@ export function startStackRecording(options: StackRecordingOptions): void {
 
   const stackProcessor = new StackSpanProcessor();
   // Under the test harness only: a screenshot of the page once its ui steps have settled.
-  const screenshots = new ScreenshotRequester(() => stackProcessor.whenNoSpanOpen(SETTLE_CAP_MILLIS));
+  const screenshots = new ScreenshotRequester(stackProcessor);
   const provider = new TracerProvider({
     resource: resourceFromAttributes({ [SERVICE_NAME]: options.component }),
     spanProcessors: [stackProcessor, screenshots, new BatchSpanProcessor({ exporter, scheduledDelayMillis: 200 })],
