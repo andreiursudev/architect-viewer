@@ -7,6 +7,7 @@ import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.model.UiActionEvent
 import io.stackvibed.model.UiNavigationEvent
 import io.stackvibed.model.UiNavigationKind
@@ -45,10 +46,18 @@ class FlowBuilder {
      * - an unanswered fetch of a frontend is a hop to the first segment of its path (`unknown-host` when it has none);
      *   a frontend reaches its API through the host that serves it, so the host says nothing.
      *
+     * A ui step carries the id of the screenshot whose record lists its span (spec step 5 §4.1); no other step does.
+     *
      * Without method events every unit and handler is null and the steps are those of a run recorded before step 3.
      */
-    fun build(manifest: RecordingManifest, events: List<RecordingEvent>, aliases: Map<String, String>): Flow {
+    fun build(
+        manifest: RecordingManifest,
+        events: List<RecordingEvent>,
+        aliases: Map<String, String>,
+        screenshots: List<ScreenshotRecord> = emptyList(),
+    ): Flow {
         fun alias(id: String) = aliases[id] ?: id
+        val screenshotOf = screenshots.flatMap { record -> record.spanIds.map { it to record.id } }.toMap()
 
         val tree = CallTree(events)
         val steps = events.sortedBy { it.startEpochNanos }.mapNotNull { event ->
@@ -91,11 +100,12 @@ class FlowBuilder {
                         UiNavigationKind.LOAD -> "load ${event.route}"
                         UiNavigationKind.ROUTE -> "→ ${event.route}"
                     },
-                    status = null,
+                    status = null, screenshot = screenshotOf[event.spanId],
                 )
                 is UiActionEvent -> step(
                     event, parent = null, from = ComponentIds.E2E_CLIENT, to = alias(event.component), kind = FlowStepKind.UI,
                     label = "${event.event.name.lowercase(Locale.ROOT)} ${event.target}", status = null,
+                    screenshot = screenshotOf[event.spanId],
                 )
             }
         }
@@ -122,7 +132,7 @@ class FlowBuilder {
     /** A method step adds no connection to the board: its [connectionId] is null. */
     private fun step(
         event: RecordingEvent, parent: String?, from: String, to: String, kind: FlowStepKind, label: String, status: Int?,
-        fromUnit: String? = null, toUnit: String? = null, handler: MethodEvent? = null,
+        fromUnit: String? = null, toUnit: String? = null, handler: MethodEvent? = null, screenshot: String? = null,
     ) = FlowStep(
         stepId = event.eventId,
         parentStepId = parent,
@@ -138,6 +148,7 @@ class FlowBuilder {
         status = status,
         event = event,
         handler = handler,
+        screenshot = screenshot,
     )
 
     private companion object {

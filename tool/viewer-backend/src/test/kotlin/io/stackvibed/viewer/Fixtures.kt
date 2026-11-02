@@ -36,7 +36,10 @@ object Fixtures {
 
     private fun copyTree(from: Path, to: Path): Path {
         Files.createDirectories(to)
-        Files.list(from).use { it.toList() }.forEach { Files.copy(it, to.resolve(it.fileName.toString())) }
+        Files.list(from).use { it.toList() }.forEach {
+            val target = to.resolve(it.fileName.toString())
+            if (Files.isDirectory(it)) copyTree(it, target) else Files.copy(it, target)
+        }
         return to
     }
 }

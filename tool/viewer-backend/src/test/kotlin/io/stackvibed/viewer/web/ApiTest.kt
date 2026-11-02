@@ -227,6 +227,33 @@ class ApiTest {
     }
 
     @Test
+    fun `browser run flow carries the screenshot of its ui steps`() {
+        mvc.get("/api/runs/run-6/flow").andExpect {
+            status { isOk() }
+            jsonPath("$.steps[0].label") { value("load /") }
+            jsonPath("$.steps[0].screenshot") { value("9a8b7c6d5e4f3021") }
+        }
+    }
+
+    @Test
+    fun `screenshot of a run is served as png`() {
+        val png = Files.readAllBytes(root.resolve("recordings/${Fixtures.PLACE_ORDER_IN_BROWSER_6}/screenshots/9a8b7c6d5e4f3021.png"))
+        mvc.get("/api/runs/run-6/screenshots/9a8b7c6d5e4f3021").andExpect {
+            status { isOk() }
+            content { contentType(MediaType.IMAGE_PNG) }
+            content { bytes(png) }
+            header { string("Cache-Control", org.hamcrest.Matchers.containsString("immutable")) }
+        }
+    }
+
+    @Test
+    fun `unknown or unlisted screenshot is 404`() {
+        mvc.get("/api/runs/run-6/screenshots/..%2Fmanifest.json").andExpect { status { isNotFound() } }
+        mvc.get("/api/runs/run-6/screenshots/0123456789abcdef").andExpect { status { isNotFound() } }
+        mvc.get("/api/runs/nope/screenshots/9a8b7c6d5e4f3021").andExpect { status { isNotFound() } }
+    }
+
+    @Test
     fun `flow endpoint returns 404 for unknown run`() {
         mvc.get("/api/runs/nope/flow").andExpect { status { isNotFound() } }
     }

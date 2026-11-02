@@ -54,7 +54,7 @@ class TopologyService(
     fun flow(runId: String): Flow {
         val manifest = (recordings.manifests() + recordings.referenceManifests()).firstOrNull { it.runId == runId }
             ?: throw NoSuchElementException("No recording with run id '$runId'")
-        return flowBuilder.build(manifest, recordings.events(runId), workspace.load().config.aliases)
+        return flowBuilder.build(manifest, recordings.events(runId), workspace.load().config.aliases, recordings.screenshots(runId))
     }
 
     /** Components and connections the evidence runs went through, by id, in first-seen order. */

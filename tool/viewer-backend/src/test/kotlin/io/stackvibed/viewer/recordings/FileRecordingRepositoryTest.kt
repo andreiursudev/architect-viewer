@@ -115,4 +115,43 @@ class FileRecordingRepositoryTest {
 
         repository().manifests().map { it.runId } shouldBe listOf("run-1")
     }
+
+    @Test
+    fun `screenshots of a run are read in order`() {
+        Fixtures.copyRun(Fixtures.PLACE_ORDER_IN_BROWSER_6, recordings)
+
+        repository().screenshots("run-6").map { it.spanIds } shouldBe listOf(
+            listOf("9a8b7c6d5e4f3021"),
+            listOf("6d5e4f302192a3b4", "5e4f302192a3b4c5"),
+            listOf("4f302192a3b4c5d6", "2192a3b4c5d6e7f8"),
+        )
+    }
+
+    @Test
+    fun `a run without screenshots has none`() {
+        Fixtures.copyRun(Fixtures.CREATE_ORDER_1, recordings)
+
+        repository().screenshots("run-1") shouldBe emptyList()
+    }
+
+    @Test
+    fun `a half-written screenshot line is ignored`() {
+        val run = Fixtures.copyRun(Fixtures.PLACE_ORDER_IN_BROWSER_6, recordings)
+        run.resolve("screenshots.jsonl").appendText("{\"id\":\"0123456789abcdef\",\"file\":\"screensh")
+
+        repository().screenshots("run-6") shouldHaveSize 3
+    }
+
+    @Test
+    fun `screenshot files are found by listed id only`() {
+        val run = Fixtures.copyRun(Fixtures.PLACE_ORDER_IN_BROWSER_6, recordings)
+        val repository = repository()
+
+        repository.screenshot("run-6", "9a8b7c6d5e4f3021") shouldBe run.resolve("screenshots/9a8b7c6d5e4f3021.png")
+        repository.screenshot("run-6", "5e4f302192a3b4c5") shouldBe null // listed in a record, but not a record id
+        repository.screenshot("run-6", "0123456789abcdef") shouldBe null
+        repository.screenshot("run-6", "../manifest") shouldBe null
+        repository.screenshot("run-6", "9A8B7C6D5E4F3021") shouldBe null
+        shouldThrow<NoSuchElementException> { repository.screenshot("nope", "9a8b7c6d5e4f3021") }
+    }
 }

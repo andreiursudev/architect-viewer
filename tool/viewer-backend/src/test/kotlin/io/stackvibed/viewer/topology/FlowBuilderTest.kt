@@ -10,6 +10,7 @@ import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.model.UiActionEvent
 import io.stackvibed.model.UiActionKind
 import io.stackvibed.model.UiNavigationEvent
@@ -558,6 +559,42 @@ class FlowBuilderTest {
         val call = client("call", "orders-service", 0, 10, url = "http://localhost:3000/orders", serverAddress = "localhost")
 
         builder.build(emptyManifest(), listOf(call), emptyMap()).steps.single().to shouldBe "localhost"
+    }
+
+    private fun shot(vararg spanIds: String) =
+        ScreenshotRecord(spanIds.first(), ScreenshotRecord.fileOf(spanIds.first()), spanIds.toList(), Instant.parse("2026-10-31T10:00:01Z"))
+
+    @Test
+    fun `ui steps carry the screenshot that lists their span`() {
+        val flow = builder.build(
+            repository.manifests().first { it.runId == "run-6" }, repository.events("run-6"), emptyMap(),
+            listOf(shot("9a8b7c6d5e4f3021"), shot("6d5e4f302192a3b4", "5e4f302192a3b4c5")),
+        )
+
+        val ui = flow.steps.filter { it.kind == FlowStepKind.UI }
+        ui.map { it.label to it.screenshot } shouldBe listOf(
+            "load /" to "9a8b7c6d5e4f3021",
+            "click to-order" to "6d5e4f302192a3b4",
+            "→ /order" to "6d5e4f302192a3b4",
+            "submit order-form" to null,
+            "→ /orders/7c9e6679-7425-40de-944b-e07fc1f90ae7" to null,
+        )
+    }
+
+    @Test
+    fun `other steps never carry a screenshot`() {
+        // 7c6d5e4f302192a3 is the frontend's GET /stock: its step is the inventory-service hop, never a ui step.
+        val flow = builder.build(
+            repository.manifests().first { it.runId == "run-6" }, repository.events("run-6"), emptyMap(),
+            listOf(shot("7c6d5e4f302192a3")),
+        )
+
+        flow.steps.mapNotNull { it.screenshot } shouldBe emptyList()
+    }
+
+    @Test
+    fun `a run without screenshots builds as before`() {
+        browserRun().steps.mapNotNull { it.screenshot } shouldBe emptyList()
     }
 
     private fun browserRun() = builder.build(

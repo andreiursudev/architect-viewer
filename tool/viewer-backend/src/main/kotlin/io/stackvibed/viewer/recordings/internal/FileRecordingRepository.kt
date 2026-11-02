@@ -2,6 +2,7 @@ package io.stackvibed.viewer.recordings.internal
 
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.RecordingRepository
 import org.slf4j.LoggerFactory
@@ -13,10 +14,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Reads `<recordings>/<folder>/{manifest.json,events.jsonl}` and `<workspace>/reference-recordings/<folder>/...`.
+ * Reads `<recordings>/<folder>/{manifest.json,events.jsonl,screenshots.jsonl,screenshots/}` and
+ * `<workspace>/reference-recordings/<folder>/...`.
  *
  * The reporter appends to these files while the viewer reads them, so reading is forgiving: a folder without a readable
- * manifest is skipped, and an unfinished last line of `events.jsonl` is ignored.
+ * manifest is skipped, and an unfinished last line of `events.jsonl` or `screenshots.jsonl` is ignored.
  */
 @Component
 class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
@@ -29,11 +31,23 @@ class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
 
     override fun referenceManifests(): List<RecordingManifest> = runs(referenceRoot).map { it.manifest }
 
-    override fun events(runId: String): List<RecordingEvent> {
-        val run = (runs(recordingsRoot) + runs(referenceRoot)).firstOrNull { it.manifest.runId == runId }
-            ?: throw NoSuchElementException("No recording with run id '$runId'")
-        return readEvents(run.folder.resolve(EVENTS_FILE))
+    override fun events(runId: String): List<RecordingEvent> =
+        readLines(folderOf(runId).resolve(EVENTS_FILE), RecordingEvent::class.java)
+
+    override fun screenshots(runId: String): List<ScreenshotRecord> =
+        readLines(folderOf(runId).resolve(SCREENSHOTS_FILE), ScreenshotRecord::class.java)
+
+    override fun screenshot(runId: String, id: String): Path? {
+        val folder = folderOf(runId)
+        if (!ScreenshotRecord.ID.matches(id)) return null
+        if (readLines(folder.resolve(SCREENSHOTS_FILE), ScreenshotRecord::class.java).none { it.id == id }) return null
+        // The path comes from the checked id, never from the record's file name.
+        return folder.resolve(ScreenshotRecord.fileOf(id)).takeIf { Files.isRegularFile(it) }
     }
+
+    private fun folderOf(runId: String): Path =
+        (runs(recordingsRoot) + runs(referenceRoot)).firstOrNull { it.manifest.runId == runId }?.folder
+            ?: throw NoSuchElementException("No recording with run id '$runId'")
 
     private class Run(val folder: Path, val manifest: RecordingManifest)
 
@@ -59,7 +73,7 @@ class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
         }
     }
 
-    private fun readEvents(file: Path): List<RecordingEvent> {
+    private fun <T> readLines(file: Path, type: Class<T>): List<T> {
         if (!Files.isRegularFile(file)) return emptyList()
         // Decoding never fails: a line cut inside a multi-byte character just becomes an unparsable partial line.
         val text = String(Files.readAllBytes(file), UTF_8)
@@ -68,7 +82,7 @@ class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
         return lines.mapIndexedNotNull { index, line ->
             if (line.isBlank()) return@mapIndexedNotNull null
             try {
-                json.readValue(line, RecordingEvent::class.java)
+                json.readValue(line, type)
             } catch (e: Exception) {
                 if (index != unterminated) {
                     log.warn("Skipping unreadable line {} of {}: {}", index + 1, file, e.message?.lineSequence()?.first())
@@ -85,5 +99,6 @@ class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
         const val REFERENCE_RECORDINGS = "reference-recordings"
         const val MANIFEST_FILE = "manifest.json"
         const val EVENTS_FILE = "events.jsonl"
+        const val SCREENSHOTS_FILE = "screenshots.jsonl"
     }
 }
