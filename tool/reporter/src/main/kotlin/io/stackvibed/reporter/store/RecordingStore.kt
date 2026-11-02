@@ -2,6 +2,7 @@ package io.stackvibed.reporter.store
 
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.reporter.runs.RunAssignment
 import io.stackvibed.reporter.runs.UNASSIGNED_RUN
 import org.slf4j.LoggerFactory
@@ -65,6 +66,25 @@ class RecordingStore(
             }
         }
     }
+
+    /**
+     * Writes [png], the screenshot of the ui steps [spanIds], as `screenshots/<first span id>.png` and appends its record
+     * to `screenshots.jsonl`, creating the run as its first span would. The manifest is not touched: a screenshot is not
+     * an event.
+     */
+    fun addScreenshot(assignment: RunAssignment, spanIds: List<String>, png: ByteArray): ScreenshotRecord =
+        withRun(assignment.runId) {
+            val run = openRun(assignment)
+            val id = spanIds.first()
+            val record = ScreenshotRecord(id, ScreenshotRecord.fileOf(id), spanIds, clock.instant())
+            Files.createDirectories(run.folder.resolve(SCREENSHOTS_DIR))
+            Files.write(run.folder.resolve(record.file), png)
+            Files.write(
+                run.folder.resolve(SCREENSHOTS_FILE), (mapper.writeValueAsString(record) + "\n").toByteArray(Charsets.UTF_8),
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND,
+            )
+            record
+        }
 
     fun markStopped(runId: String): RecordingManifest = withRun(runId) {
         val run = runs[runId] ?: throw NoSuchElementException("No recording for run '$runId'")
@@ -136,5 +156,7 @@ class RecordingStore(
     private companion object {
         const val MANIFEST_FILE = "manifest.json"
         const val EVENTS_FILE = "events.jsonl"
+        const val SCREENSHOTS_DIR = "screenshots"
+        const val SCREENSHOTS_FILE = "screenshots.jsonl"
     }
 }

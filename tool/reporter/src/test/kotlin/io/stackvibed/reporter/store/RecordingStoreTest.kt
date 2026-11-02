@@ -6,6 +6,7 @@ import io.kotest.matchers.string.shouldMatch
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
 import io.stackvibed.model.RecordingManifest
+import io.stackvibed.model.ScreenshotRecord
 import io.stackvibed.reporter.otlp.OtlpFixtures
 import io.stackvibed.reporter.otlp.SpanEventMapper
 import io.stackvibed.reporter.runs.RunAssignment
@@ -156,5 +157,52 @@ class RecordingStoreTest {
         store.append(RunAssignment("abcdefgh-1", "s", RecordingKind.E2E), events("abcdefgh-1"))
         store.append(RunAssignment("abcdefgh-2", "s", RecordingKind.E2E), events("abcdefgh-2"))
         (store.folderOf("abcdefgh-1") == store.folderOf("abcdefgh-2")) shouldBe false
+    }
+
+    private val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3)
+
+    @Test fun `a screenshot is written with its record`() {
+        val store = store()
+        val record = store.addScreenshot(e2e, listOf("04b7ffff7cd2b57d", "d6c8a8bdd007c68c"), png)
+
+        val folder = store.folderOf("run-1")!!
+        record shouldBe ScreenshotRecord(
+            id = "04b7ffff7cd2b57d",
+            file = "screenshots/04b7ffff7cd2b57d.png",
+            spanIds = listOf("04b7ffff7cd2b57d", "d6c8a8bdd007c68c"),
+            takenAt = Instant.parse("2026-10-27T22:41:05Z"),
+        )
+        Files.readAllBytes(folder.resolve("screenshots/04b7ffff7cd2b57d.png")) shouldBe png
+        folder.resolve("screenshots.jsonl").readLines().map { mapper.readValue<ScreenshotRecord>(it) } shouldBe listOf(record)
+    }
+
+    @Test fun `spans after a screenshot join its run`() {
+        val store = store()
+        store.addScreenshot(e2e, listOf("04b7ffff7cd2b57d"), png)
+        store.append(e2e, events("run-1"))
+
+        val folders = Files.list(root).use { it.toList() }
+        folders shouldHaveSize 1
+        val folder = folders.single()
+        manifest(folder).scenarioId shouldBe "create-order"
+        Files.exists(folder.resolve("screenshots/04b7ffff7cd2b57d.png")) shouldBe true
+        Files.exists(folder.resolve("screenshots.jsonl")) shouldBe true
+        Files.exists(folder.resolve("events.jsonl")) shouldBe true
+    }
+
+    @Test fun `concurrent screenshots of one run keep whole lines`() {
+        val store = store()
+        val pool = Executors.newFixedThreadPool(8)
+        val start = CountDownLatch(1)
+        val ids = (1..20).map { "%016x".format(it) }
+        for (id in ids) pool.submit { start.await(); store.addScreenshot(e2e, listOf(id), png) }
+        start.countDown()
+        pool.shutdown()
+        pool.awaitTermination(10, TimeUnit.SECONDS) shouldBe true
+
+        val folder = store.folderOf("run-1")!!
+        val records = folder.resolve("screenshots.jsonl").readLines().map { mapper.readValue<ScreenshotRecord>(it) }
+        records.map { it.id }.sorted() shouldBe ids
+        for (id in ids) Files.readAllBytes(folder.resolve("screenshots/$id.png")) shouldBe png
     }
 }
