@@ -111,6 +111,15 @@ reads as the user would: `load /`, `click to-order`, `→ /order`, `click place-
 databases, and, expanded, the classes). A fetch that started before any ui step is a top-level hop. A clicked element
 is named by its `data-testid` (the app sets them), else its `aria-label` or text, else its tag name.
 
+The three browser scenarios also record a screenshot of each ui step's result (step 5): the browser package waits
+until the page has settled (no fetch open, painted), the harness shoots the viewport and sends it to the reporter,
+which writes `screenshots/<id>.png` and `screenshots.jsonl` into the run's folder. In the sequence view each ui arrow
+has its thumbnail to its left, and the details of a selected ui step show it large (a click opens it at full size).
+Steps that settle together share one: `click to-order` and `→ /order` both show the order form. Until a screenshot is
+taken an invisible shield covers the page, so Playwright's next click waits for it. Manual runs (your own clicks in a
+recording window) have no screenshots. The harness sends them to `http://localhost:4318`; set
+`-Dstack.reporter.url=<url>` on the test JVM for a reporter elsewhere.
+
 The viewer discovers `inventory-service`, `postgresql-inventory` and the connections `orders-service` to
 `inventory-service` (`POST /reservations`) and `inventory-service` to `postgresql-inventory` from the recordings;
 accept them in the viewer to add them to `stack/`. In the `create-order-out-of-stock` run the hop to inventory-service

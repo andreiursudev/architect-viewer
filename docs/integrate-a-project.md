@@ -532,6 +532,16 @@ example (React + Vite, served by nginx).
    response) and exports them, because a closed page loses what it has not sent yet. The package also exports when
    the page is hidden, but the test may close it first. With another Playwright flavour do the same by hand:
    `page.addInitScript` to set `window.__STACK__`, and `await page.evaluate(() => window.__STACK_FLUSH__())` at the end.
+   **Screenshots.** `StackBrowser.tag(page)` also takes a screenshot of each ui step's result: once the steps have
+   settled (the fetches they started have ended and the page has painted, at most 2 s), the page asks the harness,
+   which shoots the viewport and sends it to the reporter (`-Dstack.reporter.url=<url>` on the test JVM when the
+   reporter is not on `http://localhost:4318`). The viewer shows them beside the ui steps of the sequence view. Until
+   a screenshot is taken an invisible shield covers the page, so the test's next click waits for it (up to about 2 s
+   after a step): the screenshot shows the result of the steps before the click, not of the click. A step started from
+   the keyboard alone (Enter in a field) is not held. `StackBrowser.flush(page)` also waits for the last screenshot.
+   `StackBrowser.tag(page, screenshots = false)` turns them off; a failed screenshot is logged once and never fails the
+   test. With another Playwright flavour, expose `window.__STACK_SCREENSHOT__(spanIds)` yourself and POST the PNG to
+   the reporter's `/api/runs/<runId>/screenshots?scenarioId=<id>&spanIds=<a>,<b>` (`Content-Type: image/png`).
 6. **Manual clicking** needs neither: open a recording window on the reporter
    (`POST /api/recordings/start`), use the app, wait a second, close it (`POST /api/recordings/stop`).
 

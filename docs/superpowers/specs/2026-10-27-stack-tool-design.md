@@ -202,6 +202,10 @@ See `2026-10-30-step-3-method-capture-design.md`.
 
 See `2026-10-31-step-4-frontend-design.md`.
 
+### Step 5 — screenshots of the frontend's ui steps
+
+See `2026-11-02-step-5-frontend-screenshots-design.md`.
+
 ### Explicitly later (each when the sandbox needs it)
 
 Component view and the rest of level 2 (coroutines, workspace include/exclude patterns); Kafka, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
