@@ -8,8 +8,8 @@ async function pickCreateOrder(page: Page) {
 test('board shows components and highlights create-order', async ({ page }) => {
   await page.goto('/');
   const nodes = page.locator('.react-flow__node');
-  await expect(nodes).toHaveCount(6); // run-6 also discovers the frontend
-  for (const name of ['Orders service', 'e2e-client', 'postgresql-orders', 'inventory-service', 'postgresql-inventory', 'frontend']) {
+  await expect(nodes).toHaveCount(9); // run-6 also discovers the frontend, run-7 shipping-service, its database and the order-placed topic
+  for (const name of ['Orders service', 'e2e-client', 'postgresql-orders', 'inventory-service', 'postgresql-inventory', 'frontend', 'shipping-service', 'postgresql-shipping', 'order-placed']) {
     await expect(nodes.filter({ hasText: name })).toBeVisible();
   }
   await expect(page.locator('.path-edge')).toHaveCount(0);
@@ -19,7 +19,7 @@ test('board shows components and highlights create-order', async ({ page }) => {
 
   await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(2);
   await expect(page.locator('.component-node.on-path')).toHaveCount(3);
-  await expect(page.locator('.component-node:not(.on-path)')).toHaveCount(3); // inventory-service, its database and the frontend stay unhighlighted
+  await expect(page.locator('.component-node:not(.on-path)')).toHaveCount(6); // inventory-service, shipping-service, their databases, the frontend and the topic stay unhighlighted
 });
 
 test('dragging a node persists its position', async ({ page }) => {

@@ -34,5 +34,5 @@ test('an unknown run says so and leads back to the board', async ({ page }) => {
   await expect(page.getByText(/could not load the run/i)).toBeVisible();
   await page.getByRole('link', { name: /board/i }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('.react-flow__node')).toHaveCount(6);
+  await expect(page.locator('.react-flow__node')).toHaveCount(9);
 });
