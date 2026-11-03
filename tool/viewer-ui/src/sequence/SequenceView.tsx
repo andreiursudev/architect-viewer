@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useFlow, useWorkspace } from '../api/queries';
 import { MessageDetails } from './MessageDetails';
+import { ScreenshotCarousel, type ScreenshotSlide } from './Screenshot';
 import { classCounts } from './layoutSequence';
 import { SequenceDiagram, type MessageSelection, type ParticipantInfo } from './SequenceDiagram';
 
@@ -11,6 +12,8 @@ export function SequenceView() {
   const flow = useFlow(runId);
   const workspace = useWorkspace();
   const [selected, setSelected] = useState<MessageSelection | null>(null);
+  // the selected step's screenshot at its own size, a carousel over the run's ui steps
+  const [viewing, setViewing] = useState(false);
   // services drawn as one lifeline per class; every run opens fully collapsed
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -41,6 +44,15 @@ export function SequenceView() {
   const methodCalls = steps.filter((s) => s.kind === 'method').length;
   const calls = steps.length - methodCalls;
   const step = steps.find((s) => s.stepId === selected?.stepId);
+  const slides = useMemo(
+    () =>
+      (flow.data?.steps ?? []).flatMap((s): ScreenshotSlide[] =>
+        s.kind === 'ui' && s.screenshot != null ? [{ stepId: s.stepId, label: s.label, screenshot: s.screenshot }] : [],
+      ),
+    [flow.data],
+  );
+  const closeViewing = useCallback(() => setViewing(false), []);
+  const showStep = useCallback((stepId: string) => setSelected({ stepId, kind: 'request' }), []);
 
   return (
     <main className="sequence-page">
@@ -87,11 +99,14 @@ export function SequenceView() {
       </div>
       <aside className="side-panel sequence-details" aria-label="Message details">
         {step && selected ? (
-          <MessageDetails runId={runId} step={step} kind={selected.kind} />
+          <MessageDetails runId={runId} step={step} kind={selected.kind} onOpenScreenshot={() => setViewing(true)} />
         ) : (
           <p className="muted sequence-hint">Select a message to see its payload.</p>
         )}
       </aside>
+      {viewing && step && (
+        <ScreenshotCarousel runId={runId} slides={slides} current={step.stepId} onMove={showStep} onClose={closeViewing} />
+      )}
     </main>
   );
 }

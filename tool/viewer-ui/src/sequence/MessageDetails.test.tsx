@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { createOrderFlow, loadStep, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
 import { MessageDetails } from './MessageDetails';
 
@@ -172,24 +172,14 @@ test('details of a navigation show url kind and duration', () => {
 
 const shot = '9a8b7c6d5e4f3021';
 
-test('a ui step shows its screenshot and opens it full size', async () => {
-  render(<MessageDetails runId="run-6" step={{ ...loadStep, screenshot: shot }} kind="request" />);
+test('a ui step shows its screenshot, and a click on it asks to open it full size', async () => {
+  const open = vi.fn();
+  render(<MessageDetails runId="run-6" step={{ ...loadStep, screenshot: shot }} kind="request" onOpenScreenshot={open} />);
   const image = screen.getByRole('img', { name: 'Screenshot after load /' });
   expect(image).toHaveAttribute('src', `/api/runs/run-6/screenshots/${shot}`);
 
   await userEvent.click(image);
-  const dialog = screen.getByRole('dialog', { name: 'Screenshot' });
-  expect(within(dialog).getByRole('img')).toHaveAttribute('src', `/api/runs/run-6/screenshots/${shot}`);
-
-  await userEvent.keyboard('{Escape}');
-  expect(screen.queryByRole('dialog')).toBeNull();
-});
-
-test('the full-size screenshot closes with its button', async () => {
-  render(<MessageDetails runId="run-6" step={{ ...loadStep, screenshot: shot }} kind="request" />);
-  await userEvent.click(screen.getByRole('img', { name: 'Screenshot after load /' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(open).toHaveBeenCalledOnce();
 });
 
 test('a screenshot that fails to load says so', () => {

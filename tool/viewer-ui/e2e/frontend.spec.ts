@@ -98,7 +98,22 @@ test('sequence shows a screenshot beside each browser step and in the details', 
   await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
 
   await image.click();
-  await expect(page.getByRole('dialog', { name: 'Screenshot' })).toBeVisible();
+  const carousel = page.getByRole('dialog', { name: 'Screenshot' });
+  await expect(carousel).toBeVisible();
+  await expect(carousel.getByText(/^load \/ · 1 of 5$/)).toBeVisible();
+  await expect(carousel.getByRole('button', { name: 'Previous screenshot' })).toBeDisabled();
+
+  // → walks the browser steps and selects each one in the sequence behind
+  await page.keyboard.press('ArrowRight');
+  await expect(carousel.getByText(/ · 2 of 5$/)).toBeVisible();
+  const second = (await carousel.locator('.screenshot-caption').textContent())!.replace(/ · 2 of 5$/, '');
+  await expect(diagram(page).getByRole('button', { name: `request ${second}` })).toHaveAttribute('aria-pressed', 'true');
+  await carousel.getByRole('button', { name: 'Next screenshot' }).click();
+  await expect(carousel.getByText(/ · 3 of 5$/)).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(carousel.getByText(/ · 2 of 5$/)).toBeVisible();
+
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Screenshot' })).toBeHidden();
+  await expect(carousel).toBeHidden();
+  await expect(details.getByRole('heading', { level: 2 })).toHaveText(second);
 });

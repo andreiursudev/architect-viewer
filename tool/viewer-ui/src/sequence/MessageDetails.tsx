@@ -15,7 +15,18 @@ export function prettyBody(text: string): string {
 }
 
 /** Everything recorded about one step of the run, with the section of the clicked message marked. */
-export function MessageDetails({ runId, step, kind }: { runId: string; step: FlowStep; kind: Kind }) {
+export function MessageDetails({
+  runId,
+  step,
+  kind,
+  onOpenScreenshot,
+}: {
+  runId: string;
+  step: FlowStep;
+  kind: Kind;
+  /** Opens the step's screenshot at its own size. */
+  onOpenScreenshot?: () => void;
+}) {
   const event = step.event;
   return (
     <div className="message-details">
@@ -25,7 +36,13 @@ export function MessageDetails({ runId, step, kind }: { runId: string; step: Flo
       </header>
 
       {step.kind === 'ui' && step.screenshot != null && (
-        <ScreenshotImage key={step.screenshot} runId={runId} id={step.screenshot} alt={`Screenshot after ${step.label}`} />
+        <ScreenshotImage
+          key={step.screenshot}
+          runId={runId}
+          id={step.screenshot}
+          alt={`Screenshot after ${step.label}`}
+          onOpen={onOpenScreenshot}
+        />
       )}
 
       <dl className="facts md-facts">

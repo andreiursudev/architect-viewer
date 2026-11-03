@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType, Flow, FlowStep } from '../api/types';
 import { isFailedStep, statusTone } from '../status';
 import { MARGIN_X, THUMB_HEIGHT, THUMB_WIDTH, classCounts, layoutSequence, type SequenceMessage } from './layoutSequence';
@@ -56,6 +56,11 @@ export function SequenceDiagram({
   const width = participants.length === 0 ? 0 : participants[participants.length - 1].x + MARGIN_X;
   // screenshots whose image did not load: their thumbnail is an empty, dashed frame
   const [missing, setMissing] = useState<ReadonlySet<string>>(new Set());
+  // a step selected from elsewhere (the screenshot carousel) is brought into view; a clicked one already is
+  const svg = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    svg.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [selected]);
 
   // each step's activation bar: the callee is busy from the request until the response
   const bars = useMemo(() => {
@@ -72,6 +77,7 @@ export function SequenceDiagram({
     <div className="seq-canvas" style={{ width }}>
       <SequenceHeads layout={layout} components={components} counts={counts} expanded={expanded} onToggle={onToggle} />
       <svg
+        ref={svg}
         className="seq-svg"
         role="group"
         aria-label="Sequence diagram"
