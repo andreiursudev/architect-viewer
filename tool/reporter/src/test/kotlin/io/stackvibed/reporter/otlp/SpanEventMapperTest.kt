@@ -3,11 +3,14 @@ package io.stackvibed.reporter.otlp
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.string.shouldContain
 import io.opentelemetry.proto.trace.v1.Span
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.KafkaConsumeEvent
+import io.stackvibed.model.KafkaProduceEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.UiActionEvent
@@ -351,5 +354,148 @@ class SpanEventMapperTest {
             OtlpFixtures.actionSpan("4444444444444444", "s", "r", event = null, "to-order", "/", 1, 2),
         )
         events(OtlpFixtures.request("frontend", spans)) shouldBe emptyList()
+    }
+
+    private fun kafkaSpan(kind: Span.SpanKind, vararg attributes: io.opentelemetry.proto.common.v1.KeyValue): Span =
+        OtlpFixtures.span("1111111111111111", null, kind, "kafka", 1, 11)
+            .addAttributes(OtlpFixtures.str("messaging.system", "kafka"))
+            .addAllAttributes(attributes.toList())
+            .build()
+
+    private fun produced(vararg attributes: io.opentelemetry.proto.common.v1.KeyValue): List<RecordingEvent> =
+        events(OtlpFixtures.request("orders-service", listOf(kafkaSpan(Span.SpanKind.SPAN_KIND_PRODUCER, *attributes))))
+
+    private fun consumed(vararg attributes: io.opentelemetry.proto.common.v1.KeyValue): List<RecordingEvent> =
+        events(OtlpFixtures.request("shipping-service", listOf(kafkaSpan(Span.SpanKind.SPAN_KIND_CONSUMER, *attributes))))
+
+    private val topic = OtlpFixtures.str("messaging.destination.name", "order-events")
+    private val process = OtlpFixtures.str("messaging.operation", "process")
+
+    @Test fun `producer span becomes kafka produce event`() {
+        val event = events(OtlpFixtures.request("orders-service", listOf(OtlpFixtures.producerSpan()))).single() as KafkaProduceEvent
+        event.component shouldBe "orders-service"
+        event.topic shouldBe "order-events"
+        event.partition shouldBe 0
+        event.offset shouldBe 12L
+        event.key shouldBe "7c9e6679"
+        event.headers shouldBe mapOf(
+            "traceparent" to listOf("00-0af7651916cd43dd8448eb211c80319c-e646b75d67bd006b-01"),
+            "baggage" to listOf("stack.run=run-7,stack.scenario=create-order"),
+        )
+        event.value shouldBe OtlpFixtures.KAFKA_VALUE
+        event.valueTruncated shouldBe false
+        event.valueBytes shouldBe null
+        event.errorType shouldBe null
+        event.eventId shouldBe "${OtlpFixtures.TRACE_ID}-${OtlpFixtures.KAFKA_PRODUCER_SPAN_ID}"
+        event.parentSpanId shouldBe OtlpFixtures.SERVER_SPAN_ID
+        event.durationNanos shouldBe 4_000_000L
+    }
+
+    @Test fun `consumer process span becomes kafka consume event with the group`() {
+        val event = events(OtlpFixtures.request("shipping-service", listOf(OtlpFixtures.consumerSpan()))).single() as KafkaConsumeEvent
+        event.component shouldBe "shipping-service"
+        event.topic shouldBe "order-events"
+        event.partition shouldBe 0
+        event.offset shouldBe 12L
+        event.key shouldBe "7c9e6679"
+        event.consumerGroup shouldBe "shipping"
+        event.headers.keys shouldBe setOf("traceparent", "baggage", "__TypeId__")
+        event.value shouldBe OtlpFixtures.KAFKA_VALUE
+        event.valueBytes shouldBe OtlpFixtures.KAFKA_VALUE.length.toLong()
+        event.errorType shouldBe null
+        event.parentSpanId shouldBe OtlpFixtures.KAFKA_PRODUCER_SPAN_ID
+    }
+
+    @Test fun `partition reads the newer string name first and the older long name as fallback`() {
+        val newer = produced(topic, OtlpFixtures.str("messaging.destination.partition.id", "3"), OtlpFixtures.long("messaging.kafka.destination.partition", 5))
+        (newer.single() as KafkaProduceEvent).partition shouldBe 3
+        val older = produced(topic, OtlpFixtures.long("messaging.kafka.destination.partition", 5))
+        (older.single() as KafkaProduceEvent).partition shouldBe 5
+    }
+
+    @Test fun `consumer group reads the newer name first and the older one as fallback`() {
+        val newer = consumed(topic, process, OtlpFixtures.str("messaging.consumer.group.name", "new"), OtlpFixtures.str("messaging.kafka.consumer.group", "old"))
+        (newer.single() as KafkaConsumeEvent).consumerGroup shouldBe "new"
+        val older = consumed(topic, process, OtlpFixtures.str("messaging.kafka.consumer.group", "old"))
+        (older.single() as KafkaConsumeEvent).consumerGroup shouldBe "old"
+    }
+
+    @Test fun `operation reads the newer name first and the older one as fallback`() {
+        // The newer name wins even when the older one says receive.
+        val newer = consumed(topic, OtlpFixtures.str("messaging.operation.type", "process"), OtlpFixtures.str("messaging.operation", "receive"))
+        newer.single().shouldBeInstanceOf<KafkaConsumeEvent>()
+        consumed(topic, process).single().shouldBeInstanceOf<KafkaConsumeEvent>()
+        consumed(topic, OtlpFixtures.str("messaging.operation.type", "receive"), process) shouldBe emptyList()
+    }
+
+    @Test fun `offset key and body size are read from their attributes`() {
+        val event = consumed(
+            topic, process,
+            OtlpFixtures.long("messaging.kafka.message.offset", 99),
+            OtlpFixtures.str("messaging.kafka.message.key", "k-1"),
+            OtlpFixtures.long("messaging.message.body.size", 22),
+        ).single() as KafkaConsumeEvent
+        event.offset shouldBe 99L
+        event.key shouldBe "k-1"
+        event.valueBytes shouldBe 22L
+    }
+
+    @Test fun `error type is read from error type on both ends`() {
+        (produced(topic, OtlpFixtures.str("error.type", "org.apache.kafka.common.errors.TimeoutException")).single() as KafkaProduceEvent)
+            .errorType shouldBe "org.apache.kafka.common.errors.TimeoutException"
+        (consumed(topic, process, OtlpFixtures.str("error.type", "java.lang.IllegalStateException")).single() as KafkaConsumeEvent)
+            .errorType shouldBe "java.lang.IllegalStateException"
+    }
+
+    @Test fun `failed send has no partition or offset and carries the error type`() {
+        val span = OtlpFixtures.producerSpan(partition = null, offset = null, key = null, errorType = "org.apache.kafka.common.errors.TimeoutException")
+        val event = events(OtlpFixtures.request("orders-service", listOf(span))).single() as KafkaProduceEvent
+        event.partition shouldBe null
+        event.offset shouldBe null
+        event.key shouldBe null
+        event.errorType shouldBe "org.apache.kafka.common.errors.TimeoutException"
+        event.topic shouldBe "order-events"
+    }
+
+    @Test fun `record without capture attributes maps to empty headers and no value`() {
+        val event = produced(topic).single() as KafkaProduceEvent
+        event.headers shouldBe emptyMap()
+        event.value shouldBe null
+        event.valueTruncated shouldBe false
+        event.key shouldBe null
+    }
+
+    @Test fun `truncated flag and null header value are kept`() {
+        val event = produced(
+            topic,
+            OtlpFixtures.str("stack.kafka.value", "abc"),
+            OtlpFixtures.bool("stack.kafka.value_truncated", true),
+            OtlpFixtures.str("stack.kafka.headers", """{"h":["a",null,"b"]}"""),
+        ).single() as KafkaProduceEvent
+        event.valueTruncated shouldBe true
+        event.headers shouldBe mapOf("h" to listOf("a", "", "b"))
+    }
+
+    @Test fun `consumer receive span is dropped`() {
+        consumed(topic, OtlpFixtures.str("messaging.operation", "receive")) shouldBe emptyList()
+        consumed(topic) shouldBe emptyList()
+    }
+
+    @Test fun `messaging span of another system is dropped`() {
+        val producer = OtlpFixtures.span("1111111111111111", null, Span.SpanKind.SPAN_KIND_PRODUCER, "orders publish", 1, 11)
+            .addAttributes(OtlpFixtures.str("messaging.system", "rabbitmq"))
+            .addAttributes(topic)
+            .build()
+        val consumer = OtlpFixtures.span("2222222222222222", null, Span.SpanKind.SPAN_KIND_CONSUMER, "orders process", 1, 11)
+            .addAttributes(OtlpFixtures.str("messaging.system", "rabbitmq"))
+            .addAttributes(topic)
+            .addAttributes(process)
+            .build()
+        events(OtlpFixtures.request("orders-service", listOf(producer, consumer))) shouldBe emptyList()
+    }
+
+    @Test fun `kafka span without a topic is dropped`() {
+        produced(OtlpFixtures.str("messaging.operation", "publish")) shouldBe emptyList()
+        consumed(process) shouldBe emptyList()
     }
 }

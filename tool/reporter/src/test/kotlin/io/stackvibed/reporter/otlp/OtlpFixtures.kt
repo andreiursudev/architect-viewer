@@ -24,6 +24,16 @@ object OtlpFixtures {
     const val RESERVE_SPAN_ID = "3c4d5e6f708192a3"
     const val REPOSITORY_SPAN_ID = "4d5e6f708192a3b4"
 
+    const val KAFKA_PRODUCER_SPAN_ID = "e646b75d67bd006b"
+    const val KAFKA_CONSUMER_SPAN_ID = "8b8aac56829b06ec"
+    const val SHIPPING_DB_SPAN_ID = "a9b8c7d6e5f40312"
+    const val KAFKA_TOPIC = "order-events"
+    const val KAFKA_VALUE = """{"orderId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","status":"CREATED"}"""
+    const val KAFKA_PRODUCER_HEADERS =
+        """{"traceparent":["00-0af7651916cd43dd8448eb211c80319c-e646b75d67bd006b-01"],"baggage":["stack.run=run-7,stack.scenario=create-order"]}"""
+    const val KAFKA_CONSUMER_HEADERS =
+        """{"traceparent":["00-0af7651916cd43dd8448eb211c80319c-e646b75d67bd006b-01"],"baggage":["stack.run=run-7,stack.scenario=create-order"],"__TypeId__":["java.util.Collections${'$'}SingletonMap"]}"""
+
     const val SERVER_START_NANOS = 1_760_000_000_000_000_000L
     const val SERVER_END_NANOS = SERVER_START_NANOS + 42_000_000L
     const val DB_START_NANOS = SERVER_START_NANOS + 10_000_000L
@@ -78,6 +88,76 @@ object OtlpFixtures {
         request("orders-service", listOf(serverSpan(scenario, run), clientSpan(scenario, run))),
         request("inventory-service", listOf(inventoryServerSpan(scenario, run), inventoryDbSpan(scenario, run))),
     )
+
+    /**
+     * The create-order scenario across Kafka, delivered as the two OTLP requests each service's agent would send:
+     * orders-service (the server span and the PRODUCER span of the `order-events` send) and shipping-service (the CONSUMER
+     * `process` span, which the OTel agent parents on the producer, and the insert it makes).
+     */
+    fun createOrderKafkaRun(scenario: String = "create-order", run: String = "run-7"): List<ExportTraceServiceRequest> = listOf(
+        request("orders-service", listOf(serverSpan(scenario, run), producerSpan(scenario, run))),
+        request("shipping-service", listOf(consumerSpan(scenario, run), shippingDbSpan(scenario, run))),
+    )
+
+    /**
+     * A PRODUCER span as OTel agent 2.33.1 exports it (the older messaging names: partition as a string, offset as an
+     * int) plus the agent's own `stack.kafka.*` capture. A null [key] or [value] leaves the attribute out, and so does a
+     * null [partition] or [offset] (the send got no ack). The error type is the one OTel sets on a failed send.
+     */
+    fun producerSpan(
+        scenario: String? = "create-order",
+        run: String? = "run-7",
+        topic: String = KAFKA_TOPIC,
+        partition: String? = "0",
+        offset: Long? = 12,
+        key: String? = "7c9e6679",
+        headers: String = KAFKA_PRODUCER_HEADERS,
+        value: String? = KAFKA_VALUE,
+        errorType: String? = null,
+    ): Span =
+        span(KAFKA_PRODUCER_SPAN_ID, parent = SERVER_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_PRODUCER, name = "$topic publish", SERVER_START_NANOS + 20_000_000L, SERVER_START_NANOS + 24_000_000L)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("messaging.system", "kafka"))
+            .addAttributes(str("messaging.operation", "publish"))
+            .addAttributes(str("messaging.destination.name", topic))
+            .addAttributes(str("messaging.client_id", "producer-1"))
+            .apply {
+                if (partition != null) addAttributes(str("messaging.destination.partition.id", partition))
+                if (offset != null) addAttributes(long("messaging.kafka.message.offset", offset))
+                if (key != null) addAttributes(str("messaging.kafka.message.key", key))
+                if (errorType != null) addAttributes(str("error.type", errorType))
+                if (value != null) addAttributes(str("stack.kafka.value", value))
+            }
+            .addAttributes(str("stack.kafka.headers", headers))
+            .addAttributes(bool("stack.kafka.value_truncated", false))
+            .build()
+
+    /** A CONSUMER `process` span as OTel agent 2.33.1 exports it: the consumer group and body size are on this span only. */
+    fun consumerSpan(scenario: String? = "create-order", run: String? = "run-7"): Span =
+        span(KAFKA_CONSUMER_SPAN_ID, parent = KAFKA_PRODUCER_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CONSUMER, name = "$KAFKA_TOPIC process", SERVER_START_NANOS + 30_000_000L, SERVER_START_NANOS + 38_000_000L)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("messaging.system", "kafka"))
+            .addAttributes(str("messaging.operation", "process"))
+            .addAttributes(str("messaging.destination.name", KAFKA_TOPIC))
+            .addAttributes(str("messaging.destination.partition.id", "0"))
+            .addAttributes(str("messaging.kafka.consumer.group", "shipping"))
+            .addAttributes(str("messaging.kafka.message.key", "7c9e6679"))
+            .addAttributes(long("messaging.kafka.message.offset", 12))
+            .addAttributes(long("messaging.message.body.size", KAFKA_VALUE.length.toLong()))
+            .addAttributes(str("stack.kafka.value", KAFKA_VALUE))
+            .addAttributes(str("stack.kafka.headers", KAFKA_CONSUMER_HEADERS))
+            .addAttributes(bool("stack.kafka.value_truncated", false))
+            .build()
+
+    private fun shippingDbSpan(scenario: String?, run: String?): Span =
+        span(SHIPPING_DB_SPAN_ID, parent = KAFKA_CONSUMER_SPAN_ID, kind = Span.SpanKind.SPAN_KIND_CLIENT, name = "INSERT shipments", SERVER_START_NANOS + 33_000_000L, SERVER_START_NANOS + 36_000_000L)
+            .addAllAttributes(tags(scenario, run))
+            .addAttributes(str("db.system.name", "postgresql"))
+            .addAttributes(str("db.namespace", "shipping"))
+            .addAttributes(str("db.query.text", "insert into shipments (order_id, status) values (?, ?)"))
+            .addAttributes(str("stack.db.parameters", """["7c9e6679-7425-40de-944b-e07fc1f90ae7","PENDING"]"""))
+            .addAttributes(long("stack.db.row_count", 1))
+            .build()
 
     /**
      * The same scenario as the sandbox runs it with method capture on: orders-service's server span, then

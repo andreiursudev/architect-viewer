@@ -108,6 +108,14 @@ class ReporterGoldenTest {
         folder.resolve("manifest.json").readText() shouldBe golden("create-order-methods/manifest.json")
     }
 
+    @Test fun `create order across kafka is written as recorded`() {
+        for (request in OtlpFixtures.createOrderKafkaRun()) postProtobuf("/v1/traces", request).statusCode() shouldBe 200
+
+        val folder = recordingFolder("_create-order_run-7")
+        folder.resolve("events.jsonl").readText() shouldBe golden("create-order-kafka/events.jsonl")
+        folder.resolve("manifest.json").readText() shouldBe golden("create-order-kafka/manifest.json")
+    }
+
     @Test fun `browser run matches golden recording`() {
         postProtobuf("/v1/traces", OtlpFixtures.browserPlaceOrderRun()).statusCode() shouldBe 200
 

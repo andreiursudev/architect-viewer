@@ -10,6 +10,8 @@ import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.KafkaConsumeEvent
+import io.stackvibed.model.KafkaProduceEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.UiActionEvent
@@ -33,8 +35,15 @@ data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
 /**
  * Maps OTLP spans to recording events: HTTP server spans, DB client spans, HTTP client spans (the browser's fetch spans among
  * them), the INTERNAL spans the agent writes for method calls (those carrying `stack.method.class`) and the INTERNAL
- * navigation and action spans of the browser package, recognised by their span name. Every other span is dropped, and so are
- * DB client spans without a statement and ui spans with an unknown kind.
+ * navigation and action spans of the browser package, recognised by their span name, and the OTel agent's Kafka spans: the
+ * PRODUCER span of a send and the CONSUMER `process` span of a listener invocation (`messaging.system = kafka`). Every
+ * other span is dropped, and so are DB client spans without a statement, ui spans with an unknown kind, Kafka spans
+ * without a topic, Kafka consumer spans of any other operation (`receive`) and messaging spans of other systems.
+ *
+ * The OTel agent still exports the older messaging names (`messaging.operation`, `messaging.kafka.consumer.group`,
+ * `messaging.kafka.destination.partition`); every attribute is read under the newer name first and the older one as
+ * fallback. A Kafka header value that is JSON null (the agent writes a null header value so) is kept as an empty string, so the
+ * header keeps its number of values.
  */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
@@ -54,6 +63,8 @@ class SpanEventMapper {
                             StackAttributes.ACTION_SPAN -> actionDraft(span, attrs, component)
                             else -> methodDraft(span, attrs, component)
                         }
+                        Span.SpanKind.SPAN_KIND_PRODUCER -> kafkaProduceDraft(span, attrs, component)
+                        Span.SpanKind.SPAN_KIND_CONSUMER -> kafkaConsumeDraft(span, attrs, component)
                         else -> null
                     } ?: continue
                     add(MappedSpan(SpanTags(attrs.string(StackAttributes.SCENARIO), attrs.string(StackAttributes.RUN)), draft))
@@ -213,6 +224,69 @@ class SpanEventMapper {
         }
     }
 
+    private fun kafkaProduceDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        if (attrs.string("messaging.system") != "kafka") return null
+        val topic = attrs.string("messaging.destination.name") ?: return null
+        return EventDraft { runId ->
+            KafkaProduceEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                topic = topic,
+                partition = partition(attrs),
+                offset = attrs.long("messaging.kafka.message.offset"),
+                key = attrs.string("messaging.kafka.message.key"),
+                headers = kafkaHeaders(attrs.string(StackAttributes.KAFKA_HEADERS)),
+                value = attrs.string(StackAttributes.KAFKA_VALUE),
+                valueTruncated = attrs.boolean(StackAttributes.KAFKA_VALUE_TRUNCATED),
+                valueBytes = attrs.long("messaging.message.body.size"),
+                errorType = attrs.string("error.type"),
+            )
+        }
+    }
+
+    private fun kafkaConsumeDraft(span: Span, attrs: Map<String, AnyValue>, component: String): EventDraft? {
+        if (attrs.string("messaging.system") != "kafka") return null
+        if ((attrs.string("messaging.operation.type") ?: attrs.string("messaging.operation")) != "process") return null
+        val topic = attrs.string("messaging.destination.name") ?: return null
+        return EventDraft { runId ->
+            KafkaConsumeEvent(
+                eventId = eventId(span),
+                runId = runId,
+                traceId = span.traceId.hex(),
+                spanId = span.spanId.hex(),
+                parentSpanId = span.parentSpanId.hex().ifEmpty { null },
+                component = component,
+                startEpochNanos = span.startTimeUnixNano,
+                durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
+                topic = topic,
+                partition = partition(attrs),
+                offset = attrs.long("messaging.kafka.message.offset"),
+                key = attrs.string("messaging.kafka.message.key"),
+                consumerGroup = attrs.string("messaging.consumer.group.name") ?: attrs.string("messaging.kafka.consumer.group"),
+                headers = kafkaHeaders(attrs.string(StackAttributes.KAFKA_HEADERS)),
+                value = attrs.string(StackAttributes.KAFKA_VALUE),
+                valueTruncated = attrs.boolean(StackAttributes.KAFKA_VALUE_TRUNCATED),
+                valueBytes = attrs.long("messaging.message.body.size"),
+                errorType = attrs.string("error.type"),
+            )
+        }
+    }
+
+    /** The newer semantic convention exports the partition as a string, the older one as an int. */
+    private fun partition(attrs: Map<String, AnyValue>): Int? =
+        attrs.string("messaging.destination.partition.id")?.toIntOrNull()
+            ?: attrs.long("messaging.kafka.destination.partition")?.toInt()
+
+    /** The agent writes a header whose value is null as JSON null; it is kept as an empty string. */
+    private fun kafkaHeaders(raw: String?): Map<String, List<String>> =
+        decode(raw, NULLABLE_HEADERS_TYPE)?.mapValues { (_, values) -> values.map { it ?: "" } } ?: emptyMap()
+
     private fun headers(raw: String?): Map<String, List<String>> = decode(raw, HEADERS_TYPE) ?: emptyMap()
 
     private fun parameters(raw: String?): List<String?> = decode(raw, PARAMETERS_TYPE) ?: emptyList()
@@ -243,6 +317,7 @@ class SpanEventMapper {
     private companion object {
         const val UNKNOWN_SERVICE = "unknown-service"
         val HEADERS_TYPE = object : TypeReference<Map<String, List<String>>>() {}
+        val NULLABLE_HEADERS_TYPE = object : TypeReference<Map<String, List<String?>>>() {}
         val PARAMETERS_TYPE = object : TypeReference<List<String?>>() {}
         val STRINGS_TYPE = object : TypeReference<List<String>>() {}
     }
