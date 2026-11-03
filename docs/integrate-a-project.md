@@ -70,9 +70,10 @@ has a browser frontend, see [Frontends](#frontends)):
 | The tool records | The tool does not record (yet) |
 |---|---|
 | HTTP endpoints of **Spring MVC on Spring Boot 3+** (jakarta servlet): method, route, status, headers, request and response bodies | Request/response bodies and headers of WebFlux or Spring Boot 2 (`javax.servlet`) services: the hop shows, without them |
-| Database calls over **JDBC** (JdbcTemplate, JdbcClient, JPA/Hibernate, jOOQ…): SQL with parameter values, row count. Only Postgres has been tested | Kafka, RabbitMQ, Pub/Sub and other messaging: the async part of a flow is **missing** from the board |
+| Database calls over **JDBC** (JdbcTemplate, JdbcClient, JPA/Hibernate, jOOQ…): SQL with parameter values, row count. Only Postgres has been tested | RabbitMQ, Pub/Sub and other messaging besides Kafka: the async part of a flow is **missing** from the board |
 | Outgoing HTTP calls (RestClient, RestTemplate, WebClient, Feign…). Callee under the agent: one hop with the callee's bodies. Callee not under the agent: a box named after its host, status only | gRPC: dropped entirely |
 | Scenario attribution through the W3C `baggage` header | Scheduled jobs and other work no test request starts (it lands in `recordings/_unassigned`) |
+| **Kafka** with the Java client: each send and each `@KafkaListener` receive, with value and headers, through a topic node (see [Kafka](#kafka)) | Kafka consumers without Spring Kafka (plain `poll()` loops) and batch listeners: the receive shows, without the value. Retries and dead-letter topics, schema registries (Avro, protobuf), Kafka Streams |
 | | Method calls inside a service, and non-JVM services (only their callers' view of them) |
 
 Also check each service for:
@@ -298,7 +299,9 @@ services:
 - **Other services the flows call**: either run them under the agent too (step 6; they become part of the board,
   with bodies), or stub them with WireMock (`wiremock/wiremock`). A stub appears as a box named after its host,
   without bodies. Prefer the real service when its own dependencies are cheap to run.
-- **Brokers** a service needs just to start (Kafka…): run them, but tell the user the messaging part isn't recorded.
+- **Kafka**: one KRaft container with a healthcheck, and the services `depends_on` it with `condition: service_healthy`
+  (see [Kafka](#kafka)), so `--wait` also waits for the broker. **Other brokers** a service needs just to start
+  (RabbitMQ…): run them, but tell the user the messaging part isn't recorded.
 - **Podman**: compose refuses `healthcheck.start_interval` there. If you use it, add a `compose.podman.yml` that
   resets it, as `<TOOL_REPO>/sandbox/docker-compose.podman.yml` does. Also set `$env:DOCKER_BUILDKIT = '0'` and
   `$env:COMPOSE_BAKE = 'false'` before building images (see the sandbox README, "With Podman").
@@ -483,7 +486,8 @@ Report to the user:
 
 - What runs where: containers, run scripts, ports.
 - The scenarios, and which ones pass.
-- What the tool can't show for this project (messaging, WebFlux bodies, gRPC…), with the flows it affects.
+- What the tool can't show for this project (messaging other than Kafka, consumers without Spring Kafka, WebFlux
+  bodies, gRPC…), with the flows it affects.
 - Anything you couldn't verify, and anything the tool would need. Name the tool gap; don't patch around it.
 - That `git status` in every service repository is unchanged, except the frontend change the user approved (list its
   files), which is left uncommitted unless they explicitly said otherwise.
@@ -553,6 +557,44 @@ Chromium is the only browser tried, and a React SPA the only framework (the pack
 The viewer shows what a click did by the element's `data-testid`, else its `aria-label` or text, so add
 `data-testid` to the elements the flows go through; it reads better and survives text changes.
 
+## Kafka
+
+A record sent to a topic and consumed by another service becomes steps of the run: `produce <topic>` nested in the
+request (or the consume) that sent it, and `consume <topic>` as a step of its own, with the listener's database calls
+and methods below it. Nothing changes in the services: the stack extension is the same, and the OpenTelemetry agent
+carries `traceparent` and `baggage` in the record headers, so the consumer's spans join the scenario's run.
+
+- **What is captured.** On the producer side, any `KafkaProducer.send` (Spring's `KafkaTemplate` included): the value
+  and the headers on the agent's producer span, with topic, partition, offset and key from the agent. On the consumer
+  side, **Spring Kafka record listeners** (`@KafkaListener` on a method taking one record): the same on the agent's
+  `process` span. A consumer without Spring Kafka (a plain `poll()` loop) still gets its span, the topic and the
+  offset, but no value or headers; a batch listener or a hand-written container `MessageListener` likewise. Check that
+  in the survey: it is the one thing a Kafka flow needs from the service's code.
+- **Values.** A `String` is recorded as is. `byte[]`, `ByteBuffer` and Kafka's `Bytes` are `<n bytes>`, never the
+  content. A null value (a tombstone) records no value. Anything else is rendered as JSON by the tool's own bounded
+  serialiser, not by the application's Jackson mapper (a custom `JsonSerializer` or `@JsonProperty` is not applied),
+  and cut at the body limit, which the viewer flags. The producer's value is the object handed to `send`, before the
+  value serializer; the consumer's is what the deserializer produced, so a `Map` sent through a JSON serializer reads
+  the same on both sides, but a consumer deserialising into a class shows that class's fields.
+- **Headers.** All the record's headers, including the injected `traceparent` and `baggage`: a UTF-8 value as text,
+  anything else as `<n bytes>`; not cut. The producer's list is the one at `send`, so it lacks headers the value
+  serializer adds while serializing (Spring's `__TypeId__`), which the consumer's has.
+- **The topic is a node.** Its id is `topic-<name>` and its name the topic's name (`order-placed`), type `topic`, with
+  the connections `<producer>--topic-<name>` and `topic-<name>--<consumer>` (kind `kafka`), discovered and accepted
+  like the others. A topic nothing consumed in the run still shows, with its produce marked "Not consumed in this
+  run".
+- **Scenarios must wait for the consume.** The run ends when the test does, so a scenario that only sends has no
+  `consume` in it. Poll something the consumer writes (a `GET` of what it stored), as the sandbox's `create-order`
+  does (every 100 ms, up to 10 s), instead of sleeping.
+- **compose.yaml.** Run the broker as in `<TOOL_REPO>/sandbox/docker-compose.yml`: `apache/kafka`, one KRaft node, a
+  `PLAINTEXT` listener for the containers (`kafka:29092`) and a `HOST` one on `127.0.0.1:9092` for a service run from
+  the IDE, the healthcheck `kafka-broker-api-versions.sh --bootstrap-server localhost:29092`, and the services'
+  `SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092`. For a Spring Boot service set `auto-offset-reset: earliest` through
+  the environment (`SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET`) rather than in the service, so a record published before
+  the listener joined its group is still consumed.
+
+One cluster, no schema registry, no retry or dead-letter topics: a flow that needs them is partly shown.
+
 ## Troubleshooting
 
 - **The service exits with `Error opening zip file` / agent not found**: `build/stack-agent/` is empty; run
@@ -563,6 +605,10 @@ The viewer shows what a click did by the element's `data-testid`, else its `aria
 - **A run is missing right after a test**: spans are exported every 200 ms; it appears a moment later.
 - **A hop to another service shows only a host name**: that service doesn't run under the agent (or has no
   `OTEL_SERVICE_NAME`), so only the caller's view of the call is recorded.
+- **A produce shows "Not consumed in this run", or the consume has no value**: the scenario ended before the
+  listener ran (poll for its effect, see [Kafka](#kafka)); the listener had not joined its group yet (without
+  `auto-offset-reset: earliest` a record sent before that is skipped; with it the consume only comes later); or the
+  consumer is not a Spring Kafka record listener (no value, see [Kafka](#kafka)).
 - **A frontend shows no steps, or its fetches are missing**: the app is not opened on `localhost` or `127.0.0.1`
   (CORS), `startStackRecording` runs after the first render or fetch, or the test closed the page without
   `StackBrowser.flush(page)`.

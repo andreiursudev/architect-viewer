@@ -121,8 +121,22 @@ real scenario makes.
 
 ## Deferred follow-ups
 
-- Batch listeners and hand-written container `MessageListener`s record no value (Ruling K1).
+Out of scope for step 6 (spec §9):
+
+- Retries and dead-letter topics.
+- Consumers without Spring Kafka (plain `poll()` loops): the OTel agent's span is recorded, without a value or headers.
+- Batch listeners (`BatchMessagingMessageListenerAdapter`) and hand-written container `MessageListener`s: no value
+  (Ruling K1).
+- Schema registry, Avro and protobuf, and with them a schema id on the record.
+- More than one Kafka cluster.
+- The per-topic raw-bytes debug flag (D10): byte values stay `<n bytes>` (Ruling K5).
+- Kafka Streams.
+
+Found while building:
+
 - Producer headers lack the serializer's type headers (Ruling K3); an exit advice on `doSend` would see them.
+- Header values are not cut (Ruling K6): a record with a huge header is recorded whole, unlike the value, which is cut
+  at the body limit.
 - Edge chips can cover nodes (Ruling K8): the board draws each connection's chip at its bezier midpoint, which ELK's
   auto-layout knows nothing about. A connection that skips an even number of layers puts its chip on the column of the
   middle layer, over whatever node sits there. With run 7's poll, the `GET /shipments/{orderId}` chip

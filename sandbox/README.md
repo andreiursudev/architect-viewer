@@ -13,6 +13,13 @@ fetches they trigger) through the tool's `@stackvibed/browser` package and sends
 scenarios drive it with Playwright (Chromium): `browse-stock`, `place-order-in-browser` and
 `place-order-out-of-stock-in-browser`.
 
+Since step 6 a placed order is also published to Kafka: orders-service sends `OrderPlaced` (`orderId`, `sku`,
+`quantity`) to the `order-placed` topic, keyed by the order id, and waits for the broker's acknowledgement, and
+`shipping-service` (same stack, its own Postgres) consumes it with a Spring Kafka `@KafkaListener` in the group
+`shipping` and stores a pending shipment, readable at `GET /shipments/{orderId}`. `create-order` polls that endpoint
+until the shipment exists (every 100 ms, at most 10 s), so the run holds the produce, the consume and the insert it
+caused.
+
 The sandbox is a separate Gradle build and uses the tool like any outside project would: the OpenTelemetry agent
 extension, the test harness and the browser package (an npm tarball) come from `mavenLocal`, the reporter from its
 Docker image. It never depends on `tool/` sources.
@@ -21,9 +28,10 @@ Docker image. It never depends on `tool/` sources.
 |---|---|
 | `services/orders-service` | `POST /orders` (reserves stock at inventory-service first; `409` when it is short), `GET /orders/{id}`; knows nothing about the tool |
 | `services/inventory-service` | `POST /reservations` (`201`, or `409` when the stock is short), `GET /stock` (`[{"sku": …, "available": …}]` by SKU, read by the frontend's stock list); seeded SKUs `sku-1` (plenty) and `sku-out` (none) |
+| `services/shipping-service` | consumes `order-placed` (group `shipping`) and inserts a `PENDING` shipment; `GET /shipments/{orderId}` (`200`, or `404`); knows nothing about the tool |
 | `services/frontend` | React + TypeScript + Vite app (`/` stock list, `/order` form, `/orders/:id` order page), built to static files and served by nginx; knows the tool only through `startStackRecording({ component: 'frontend' })` |
 | `e2e-tests` | `OrdersScenarios` and `FrontendScenarios` (the user journeys), `OrdersE2ETest` and `FrontendE2ETest` (tagged with `@StackScenario`), `SandboxAcceptanceTest` |
-| `docker-compose.yml` | `postgres` (15432), `inventory-db` (15433), `reporter` (4318, writes `./recordings`), `orders-service` (8080) and `inventory-service` (8081) under the agent, and `frontend` (3000) |
+| `docker-compose.yml` | `postgres` (15432), `inventory-db` (15433), `shipping-db` (15434), `kafka` (9092; `apache/kafka:4.1.0`, one KRaft node), `reporter` (4318, writes `./recordings`), `orders-service` (8080), `inventory-service` (8081) and `shipping-service` (8082) under the agent, and `frontend` (3000) |
 | `stack/` | the committed workspace the viewer opens (`workspace.yaml`, `scenarios/`, and later components, connections, notes) |
 | `recordings/` | what the reporter recorded; gitignored |
 
@@ -55,16 +63,18 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    sandbox/gradlew -p sandbox stackAgent stackBrowser assemble
    ```
 
-3. Start the stack. `--wait` returns once the two services and the frontend report healthy (the services'
-   `/actuator/health`, and a `wget` of the frontend's `/`; orders-service waits for inventory-service, the frontend for
-   both), so the tests below never race their startup:
+3. Start the stack. `--wait` returns once the broker, the three services and the frontend report healthy (the
+   broker's `kafka-broker-api-versions.sh`, the services' `/actuator/health`, and a `wget` of the frontend's `/`;
+   orders-service waits for inventory-service and the broker, shipping-service for the broker, the frontend for the
+   two HTTP services), so the tests below never race their startup:
 
    ```sh
    docker compose -f sandbox/docker-compose.yml up -d --build --wait
    ```
 
 4. Run the tagged e2e scenarios against it. Each test becomes one recorded run in `sandbox/recordings/`, and the
-   two orders-service scenarios that reserve stock also record the hop to inventory-service. The three browser
+   two orders-service scenarios that reserve stock also record the hop to inventory-service, and `create-order` follows the order across Kafka to
+   shipping-service. The three browser
    scenarios run in Chromium, which Playwright downloads on the first `e2eTest`:
 
    ```sh
@@ -84,19 +94,22 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    docker compose -f sandbox/docker-compose.yml down -v
    ```
 
-Method capture is on for both services: `docker-compose.yml` passes `-Dstack.methods.packages=io.stackvibed.sandbox.orders`
-(and `...inventory`) to the agent, so every public method of a Spring stereotype class (`@RestController`, `@Service`,
+Method capture is on for all three services: `docker-compose.yml` passes `-Dstack.methods.packages=io.stackvibed.sandbox.orders`
+(and `...inventory`, `...shipping`) to the agent, so every public method of a Spring stereotype class (`@RestController`, `@Service`,
 `@Repository`, `@Component`, `@Controller`) in those packages is recorded with its arguments, return value or thrown
 exception. In the viewer, open a `create-order` run in the sequence view and click the `▸ N classes` toggle under a
 service to expand it into its classes (`OrdersController`, `OrderService`, `InventoryClient`, `OrderRepository` in
-orders-service; `ReservationsController`, `StockRepository` in inventory-service); the arrows between classes are the
+orders-service; `ReservationsController`, `StockRepository` in inventory-service; `ShipmentListener`,
+`ShipmentRepository` in shipping-service); the arrows between classes are the
 method calls, and clicking one shows its arguments and return value or exception. In the `create-order-out-of-stock`
 run the exception thrown by inventory-service's controller shows as failed arrows up through the callers. To turn method
-capture off, remove the `-Dstack.methods.packages=...` option from the two `JAVA_TOOL_OPTIONS` in
+capture off, remove the `-Dstack.methods.packages=...` option from the three `JAVA_TOOL_OPTIONS` in
 `docker-compose.yml` (without it the agent records the service level only, as before step 3) and start the stack again.
 
-All published ports (3000 frontend, 8080 orders-service, 8081 inventory-service, 4318 reporter, 15432 orders Postgres,
-15433 inventory Postgres) are bound to `127.0.0.1` only.
+All published ports (3000 frontend, 8080 orders-service, 8081 inventory-service, 8082 shipping-service, 4318 reporter,
+9092 Kafka, 15432 orders Postgres, 15433 inventory Postgres, 15434 shipping Postgres) are bound to `127.0.0.1` only.
+Kafka has two listeners: `kafka:29092` for the containers and `localhost:9092` for a service run from the IDE (the
+services' `application.yaml` default to the latter).
 
 The frontend is built through Gradle (`sandbox/gradlew -p sandbox stackAgent stackBrowser assemble`, step 2), not with a
 plain `npm install` in `services/frontend`: `@stackvibed/browser` is installed from the tarball `stackBrowser` copies
@@ -124,6 +137,14 @@ The viewer discovers `inventory-service`, `postgresql-inventory` and the connect
 `inventory-service` (`POST /reservations`) and `inventory-service` to `postgresql-inventory` from the recordings;
 accept them in the viewer to add them to `stack/`. In the `create-order-out-of-stock` run the hop to inventory-service
 is the failed one (`409`).
+
+Likewise `shipping-service`, `postgresql-shipping`, the topic `order-placed` and the connections `orders-service` to
+the topic (kind `kafka`), the topic to `shipping-service` and `shipping-service` to `postgresql-shipping`. The topic is
+a node of its own (id `topic-order-placed`, shown as `order-placed`). In the sequence view of a `create-order` run
+`produce order-placed` is nested in the `POST /orders` request that sent it, and `consume order-placed` follows as a
+separate root step with a `+<n> ms` note for the time since the produce ended, holding the listener's insert. The
+details of either show the topic, partition, offset, key, headers and the `OrderPlaced` JSON, and "Consumed by
+shipping-service (group shipping)" or "Produced by orders-service".
 
 The OpenTelemetry agent version in `sandbox/gradle/libs.versions.toml` must equal the one in
 `tool/gradle/libs.versions.toml`: the stack extension uses the agent's internal APIs, so it only works in that version.
@@ -193,17 +214,18 @@ It starts its own copy of the stack with Docker Compose (Testcontainers), runs a
 ones and the three browser ones), checks the recordings the reporter wrote, and tears the stack down. On Podman it
 uses `docker-compose.podman.yml` and the classic builder (see [With Podman](#with-podman)), and waits for the services
 on their published ports instead of through Testcontainers' ambassador container, which needs container links that
-Podman does not support. It uses the same fixed ports (3000, 4318, 15432, 15433, 8080, 8081), so stop a stack started
+Podman does not support. It uses the same fixed ports (3000, 4318, 9092, 15432, 15433, 15434, 8080, 8081, 8082), so stop a stack started
 by hand first. Neither `e2eTest` nor `acceptanceTest` is part of `build`.
 
 ## Running orders-service from IntelliJ
 
-Start only the databases, inventory-service (orders-service calls it) and the reporter, then run orders-service from
-the IDE under the agent:
+Start only the databases, inventory-service (orders-service calls it), the broker, shipping-service (the
+`create-order` scenario polls it on `localhost:8082`) and the reporter, then run orders-service from the IDE under
+the agent:
 
 ```sh
-sandbox/gradlew -p sandbox stackAgent :services:inventory-service:assemble
-docker compose -f sandbox/docker-compose.yml up -d --build --wait postgres inventory-service reporter
+sandbox/gradlew -p sandbox stackAgent :services:inventory-service:assemble :services:shipping-service:assemble
+docker compose -f sandbox/docker-compose.yml up -d --build --wait postgres inventory-service kafka shipping-service reporter
 ```
 
 Run configuration for `io.stackvibed.sandbox.orders.OrdersApplicationKt` (module `orders-service.main`), environment
@@ -217,7 +239,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 `http://localhost:4318` is also the extension's default endpoint, so that variable only makes it explicit.
 `application.yaml` already points at the compose Postgres, published on `localhost:15432` (not 5432, so a Postgres
-installed on the host cannot shadow it). Then run `e2eTest` from the IDE or Gradle as
+installed on the host cannot shadow it), and at the broker on `localhost:9092`. Then run `e2eTest` from the IDE or Gradle as
 above.
 
 ## Troubleshooting
@@ -235,12 +257,18 @@ above.
   export DOCKER_CONFIG=/tmp/docker-nocreds
   ```
 
-  Only public images are pulled (`postgres:17`, `eclipse-temurin:25-jre`, and Testcontainers' own helpers), so no
+  Only public images are pulled (`postgres:17`, `apache/kafka:4.1.0`, `eclipse-temurin:25-jre`, and Testcontainers' own helpers), so no
   credentials are needed. Pulling them once (`docker pull postgres:17`) is enough; later runs use the local copies.
-- **orders-service or inventory-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
+- **orders-service, inventory-service or shipping-service exits at start with `Error opening zip file` / agent not found.** `sandbox/build/stack-agent/`
   is empty: run `sandbox/gradlew -p sandbox stackAgent`, then `docker compose -f sandbox/docker-compose.yml up -d --build --wait` again.
 - **`reporter` image not found, or the recordings do not reflect a tool change.** The image is built locally only,
   and only when asked: `tool/gradlew -p tool :reporter:dockerImage`, then `docker compose -f sandbox/docker-compose.yml up -d --build --wait`.
+- **`create-order` fails with `no shipment for order …`, or a run has a `produce order-placed` and no `consume`.**
+  shipping-service is healthy before its listener has joined the `shipping` group (the actuator answers while the
+  group still rebalances, a few seconds after a cold start). Nothing is lost: the listener starts from the earliest
+  offset, so it consumes the record once it has joined, and the scenario's poll waits up to 10 s for it. Run it again
+  after a few seconds; if it keeps failing, look at `docker compose -f sandbox/docker-compose.yml logs shipping-service kafka`
+  (the broker unreachable from the service, or the listener failing on the record).
 - **Podman: `docker compose` or `docker ps` hangs, while `podman ps` still answers.** Podman's Docker-compatible API is
   stuck, typically on an image streamed in by a BuildKit build. `podman machine stop`, `podman machine start`, and use
   the classic builder as in [With Podman](#with-podman).
@@ -249,7 +277,7 @@ above.
 - **Podman: the first request right after `up --wait` fails (`connection reset`, `connection was aborted`).** The
   services are up, but Podman forwards the published ports to them only some seconds later; retry.
 - **Port already in use.** Another stack (a manual `docker compose up` or a running acceptance test) holds 4318,
-  15432, 15433, 8080, 8081 or 3000: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
+  9092, 15432, 15433, 15434, 8080, 8081, 8082 or 3000: `docker compose -f sandbox/docker-compose.yml down -v`. The viewer uses 8090 (`--server.port=<n>`
   to move it).
 - **`POST /orders` answers `5xx` and the hop to inventory-service is marked failed.** orders-service cannot reach
   inventory-service, so no inventory-service server span is recorded; the orders-service to inventory-service hop
