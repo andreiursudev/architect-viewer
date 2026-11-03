@@ -156,10 +156,14 @@ class TopologyService(
             .filterKeys { it !in known }
             .toSortedMap()
             .map { (id, type) ->
-                BoardComponent(id, type, observed.displayNames[id] ?: id, discovered = true, hasNotes = id in loaded.notedTargets)
+                BoardComponent(id, type, observed.displayNames[id] ?: fallbackName(id, type), discovered = true, hasNotes = id in loaded.notedTargets)
             }
         return curated + discovered
     }
+
+    /** A discovered component nobody observed a name for: a topic is named without its id prefix, anything else by its id. */
+    private fun fallbackName(id: String, type: ComponentType): String =
+        if (type == ComponentType.TOPIC) id.removePrefix(ComponentIds.TOPIC_PREFIX) else id
 
     /**
      * The endpoints of the non-hidden curated connections, typed from the connections alone: the e2e client is a

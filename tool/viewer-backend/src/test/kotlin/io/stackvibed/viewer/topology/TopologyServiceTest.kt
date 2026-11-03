@@ -465,5 +465,11 @@ class TopologyServiceTest {
             "orders-service" to ComponentType.SERVICE,
             "topic-order-created" to ComponentType.TOPIC,
         )
+        view.components.associate { it.id to it.displayName } shouldBe mapOf(
+            "topic-order-placed" to "order-placed",
+            "shipping-service" to "shipping-service",
+            "orders-service" to "orders-service",
+            "topic-order-created" to "order-created",
+        )
     }
 }
