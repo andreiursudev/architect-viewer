@@ -64,7 +64,8 @@ Spring Boot 4, Kotlin, Spring MVC, Flyway, the conventions of the other two serv
 
 ### 2.4 e2e scenarios and acceptance (red first)
 
-- `create-order`: after the `201`, polls `GET /shipments/{orderId}` (every 100 ms, 5 s cap) until `200`. The consume
+- `create-order`: after the `201`, polls `GET /shipments/{orderId}` (every 100 ms, 10 s cap: the first test of a
+  suite may run while the listener still joins its group) until `200`. The consume
   carries the run's baggage, so it lands in the same run; polling makes the run complete before the test ends. The
   polls are steps of the scenario, which is honest: the test does make them.
 - `create-order-out-of-stock`: unchanged scenario; acceptance asserts the run has no `kafka.produce` or `kafka.consume`.
@@ -115,15 +116,16 @@ data class KafkaConsumeEvent(/* common fields */,
 
 ### 4.1 Producer
 
-- Advice on `KafkaProducer.send(ProducerRecord, Callback)`, ordered after the OTel agent's own Kafka advice so that its
-  producer span is current (instrumentation module `order()`).
-- Records on that span `stack.kafka.value` (+ `stack.kafka.value.truncated`) and `stack.kafka.headers` (JSON).
+- Advice on `KafkaProducer.doSend(ProducerRecord, Callback)`, which `send` calls inside the OTel agent's own advice
+  scope, so its producer span is current whatever order the two advices are applied in.
+- Records on that span `stack.kafka.value` (+ `stack.kafka.value_truncated`, named like the body flags) and
+  `stack.kafka.headers` (JSON).
 - Value rendering: a `String` as is; `byte[]` and `ByteBuffer` as `<n bytes>` (D10: raw bytes only behind the per-topic
   debug flag, which is not built); anything else through `BoundedValueSerializer`, cut to
   `StackAttributes.MAX_BODY_CHARS`. The application's Jackson mapper is not reachable here, as it is through Spring
   MVC's converters; the bounded serialiser is the fallback D10 already names.
-- The attributes must land on the producer span, not its parent: the module order guarantees it, and the agent test
-  (§7) pins it by asserting the value on the producer span and not on the request span around it.
+- The attributes must land on the producer span, not its parent: the agent test (§7) pins it by asserting the value
+  on the producer span and not on the request span around it.
 
 ### 4.2 Consumer
 
