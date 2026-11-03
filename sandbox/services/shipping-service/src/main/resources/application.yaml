@@ -1,0 +1,30 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: shipping-service
+  datasource:
+    # docker-compose.yml overrides this (SPRING_DATASOURCE_URL); localhost:15434 is the compose shipping-db as
+    # seen from the host, for a run from the IDE.
+    url: jdbc:postgresql://localhost:15434/shipping
+    username: shipping
+    password: shipping
+  kafka:
+    # docker-compose.yml overrides this (SPRING_KAFKA_BOOTSTRAP_SERVERS); localhost:9092 is the compose broker as
+    # seen from the host, for a run from the IDE.
+    bootstrap-servers: localhost:9092
+    consumer:
+      # A record published before this service joined the group is still consumed.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      properties:
+        # The records carry no type header (orders-service sets spring.json.add.type.headers: false).
+        spring.json.value.default.type: io.stackvibed.sandbox.shipping.OrderPlaced
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

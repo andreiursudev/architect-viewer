@@ -14,3 +14,8 @@ services:
     healthcheck:
       start_interval: !reset null
       interval: 10s
+
+  shipping-service:
+    healthcheck:
+      start_interval: !reset null
+      interval: 10s

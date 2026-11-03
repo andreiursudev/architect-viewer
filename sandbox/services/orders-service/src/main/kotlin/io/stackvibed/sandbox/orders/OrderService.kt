@@ -5,11 +5,15 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-/** The order logic: reserves stock at inventory-service, then stores the order. The controller keeps the HTTP concerns. */
+/** The order logic: reserves stock at inventory-service, stores the order and announces it on Kafka. The controller keeps the HTTP concerns. */
 @Service
-class OrderService(private val orders: OrderRepository, private val inventory: InventoryClient) {
+class OrderService(
+    private val orders: OrderRepository,
+    private val inventory: InventoryClient,
+    private val events: OrderEvents,
+) {
 
-    /** Reserves the stock and stores the order; when the stock cannot be reserved, nothing is stored. */
+    /** Reserves the stock, stores the order and publishes `order-placed`; when the stock cannot be reserved, nothing is stored. */
     fun create(newOrder: NewOrder): Order {
         // Before the insert: an order whose stock cannot be reserved is never stored.
         inventory.reserve(newOrder.sku, newOrder.quantity)
@@ -23,6 +27,7 @@ class OrderService(private val orders: OrderRepository, private val inventory: I
             createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS),
         )
         orders.insert(order)
+        events.placed(order)
         return order
     }
 

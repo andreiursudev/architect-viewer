@@ -7,6 +7,16 @@ spring:
     url: jdbc:postgresql://localhost:15432/orders
     username: orders
     password: orders
+  kafka:
+    # docker-compose.yml overrides this (SPRING_KAFKA_BOOTSTRAP_SERVERS); localhost:9092 is the compose broker as
+    # seen from the host, for a run from the IDE.
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      properties:
+        # The consumer deserialises into its own OrderPlaced, so no type header naming orders-service's class.
+        spring.json.add.type.headers: false
 
 inventory:
   # docker-compose.yml overrides this (INVENTORY_BASE_URL); localhost:8081 is inventory-service as seen from the

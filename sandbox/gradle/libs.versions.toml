@@ -27,9 +27,10 @@ stack-browser = { module = "io.stackvibed:stack-browser", version.ref = "stack-t
 stack-test-harness = { module = "io.stackvibed:stack-test-harness", version.ref = "stack-tool" }
 opentelemetry-javaagent = { module = "io.opentelemetry.javaagent:opentelemetry-javaagent", version.ref = "opentelemetry-javaagent" }
 
-# orders-service and inventory-service (versions managed by the Spring Boot BOM)
+# orders-service, inventory-service and shipping-service (versions managed by the Spring Boot BOM)
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-restclient = { module = "org.springframework.boot:spring-boot-starter-restclient" }
+spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
