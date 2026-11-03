@@ -447,6 +447,88 @@ class SpanEventMapperTest {
             .errorType shouldBe "java.lang.IllegalStateException"
     }
 
+    private fun exceptionEvent(type: String? = null, name: String = "exception"): io.opentelemetry.proto.trace.v1.Span.Event =
+        io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+            .setName(name)
+            .apply { if (type != null) addAttributes(OtlpFixtures.str("exception.type", type)) }
+            .build()
+
+    private fun withStatus(
+        kind: Span.SpanKind,
+        code: io.opentelemetry.proto.trace.v1.Status.StatusCode,
+        events: List<io.opentelemetry.proto.trace.v1.Span.Event>,
+        vararg attributes: io.opentelemetry.proto.common.v1.KeyValue,
+    ): List<RecordingEvent> {
+        val span = OtlpFixtures.span("1111111111111111", null, kind, "kafka", 1, 11)
+            .addAttributes(OtlpFixtures.str("messaging.system", "kafka"))
+            .addAllAttributes(attributes.toList())
+            .setStatus(io.opentelemetry.proto.trace.v1.Status.newBuilder().setCode(code))
+            .addAllEvents(events)
+            .build()
+        return events(OtlpFixtures.request("orders-service", listOf(span)))
+    }
+
+    private val errorCode = io.opentelemetry.proto.trace.v1.Status.StatusCode.STATUS_CODE_ERROR
+    private val okCode = io.opentelemetry.proto.trace.v1.Status.StatusCode.STATUS_CODE_OK
+
+    @Test fun `error status producer span takes the error type from its exception event`() {
+        val event = withStatus(
+            Span.SpanKind.SPAN_KIND_PRODUCER, errorCode,
+            listOf(exceptionEvent(type = "org.apache.kafka.common.errors.RecordTooLargeException")), topic,
+        ).single() as KafkaProduceEvent
+        event.errorType shouldBe "org.apache.kafka.common.errors.RecordTooLargeException"
+    }
+
+    @Test fun `error status consumer span without exception event gets the literal error`() {
+        val event = withStatus(Span.SpanKind.SPAN_KIND_CONSUMER, errorCode, emptyList(), topic, process).single() as KafkaConsumeEvent
+        event.errorType shouldBe "error"
+    }
+
+    @Test fun `error status span uses the first exception event and falls back when it has no type`() {
+        val first = withStatus(
+            Span.SpanKind.SPAN_KIND_CONSUMER, errorCode,
+            listOf(exceptionEvent(name = "other", type = "ignored"), exceptionEvent(type = "java.lang.IllegalStateException"), exceptionEvent(type = "second")),
+            topic, process,
+        ).single() as KafkaConsumeEvent
+        first.errorType shouldBe "java.lang.IllegalStateException"
+        val untyped = withStatus(Span.SpanKind.SPAN_KIND_PRODUCER, errorCode, listOf(exceptionEvent()), topic).single() as KafkaProduceEvent
+        untyped.errorType shouldBe "error"
+    }
+
+    @Test fun `ok status span keeps a null error type even with an exception event`() {
+        val event = withStatus(
+            Span.SpanKind.SPAN_KIND_PRODUCER, okCode, listOf(exceptionEvent(type = "java.lang.RuntimeException")), topic,
+        ).single() as KafkaProduceEvent
+        event.errorType shouldBe null
+        (withStatus(Span.SpanKind.SPAN_KIND_CONSUMER, okCode, emptyList(), topic, process).single() as KafkaConsumeEvent).errorType shouldBe null
+    }
+
+    @Test fun `error type attribute wins over the status fallback`() {
+        val event = withStatus(
+            Span.SpanKind.SPAN_KIND_PRODUCER, errorCode,
+            listOf(exceptionEvent(type = "from.the.Event")), topic, OtlpFixtures.str("error.type", "from.the.Attribute"),
+        ).single() as KafkaProduceEvent
+        event.errorType shouldBe "from.the.Attribute"
+    }
+
+    @Test fun `offset is read from the newer name first and the older one as fallback`() {
+        val newer = produced(topic, OtlpFixtures.long("messaging.kafka.offset", 7), OtlpFixtures.long("messaging.kafka.message.offset", 9))
+        (newer.single() as KafkaProduceEvent).offset shouldBe 7L
+        val older = consumed(topic, process, OtlpFixtures.long("messaging.kafka.message.offset", 9))
+        (older.single() as KafkaConsumeEvent).offset shouldBe 9L
+        val onlyNewer = consumed(topic, process, OtlpFixtures.long("messaging.kafka.offset", 7))
+        (onlyNewer.single() as KafkaConsumeEvent).offset shouldBe 7L
+    }
+
+    @Test fun `null header values list and unparsable headers keep the event with empty headers`() {
+        val nullList = produced(topic, OtlpFixtures.str("stack.kafka.headers", """{"h":null}""")).single() as KafkaProduceEvent
+        nullList.headers shouldBe mapOf("h" to emptyList<String>())
+        val garbage = consumed(topic, process, OtlpFixtures.str("stack.kafka.headers", "not json")).single() as KafkaConsumeEvent
+        garbage.headers shouldBe emptyMap()
+        val wrongShape = produced(topic, OtlpFixtures.str("stack.kafka.headers", """{"h":"a"}""")).single() as KafkaProduceEvent
+        wrongShape.headers shouldBe emptyMap()
+    }
+
     @Test fun `failed send has no partition or offset and carries the error type`() {
         val span = OtlpFixtures.producerSpan(partition = null, offset = null, key = null, errorType = "org.apache.kafka.common.errors.TimeoutException")
         val event = events(OtlpFixtures.request("orders-service", listOf(span))).single() as KafkaProduceEvent

@@ -5,6 +5,7 @@ import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.KeyValue
 import io.opentelemetry.proto.trace.v1.Span
+import io.opentelemetry.proto.trace.v1.Status
 import io.stackvibed.agent.contract.StackAttributes
 import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
@@ -43,7 +44,10 @@ data class MappedSpan(val tags: SpanTags, val toEvent: EventDraft)
  * The OTel agent still exports the older messaging names (`messaging.operation`, `messaging.kafka.consumer.group`,
  * `messaging.kafka.destination.partition`); every attribute is read under the newer name first and the older one as
  * fallback. A Kafka header value that is JSON null (the agent writes a null header value so) is kept as an empty string, so the
- * header keeps its number of values.
+ * header keeps its number of values, and a header whose value list is null has none.
+ *
+ * The offset is read the same way, as is the error type of a Kafka span: `error.type`, else the status-based fallback described on
+ * [kafkaErrorType].
  */
 class SpanEventMapper {
     private val json = JsonMapper.builder().build()
@@ -239,13 +243,13 @@ class SpanEventMapper {
                 durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
                 topic = topic,
                 partition = partition(attrs),
-                offset = attrs.long("messaging.kafka.message.offset"),
+                offset = offset(attrs),
                 key = attrs.string("messaging.kafka.message.key"),
                 headers = kafkaHeaders(attrs.string(StackAttributes.KAFKA_HEADERS)),
                 value = attrs.string(StackAttributes.KAFKA_VALUE),
                 valueTruncated = attrs.boolean(StackAttributes.KAFKA_VALUE_TRUNCATED),
                 valueBytes = attrs.long("messaging.message.body.size"),
-                errorType = attrs.string("error.type"),
+                errorType = kafkaErrorType(span, attrs),
             )
         }
     }
@@ -266,16 +270,33 @@ class SpanEventMapper {
                 durationNanos = span.endTimeUnixNano - span.startTimeUnixNano,
                 topic = topic,
                 partition = partition(attrs),
-                offset = attrs.long("messaging.kafka.message.offset"),
+                offset = offset(attrs),
                 key = attrs.string("messaging.kafka.message.key"),
                 consumerGroup = attrs.string("messaging.consumer.group.name") ?: attrs.string("messaging.kafka.consumer.group"),
                 headers = kafkaHeaders(attrs.string(StackAttributes.KAFKA_HEADERS)),
                 value = attrs.string(StackAttributes.KAFKA_VALUE),
                 valueTruncated = attrs.boolean(StackAttributes.KAFKA_VALUE_TRUNCATED),
                 valueBytes = attrs.long("messaging.message.body.size"),
-                errorType = attrs.string("error.type"),
+                errorType = kafkaErrorType(span, attrs),
             )
         }
+    }
+
+    /** The newer name is `messaging.kafka.offset`; the agent still exports `messaging.kafka.message.offset`. */
+    private fun offset(attrs: Map<String, AnyValue>): Long? =
+        attrs.long("messaging.kafka.offset") ?: attrs.long("messaging.kafka.message.offset")
+
+    /**
+     * The agent writes `error.type` on messaging spans only under the stable-semconv opt-in, so a failed send or listener is
+     * recognised by its status: the type of the span's first `exception` event, or the literal `error` without one.
+     */
+    private fun kafkaErrorType(span: Span, attrs: Map<String, AnyValue>): String? {
+        attrs.string("error.type")?.let { return it }
+        if (span.status.code != Status.StatusCode.STATUS_CODE_ERROR) return null
+        val exception = span.eventsList.firstOrNull { it.name == "exception" }
+        return exception?.attributesList?.firstOrNull { it.key == "exception.type" }
+            ?.value?.takeIf { it.hasStringValue() }?.stringValue?.ifEmpty { null }
+            ?: "error"
     }
 
     /** The newer semantic convention exports the partition as a string, the older one as an int. */
@@ -285,7 +306,7 @@ class SpanEventMapper {
 
     /** The agent writes a header whose value is null as JSON null; it is kept as an empty string. */
     private fun kafkaHeaders(raw: String?): Map<String, List<String>> =
-        decode(raw, NULLABLE_HEADERS_TYPE)?.mapValues { (_, values) -> values.map { it ?: "" } } ?: emptyMap()
+        decode(raw, NULLABLE_HEADERS_TYPE)?.mapValues { (_, values) -> values?.map { it ?: "" } ?: emptyList() } ?: emptyMap()
 
     private fun headers(raw: String?): Map<String, List<String>> = decode(raw, HEADERS_TYPE) ?: emptyMap()
 
@@ -317,7 +338,7 @@ class SpanEventMapper {
     private companion object {
         const val UNKNOWN_SERVICE = "unknown-service"
         val HEADERS_TYPE = object : TypeReference<Map<String, List<String>>>() {}
-        val NULLABLE_HEADERS_TYPE = object : TypeReference<Map<String, List<String?>>>() {}
+        val NULLABLE_HEADERS_TYPE = object : TypeReference<Map<String, List<String?>?>>() {}
         val PARAMETERS_TYPE = object : TypeReference<List<String?>>() {}
         val STRINGS_TYPE = object : TypeReference<List<String>>() {}
     }
