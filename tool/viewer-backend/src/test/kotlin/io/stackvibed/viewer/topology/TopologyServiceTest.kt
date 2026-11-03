@@ -406,4 +406,64 @@ class TopologyServiceTest {
     fun `flow of an unknown run is reported`() {
         shouldThrow<NoSuchElementException> { service().flow("nope") }
     }
+
+    private fun kafkaRun() {
+        val common = """"runId":"run-k","traceId":"t","startEpochNanos":1,"durationNanos":1,"partition":0,"offset":7,"key":"42","headers":{},"value":"{}","valueTruncated":false,"valueBytes":2,"errorType":null,"topic":"order-placed""""
+        val produce = """{"type":"kafka.produce","schemaVersion":5,"eventId":"p","spanId":"p","parentSpanId":null,"component":"orders-service",$common}"""
+        val consume = """{"type":"kafka.consume","schemaVersion":5,"eventId":"c","spanId":"c","parentSpanId":"p","component":"shipping-service","consumerGroup":"shipping",$common}"""
+        recordingsDir.resolve("run-k").createDirectories()
+        recordingsDir.resolve("run-k/manifest.json").writeText(
+            """{"schemaVersion":5,"runId":"run-k","scenarioId":"ship-order","kind":"e2e","startedAt":"2026-11-03T10:00:00Z","lastEventAt":null,"stoppedAt":null,"reporterVersion":"0.1.0-test","componentsSeen":["orders-service","shipping-service"]}""",
+        )
+        recordingsDir.resolve("run-k/events.jsonl").writeText("$produce\n$consume\n")
+    }
+
+    @Test
+    fun `a run with produce and consume discovers kafka connections through the topic`() {
+        kafkaRun()
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "orders-service" to ComponentType.SERVICE,
+            "topic-order-placed" to ComponentType.TOPIC,
+            "shipping-service" to ComponentType.SERVICE,
+        )
+        view.components.associate { it.id to it.displayName } shouldBe mapOf(
+            "orders-service" to "orders-service",
+            "shipping-service" to "shipping-service",
+            "topic-order-placed" to "order-placed",
+        )
+        view.connections.map { Triple(it.id, it.kind, it.label) } shouldContainExactlyInAnyOrder listOf(
+            Triple("orders-service--topic-order-placed", ConnectionKind.KAFKA, null),
+            Triple("topic-order-placed--shipping-service", ConnectionKind.KAFKA, null),
+        )
+        view.connections.all { it.state == ConnectionState.DISCOVERED } shouldBe true
+    }
+
+    @Test
+    fun `a curated topic keeps its curated display name`() {
+        kafkaRun()
+        store.saveComponent(ComponentDefinition("topic-order-placed", ComponentType.TOPIC, "Orders placed"))
+
+        val topic = service().workspaceView().components.single { it.id == "topic-order-placed" }
+
+        topic.displayName shouldBe "Orders placed"
+        topic.discovered shouldBe false
+    }
+
+    @Test
+    fun `the topic end of a curated kafka connection is a topic`() {
+        store.saveConnection(definition("topic-order-placed", "shipping-service", ConnectionKind.KAFKA, ConnectionState.ACCEPTED))
+        store.saveConnection(definition("orders-service", "topic-order-created", ConnectionKind.KAFKA, ConnectionState.MANUAL))
+
+        val view = service().workspaceView()
+
+        view.components.map { it.id to it.type } shouldContainExactlyInAnyOrder listOf(
+            "topic-order-placed" to ComponentType.TOPIC,
+            "shipping-service" to ComponentType.SERVICE,
+            "orders-service" to ComponentType.SERVICE,
+            "topic-order-created" to ComponentType.TOPIC,
+        )
+    }
 }

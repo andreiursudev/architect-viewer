@@ -2,6 +2,8 @@ package io.stackvibed.viewer.topology
 
 import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.ComponentType
+import io.stackvibed.model.KafkaConsumeEvent
+import io.stackvibed.model.KafkaProduceEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
 import io.stackvibed.model.UiActionEvent
@@ -57,10 +59,14 @@ class TopologyService(
         return flowBuilder.build(manifest, recordings.events(runId), workspace.load().config.aliases, recordings.screenshots(runId))
     }
 
-    /** Components and connections the evidence runs went through, by id, in first-seen order. */
+    /**
+     * Components and connections the evidence runs went through, by id, in first-seen order. [displayNames]: the names
+     * of discovered components that are not their id, a topic's name for its `topic-` id.
+     */
     private class Observed {
         val componentTypes = linkedMapOf<String, ComponentType>()
         val connections = linkedMapOf<String, ObservedConnection>()
+        val displayNames = linkedMapOf<String, String>()
     }
 
     /**
@@ -90,27 +96,41 @@ class TopologyService(
             FlowStepKind.KAFKA -> ConnectionKind.KAFKA
         }
         // The e2e client calls from outside; the caller of an HTTP hop or a database is a service (a frontend once it is seen
-        // with ui steps); a ui step's target is the frontend.
-        val toType = when (kind) {
-            ConnectionKind.DB -> ComponentType.DATABASE
-            ConnectionKind.UI -> ComponentType.FRONTEND
+        // with ui steps); a ui step's target is the frontend. A kafka step goes through a topic: the target of a produce,
+        // the source of a consume.
+        val event = step.event
+        val fromType = when {
+            event is KafkaConsumeEvent -> ComponentType.TOPIC
+            step.from == ComponentIds.E2E_CLIENT -> ComponentType.CLIENT
             else -> ComponentType.SERVICE
         }
-        // A database is not downgraded to a service, a frontend neither (it calls out before its first ui step too).
-        into.componentTypes.merge(step.from, if (step.from == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else ComponentType.SERVICE, ::stronger)
+        val toType = when {
+            event is KafkaProduceEvent -> ComponentType.TOPIC
+            kind == ConnectionKind.DB -> ComponentType.DATABASE
+            kind == ConnectionKind.UI -> ComponentType.FRONTEND
+            else -> ComponentType.SERVICE
+        }
+        // A database is not downgraded to a service, a frontend or a topic neither (a frontend calls out before its first
+        // ui step too).
+        into.componentTypes.merge(step.from, fromType, ::stronger)
         into.componentTypes.merge(step.to, toType, ::stronger)
+        when (event) {
+            is KafkaProduceEvent -> into.displayNames.putIfAbsent(step.to, event.topic)
+            is KafkaConsumeEvent -> into.displayNames.putIfAbsent(step.from, event.topic)
+            else -> Unit
+        }
         val connection = into.connections.getOrPut(connectionId) { ObservedConnection(step.from, step.to, kind) }
         // A database call's label is its SQL, which says nothing about the connection as a whole.
         if (kind == ConnectionKind.HTTP) connection.labels += step.label
         if (kind == ConnectionKind.UI) uiRouteOf(step.event)?.let { connection.labels += it }
     }
 
-    /** The type that wins when a component is seen as both: a database over a frontend over anything else. */
+    /** The type that wins when a component is seen as both: a database or a topic over a frontend over anything else. */
     private fun stronger(known: ComponentType, new: ComponentType): ComponentType =
         if (rank(new) > rank(known)) new else known
 
     private fun rank(type: ComponentType) = when (type) {
-        ComponentType.DATABASE -> 2
+        ComponentType.DATABASE, ComponentType.TOPIC -> 2
         ComponentType.FRONTEND -> 1
         else -> 0
     }
@@ -135,14 +155,16 @@ class TopologyService(
         val discovered = types
             .filterKeys { it !in known }
             .toSortedMap()
-            .map { (id, type) -> BoardComponent(id, type, id, discovered = true, hasNotes = id in loaded.notedTargets) }
+            .map { (id, type) ->
+                BoardComponent(id, type, observed.displayNames[id] ?: id, discovered = true, hasNotes = id in loaded.notedTargets)
+            }
         return curated + discovered
     }
 
     /**
      * The endpoints of the non-hidden curated connections, typed from the connections alone: the e2e client is a
-     * client, the target of a database connection a database, the target of a ui connection a frontend, anything else
-     * a service.
+     * client, the target of a database connection a database, the target of a ui connection a frontend, the end of a
+     * kafka connection whose id starts with [ComponentIds.TOPIC_PREFIX] a topic, anything else a service.
      */
     private fun curatedEndpoints(loaded: LoadedWorkspace): Map<String, ComponentType> {
         val types = linkedMapOf<String, ComponentType>()
@@ -150,13 +172,15 @@ class TopologyService(
             val inferred = if (id == ComponentIds.E2E_CLIENT) ComponentType.CLIENT else type
             types.merge(id, inferred, ::stronger)
         }
+        fun isTopic(id: String, kind: ConnectionKind) = kind == ConnectionKind.KAFKA && id.startsWith(ComponentIds.TOPIC_PREFIX)
         loaded.connections.filter { it.state != ConnectionState.HIDDEN }.forEach {
-            add(it.from, ComponentType.SERVICE)
+            add(it.from, if (isTopic(it.from, it.kind)) ComponentType.TOPIC else ComponentType.SERVICE)
             add(
                 it.to,
-                when (it.kind) {
-                    ConnectionKind.DB -> ComponentType.DATABASE
-                    ConnectionKind.UI -> ComponentType.FRONTEND
+                when {
+                    isTopic(it.to, it.kind) -> ComponentType.TOPIC
+                    it.kind == ConnectionKind.DB -> ComponentType.DATABASE
+                    it.kind == ConnectionKind.UI -> ComponentType.FRONTEND
                     else -> ComponentType.SERVICE
                 },
             )

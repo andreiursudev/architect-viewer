@@ -6,6 +6,8 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.KafkaConsumeEvent
+import io.stackvibed.model.KafkaProduceEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingKind
@@ -596,6 +598,168 @@ class FlowBuilderTest {
     fun `a run without screenshots builds as before`() {
         browserRun().steps.mapNotNull { it.screenshot } shouldBe emptyList()
     }
+
+    /**
+     * An order placed and shipped, as the agent records it: `POST /orders` → `OrdersController.create` →
+     * `OrderEvents.placed` → produce; the consume's parent span is the produce, the listener's parent is the consume.
+     */
+    private fun placedAndShipped(): List<RecordingEvent> = listOf(
+        http("req", "orders-service", 0, 1000, route = "/orders", path = "/orders", method = "POST"),
+        method("ctl", "orders-service", 10, 980, "x.OrdersController", "create", parent = "req"),
+        method("evt", "orders-service", 100, 200, "x.OrderEvents", "placed", parent = "ctl"),
+        produce("prod", "orders-service", 110, 50, parent = "evt"),
+        consume("cons", "shipping-service", 400, 300, parent = "prod"),
+        method("lst", "shipping-service", 410, 280, "y.OrderPlacedListener", "onOrderPlaced", parent = "cons"),
+        method("save", "shipping-service", 420, 100, "y.ShipmentRepository", "save", parent = "lst"),
+        db("insert", "shipping-service", 430, 50, "insert into shipments (order_id) values (?)", dbName = "shipping", parent = "save"),
+        db("audit", "shipping-service", 600, 20, "insert into audit (order_id) values (?)", dbName = "shipping", parent = "lst"),
+    )
+
+    @Test
+    fun `produce nests under its owner method and goes to the topic`() {
+        val steps = builder.build(emptyManifest(), placedAndShipped(), emptyMap()).steps.associateBy { it.stepId }
+
+        with(steps.getValue("prod")) {
+            kind shouldBe FlowStepKind.KAFKA
+            from shouldBe "orders-service"
+            to shouldBe "topic-order-placed"
+            connectionId shouldBe "orders-service--topic-order-placed"
+            label shouldBe "produce order-placed"
+            parentStepId shouldBe "evt"
+            fromUnit shouldBe "x.OrderEvents"
+            toUnit shouldBe null
+            status shouldBe null
+            handler shouldBe null
+            causedBy shouldBe null
+        }
+        steps.getValue("evt").parentStepId shouldBe "req"
+    }
+
+    @Test
+    fun `consume is a root step from the topic, caused by its produce (parent span)`() {
+        val steps = builder.build(emptyManifest(), placedAndShipped(), emptyMap()).steps.associateBy { it.stepId }
+
+        with(steps.getValue("cons")) {
+            kind shouldBe FlowStepKind.KAFKA
+            from shouldBe "topic-order-placed"
+            to shouldBe "shipping-service"
+            connectionId shouldBe "topic-order-placed--shipping-service"
+            label shouldBe "consume order-placed"
+            parentStepId shouldBe null
+            fromUnit shouldBe null
+            status shouldBe null
+            causedBy shouldBe "prod"
+        }
+    }
+
+    @Test
+    fun `consume pairs with its produce by topic, partition and offset when the parent span is another`() {
+        val events = listOf(
+            produce("other-offset", "orders-service", 0, 10, offset = 6),
+            produce("other-topic", "orders-service", 20, 10, topic = "order-cancelled"),
+            produce("prod", "orders-service", 40, 10),
+            consume("cons", "shipping-service", 100, 50, parent = "not-recorded", trace = "t2"),
+        )
+
+        val steps = builder.build(emptyManifest(), events, emptyMap()).steps.associateBy { it.stepId }
+
+        steps.getValue("cons").causedBy shouldBe "prod"
+        steps.getValue("cons").parentStepId shouldBe null
+    }
+
+    @Test
+    fun `consume without its produce in the run has no causedBy`() {
+        val events = listOf(
+            // No ack: a produce without partition and offset pairs with nothing.
+            produce("unacked", "orders-service", 0, 10, partition = null, offset = null),
+            produce("elsewhere", "orders-service", 20, 10, offset = 99),
+            consume("cons", "shipping-service", 100, 50, parent = "not-recorded"),
+            consume("no-offset", "shipping-service", 200, 50, parent = null, partition = null, offset = null),
+        )
+
+        val steps = builder.build(emptyManifest(), events, emptyMap()).steps.associateBy { it.stepId }
+
+        steps.getValue("cons").causedBy shouldBe null
+        steps.getValue("no-offset").causedBy shouldBe null
+        steps.getValue("no-offset").from shouldBe "topic-order-placed"
+    }
+
+    @Test
+    fun `the listener method is the consume's handler and its insert nests under the consume`() {
+        val flow = builder.build(emptyManifest(), placedAndShipped(), emptyMap())
+        val steps = flow.steps.associateBy { it.stepId }
+
+        flow.steps.map { it.stepId } shouldBe listOf("req", "evt", "prod", "cons", "save", "insert", "audit")
+        with(steps.getValue("cons")) {
+            toUnit shouldBe "y.OrderPlacedListener"
+            handler?.methodName shouldBe "onOrderPlaced"
+        }
+        with(steps.getValue("save")) {
+            kind shouldBe FlowStepKind.METHOD
+            parentStepId shouldBe "cons"
+            fromUnit shouldBe "y.OrderPlacedListener"
+            toUnit shouldBe "y.ShipmentRepository"
+        }
+        with(steps.getValue("insert")) {
+            parentStepId shouldBe "save"
+            connectionId shouldBe "shipping-service--postgresql-shipping"
+            fromUnit shouldBe "y.ShipmentRepository"
+        }
+        with(steps.getValue("audit")) {
+            parentStepId shouldBe "cons"
+            fromUnit shouldBe "y.OrderPlacedListener"
+        }
+    }
+
+    @Test
+    fun `a produce nobody consumed stays a produce step`() {
+        val events = placedAndShipped().filter { it.component == "orders-service" }
+
+        val flow = builder.build(emptyManifest(), events, emptyMap())
+
+        flow.steps.map { it.stepId } shouldBe listOf("req", "evt", "prod")
+        flow.steps.single { it.kind == FlowStepKind.KAFKA }.to shouldBe "topic-order-placed"
+    }
+
+    @Test
+    fun `aliases rename the consumer but not the topic id scheme`() {
+        val events = listOf(
+            produce("prod", "orders", 0, 10, topic = "Orders"),
+            consume("cons", "shipping-service", 100, 50, parent = "prod", topic = "Orders"),
+        )
+        val serviceAliases = mapOf("orders" to "orders-api", "shipping-service" to "shipping")
+
+        val plain = builder.build(emptyManifest(), events, serviceAliases).steps.associateBy { it.stepId }
+        val aliased = builder.build(emptyManifest(), events, serviceAliases + ("topic-orders" to "order-events"))
+            .steps.associateBy { it.stepId }
+
+        plain.getValue("prod").from shouldBe "orders-api"
+        plain.getValue("prod").to shouldBe ComponentIds.topic("Orders")
+        plain.getValue("prod").label shouldBe "produce Orders"
+        plain.getValue("cons").from shouldBe "topic-orders"
+        plain.getValue("cons").to shouldBe "shipping"
+        aliased.getValue("prod").connectionId shouldBe "orders-api--order-events"
+        aliased.getValue("cons").connectionId shouldBe "order-events--shipping"
+    }
+
+    private fun produce(
+        id: String, component: String, start: Long, duration: Long, parent: String? = null, topic: String = "order-placed",
+        partition: Int? = 0, offset: Long? = 7, trace: String = "t1",
+    ): RecordingEvent = KafkaProduceEvent(
+        eventId = id, runId = "r", traceId = trace, spanId = id, parentSpanId = parent, component = component,
+        startEpochNanos = start, durationNanos = duration, topic = topic, partition = partition, offset = offset,
+        key = "42", headers = emptyMap(), value = """{"orderId":42}""", valueBytes = 14, errorType = null,
+    )
+
+    private fun consume(
+        id: String, component: String, start: Long, duration: Long, parent: String? = null, topic: String = "order-placed",
+        partition: Int? = 0, offset: Long? = 7, trace: String = "t1",
+    ): RecordingEvent = KafkaConsumeEvent(
+        eventId = id, runId = "r", traceId = trace, spanId = id, parentSpanId = parent, component = component,
+        startEpochNanos = start, durationNanos = duration, topic = topic, partition = partition, offset = offset,
+        key = "42", consumerGroup = "shipping", headers = emptyMap(), value = """{"orderId":42}""", valueBytes = 14,
+        errorType = null,
+    )
 
     private fun browserRun() = builder.build(
         repository.manifests().first { it.runId == "run-6" }, repository.events("run-6"), emptyMap(),
