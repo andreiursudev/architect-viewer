@@ -21,7 +21,7 @@ class OrdersE2ETest {
     @Test
     @StackScenario("create-order")
     fun `create order`() {
-        scenarios.createOrder()
+        scenarios.awaitShipment(scenarios.createOrder())
     }
 
     @Test

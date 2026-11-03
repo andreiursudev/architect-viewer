@@ -9,6 +9,7 @@ import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
@@ -42,9 +43,10 @@ import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readLines
 
 /**
- * Sandbox acceptance: the whole stack (both services under the agent, their Postgres databases, the reporter, the
- * frontend) comes up with Docker Compose, the tagged scenarios run against it (the browser ones in Chromium), and the
- * reporter's recordings describe the expected flow across the frontend and both services.
+ * Sandbox acceptance: the whole stack (the three services under the agent, their Postgres databases, the Kafka broker,
+ * the reporter, the frontend) comes up with Docker Compose, the tagged scenarios run against it (the browser ones in
+ * Chromium), and the reporter's recordings describe the expected flow across the frontend, the services and the
+ * `order-placed` hop from orders-service through Kafka to shipping-service.
  */
 @Testcontainers
 class SandboxAcceptanceTest {
@@ -52,16 +54,19 @@ class SandboxAcceptanceTest {
     @Test
     @StackScenario("create-order")
     fun `create order is recorded across both services`() {
-        OrdersScenarios(BASE_URL).createOrder()
+        val orderId = OrdersScenarios(BASE_URL).let { scenarios -> scenarios.createOrder().also { scenarios.awaitShipment(it) } }
 
-        // 5 http/db events and 6 method events (the methods asserted below).
-        val run = awaitRecording(scenario = "create-order", minEvents = 11)
+        // 5 http/db events and 6 method events (the methods asserted below); the Kafka hop adds the produce and the
+        // consume, shipping-service's insert and its 3 methods (OrderEvents.placed, ShipmentListener.onOrderPlaced,
+        // ShipmentRepository.insert); awaitShipment adds at least one poll (server, select, 2 methods).
+        val run = awaitRecording(scenario = "create-order", minEvents = 21)
 
         run.manifest["kind"] shouldBe "e2e"
         run.manifest["scenarioId"] shouldBe "create-order"
-        (run.manifest["componentsSeen"] as List<*>).toSet() shouldBe setOf("orders-service", "inventory-service")
+        (run.manifest["componentsSeen"] as List<*>).toSet() shouldBe setOf("orders-service", "inventory-service", "shipping-service")
         val servers = run.events.filter { it["type"] == "http.server" }
-        servers.map { it["component"] }.toSet() shouldBe setOf("orders-service", "inventory-service")
+        // shipping-service's server spans are awaitShipment's polls.
+        servers.map { it["component"] }.toSet() shouldBe setOf("orders-service", "inventory-service", "shipping-service")
         val reserve = servers.single { it["component"] == "inventory-service" }
         reserve["route"] shouldBe "/reservations"
         reserve["status"] shouldBe 201
@@ -73,9 +78,10 @@ class SandboxAcceptanceTest {
         client["status"] shouldBe 201
         (client["url"] as String) shouldEndWith "/reservations"
         reserve["parentSpanId"] shouldBe client["spanId"]
-        // Exactly one statement per database: the reporter drops the empty queries the connection pool validates connections with.
+        // Exactly one statement per database (shipping: one insert, plus a select per poll): the reporter drops the
+        // empty queries the connection pool validates connections with.
         val statements = run.events.filter { it["type"] == "db.client" }
-        statements.map { it["dbName"] }.toSet() shouldBe setOf("orders", "inventory")
+        statements.map { it["dbName"] }.toSet() shouldBe setOf("orders", "inventory", "shipping")
         statements.single { it["dbName"] == "orders" }.let {
             (it["statement"] as String) shouldStartWith "insert into orders"
             it["dbSystem"] shouldBe "postgresql"
@@ -91,10 +97,28 @@ class SandboxAcceptanceTest {
         methods.map { "${(it["className"] as String).substringAfterLast('.')}.${it["methodName"]}" }.toSet() shouldBe setOf(
             "OrdersController.create", "OrderService.create", "InventoryClient.reserve", "OrderRepository.insert",
             "ReservationsController.reserve", "StockRepository.reserve",
+            "OrderEvents.placed", "ShipmentListener.onOrderPlaced", "ShipmentRepository.insert",
+            "ShipmentsController.find", "ShipmentRepository.find",
         )
         val reserveMethod = methods.single { it["methodName"] == "reserve" && it["component"] == "orders-service" }
         client["parentSpanId"] shouldBe reserveMethod["spanId"]
         (reserveMethod["arguments"] as List<*>) shouldBe listOf("\"sku-1\"", "2") // the values createOrder() posts
+
+        // Step 6: the order-placed event is one produce span (orders-service) and one consume span (shipping-service),
+        // the consume a child of the produce, and shipping-service's insert runs inside the consume.
+        val produce = run.events.single { it["type"] == "kafka.produce" }
+        produce["component"] shouldBe "orders-service"
+        produce["topic"] shouldBe "order-placed"
+        produce["key"] shouldBe orderId
+        (produce["value"] as String) shouldContain orderId
+        val consume = run.events.single { it["type"] == "kafka.consume" }
+        consume["component"] shouldBe "shipping-service"
+        consume["consumerGroup"] shouldBe "shipping"
+        listOf("topic", "partition", "offset").forEach { consume[it] shouldBe produce[it] }
+        consume["parentSpanId"] shouldBe produce["spanId"]
+        val insert = run.events.single { it["type"] == "db.client" && it["dbName"] == "shipping" && (it["statement"] as String).startsWith("insert") }
+        startOf(insert) shouldBeGreaterThanOrEqual startOf(consume)
+        (startOf(insert) + (insert["durationNanos"] as Long)) shouldBeLessThanOrEqual (startOf(consume) + (consume["durationNanos"] as Long))
     }
 
     @Test
@@ -118,6 +142,8 @@ class SandboxAcceptanceTest {
             named[name]?.get("exceptionType") shouldBe "org.springframework.web.server.ResponseStatusException"
         }
         named.keys shouldNotContain "OrderRepository.insert"
+        // No order, no event: nothing is published to Kafka.
+        run.events.none { (it["type"] as String).startsWith("kafka.") } shouldBe true
     }
 
     @Test
@@ -178,8 +204,9 @@ class SandboxAcceptanceTest {
         inBrowser { orderId = FrontendScenarios(it, FRONTEND_URL).placeOrder() }
 
         // Real recording: 3 ui navigations, 3 ui actions, 3 frontend fetches, 4 server spans, orders-service's call to
-        // inventory-service, 4 database calls and 11 methods (7 in orders-service, 4 in inventory-service).
-        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 29)
+        // inventory-service, 4 database calls and 11 methods (7 in orders-service, 4 in inventory-service); plus the
+        // Kafka hop: produce, consume, shipping-service's insert and its 3 methods.
+        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 35)
 
         val navigations = run.events.filter { it["type"] == "ui.navigation" }.sortedBy { it["startEpochNanos"] as Long }
         navigations.map { it["route"] } shouldBe listOf("/", "/order", "/orders/$orderId")
@@ -203,6 +230,8 @@ class SandboxAcceptanceTest {
         val servers = run.events.filter { it["type"] == "http.server" }
         servers.single { it["component"] == "orders-service" && it["method"] == "POST" }["parentSpanId"] shouldBe fetches[1]["spanId"]
         servers.single { it["component"] == "inventory-service" && it["route"] == "/reservations" }["status"] shouldBe 201
+        run.events.single { it["type"] == "kafka.produce" }["component"] shouldBe "orders-service"
+        run.events.single { it["type"] == "kafka.consume" }["component"] shouldBe "shipping-service"
 
         // The shield holds each click until the screenshot of the steps before it is taken, so the load is shot alone.
         assertScreenshots(
@@ -383,6 +412,7 @@ class SandboxAcceptanceTest {
                     withExposedService("reporter", 4318, Wait.forHttp("/api/recordings/active").forStatusCodeMatching { it < 500 })
                     withExposedService("orders-service", 8080, Wait.forHttp("/actuator/health"))
                     withExposedService("inventory-service", 8081, Wait.forHttp("/actuator/health"))
+                    withExposedService("shipping-service", 8082, Wait.forHttp("/actuator/health"))
                     withExposedService("frontend", 80, Wait.forHttp("/"))
                 }
             }
@@ -403,6 +433,7 @@ class SandboxAcceptanceTest {
                 awaitHttp("http://localhost:4318/api/recordings/active")
                 awaitHttp("$BASE_URL/actuator/health")
                 awaitHttp("http://localhost:8081/actuator/health")
+                awaitHttp("http://localhost:8082/actuator/health")
                 awaitHttp(FRONTEND_URL)
             }
             seededOrderId = OrdersScenarios(BASE_URL).createOrder()
