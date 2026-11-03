@@ -206,9 +206,13 @@ See `2026-10-31-step-4-frontend-design.md`.
 
 See `2026-11-02-step-5-frontend-screenshots-design.md`.
 
+### Step 6 — Kafka: a scenario followed across an asynchronous hop
+
+See `2026-11-03-step-6-kafka-design.md`.
+
 ### Explicitly later (each when the sandbox needs it)
 
-Component view and the rest of level 2 (coroutines, workspace include/exclude patterns); Kafka, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
+Component view and the rest of level 2 (coroutines, workspace include/exclude patterns); Kafka retries and dead-letter topics, WireMock (with client-side body capture); layers; test recording (Gradle plugin); unassigned inbox; live streaming; reference recordings; infrastructure view; production view; Mermaid/PlantUML export; optional Collector fan-out.
 
 ## 12. Testing strategy (D21)
 
