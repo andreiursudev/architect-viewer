@@ -54,12 +54,14 @@ class SandboxAcceptanceTest {
     @Test
     @StackScenario("create-order")
     fun `create order is recorded across both services`() {
-        val orderId = OrdersScenarios(BASE_URL).let { scenarios -> scenarios.createOrder().also { scenarios.awaitShipment(it) } }
+        val scenarios = OrdersScenarios(BASE_URL)
+        val orderId = scenarios.createOrder()
+        scenarios.awaitShipment(orderId)
 
         // 5 http/db events and 6 method events (the methods asserted below); the Kafka hop adds the produce and the
         // consume, shipping-service's insert and its 3 methods (OrderEvents.placed, ShipmentListener.onOrderPlaced,
         // ShipmentRepository.insert); awaitShipment adds at least one poll (server, select, 2 methods).
-        val run = awaitRecording(scenario = "create-order", minEvents = 21)
+        val run = awaitRecording(scenario = "create-order", minEvents = 21, requiredTypes = setOf("kafka.produce", "kafka.consume"))
 
         run.manifest["kind"] shouldBe "e2e"
         run.manifest["scenarioId"] shouldBe "create-order"
@@ -116,9 +118,11 @@ class SandboxAcceptanceTest {
         consume["consumerGroup"] shouldBe "shipping"
         listOf("topic", "partition", "offset").forEach { consume[it] shouldBe produce[it] }
         consume["parentSpanId"] shouldBe produce["spanId"]
-        val insert = run.events.single { it["type"] == "db.client" && it["dbName"] == "shipping" && (it["statement"] as String).startsWith("insert") }
+        val insert = run.events.single {
+            it["type"] == "db.client" && it["dbName"] == "shipping" && (it["statement"] as String).startsWith("insert")
+        }
         startOf(insert) shouldBeGreaterThanOrEqual startOf(consume)
-        (startOf(insert) + (insert["durationNanos"] as Long)) shouldBeLessThanOrEqual (startOf(consume) + (consume["durationNanos"] as Long))
+        (startOf(insert) + durationOf(insert)) shouldBeLessThanOrEqual (startOf(consume) + durationOf(consume))
     }
 
     @Test
@@ -206,7 +210,11 @@ class SandboxAcceptanceTest {
         // Real recording: 3 ui navigations, 3 ui actions, 3 frontend fetches, 4 server spans, orders-service's call to
         // inventory-service, 4 database calls and 11 methods (7 in orders-service, 4 in inventory-service); plus the
         // Kafka hop: produce, consume, shipping-service's insert and its 3 methods.
-        val run = awaitRecording(scenario = "place-order-in-browser", minEvents = 35)
+        val run = awaitRecording(
+            scenario = "place-order-in-browser",
+            minEvents = 35,
+            requiredTypes = setOf("kafka.produce", "kafka.consume"),
+        )
 
         val navigations = run.events.filter { it["type"] == "ui.navigation" }.sortedBy { it["startEpochNanos"] as Long }
         navigations.map { it["route"] } shouldBe listOf("/", "/order", "/orders/$orderId")
@@ -288,6 +296,9 @@ class SandboxAcceptanceTest {
     /** The start of a recorded event; Jackson reads the epoch nanos as a Long. */
     private fun startOf(event: Map<String, Any?>): Long = event["startEpochNanos"] as Long
 
+    /** The duration of a recorded event; untyped Jackson reads a duration under 2^31 ns (about 2.1 s) as an Integer. */
+    private fun durationOf(event: Map<String, Any?>): Long = (event["durationNanos"] as Number).toLong()
+
     /** A recorded run: its folder, its manifest and its events, both as plain JSON maps (no dependency on tool internals). */
     private data class Recording(val folder: Path, val manifest: Map<String, Any?>, val events: List<Map<String, Any?>>)
 
@@ -336,22 +347,29 @@ class SandboxAcceptanceTest {
 
     /**
      * Waits for the reporter to write the recording of the current test's run (the run id the harness put into
-     * the baggage) with at least [minEvents] events. Spans reach the reporter asynchronously (batched export).
+     * the baggage) with at least [minEvents] events and at least one event of every type in [requiredTypes] (a count
+     * alone can be reached before a late span, such as the Kafka consume, is exported). Spans reach the reporter
+     * asynchronously (batched export).
      */
-    private fun awaitRecording(scenario: String, minEvents: Int, timeout: Duration = Duration.ofSeconds(10)): Recording {
+    private fun awaitRecording(
+        scenario: String,
+        minEvents: Int,
+        requiredTypes: Set<String> = emptySet(),
+        timeout: Duration = Duration.ofSeconds(10),
+    ): Recording {
         val runId = requireNotNull(StackContext.current()) { "no @StackScenario is active" }.runId
         val deadline = Instant.now().plus(timeout)
         var latest: Recording? = null
         while (Instant.now().isBefore(deadline)) {
             latest = readRecording(runId)
-            if (latest != null && latest.events.size >= minEvents) {
+            if (latest != null && latest.events.size >= minEvents && latest.events.mapTo(HashSet()) { it["type"] }.containsAll(requiredTypes)) {
                 latest.manifest["scenarioId"] shouldBe scenario
                 return latest
             }
             Thread.sleep(200)
         }
         throw AssertionError(
-            "no recording of run $runId ($scenario) with at least $minEvents events in $RECORDINGS within $timeout; " +
+            "no recording of run $runId ($scenario) with at least $minEvents events and types $requiredTypes in $RECORDINGS within $timeout; " +
                 "last seen: ${latest?.events?.size ?: 0} events, types ${latest?.events?.groupingBy { it["type"] }?.eachCount()}; $latest",
         )
     }
