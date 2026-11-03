@@ -24,6 +24,10 @@ archunit = "1.5.1"
 # Viewer UI: Gradle runs npm with a downloaded Node; 22.x is the LTS line the UI toolchain (Vite 8, Vitest 5) supports
 node-gradle = "7.1.0"
 nodejs = "22.23.4"
+# Step 6 Kafka: kafka-clients is compileOnly for the extension (the app brings its own); Testcontainers 2.x runs the agent
+# test's broker
+kafka-clients = "4.1.0"
+testcontainers = "2.0.5"
 
 [libraries]
 # Build-logic plugin artifacts
@@ -70,6 +74,12 @@ spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-star
 spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 h2 = { module = "com.h2database:h2" }
+spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
+
+# Kafka (agent extension compiles against the client; agent tests run a broker in a container)
+kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka-clients" }
+testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka", version.ref = "testcontainers" }
 
 # Spring Modulith (BOM-managed) and architecture tests
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }

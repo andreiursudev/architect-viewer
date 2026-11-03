@@ -19,6 +19,14 @@ package io.stackvibed.agent.contract;
  * (page load or route change; {@link #UI_NAVIGATION_KIND} is {@code load} or {@code route}, with
  * {@link #UI_URL} and {@link #UI_ROUTE}) and {@link #ACTION_SPAN} ({@link #UI_ACTION_EVENT} is {@code
  * click} or {@code submit}, with {@link #UI_ACTION_TARGET} and {@link #UI_ROUTE}). Both are INTERNAL spans.
+ *
+ * <p>Kafka records are captured on the OTel agent's own spans: the PRODUCER span of the send and the CONSUMER
+ * {@code process} span of the listener invocation. {@link #KAFKA_VALUE} is the record value before
+ * serialisation (producer) or after deserialisation (consumer): a {@code String} as is, {@code byte[]} and
+ * {@code ByteBuffer} as {@code <N bytes>}, anything else rendered as JSON; cut to {@link #MAX_BODY_CHARS}
+ * characters with {@link #KAFKA_VALUE_TRUNCATED} set. {@link #KAFKA_HEADERS} is a JSON object of header name (as
+ * sent, not lower-cased) to the list of its values, each decoded as UTF-8 or, when not valid UTF-8, {@code <N
+ * bytes>}.
  */
 public final class StackAttributes {
 
@@ -51,6 +59,10 @@ public final class StackAttributes {
     public static final String UI_ROUTE = "stack.ui.route";
     public static final String UI_ACTION_EVENT = "stack.ui.action.event";
     public static final String UI_ACTION_TARGET = "stack.ui.action.target";
+
+    public static final String KAFKA_VALUE = "stack.kafka.value";
+    public static final String KAFKA_VALUE_TRUNCATED = "stack.kafka.value_truncated";
+    public static final String KAFKA_HEADERS = "stack.kafka.headers";
 
     public static final int MAX_BODY_CHARS = 262_144;
 

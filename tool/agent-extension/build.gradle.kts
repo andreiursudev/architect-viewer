@@ -20,6 +20,7 @@ dependencies {
     compileOnly(libs.opentelemetry.sdk.extension.autoconfigure.spi)
     compileOnly(libs.bytebuddy)
     compileOnly(libs.jakarta.servlet.api)
+    compileOnly(libs.kafka.clients)
 
     // Unit tests load helpers that reference instrumentation-api types (e.g. VirtualField).
     testImplementation(platform(libs.opentelemetry.instrumentation.bom.alpha))
@@ -28,6 +29,8 @@ dependencies {
     testImplementation(libs.opentelemetry.sdk.extension.autoconfigure.spi)
     // Matcher tests evaluate ByteBuddy matchers against TypeDescription.ForLoadedType.
     testImplementation(libs.bytebuddy)
+    // KafkaCapture renders headers and values of real kafka-clients types.
+    testImplementation(libs.kafka.clients)
 
     otelAgent(libs.opentelemetry.javaagent)
     fixtureApp(project(":agent-fixture-app", "fixtureJar"))
@@ -35,6 +38,8 @@ dependencies {
     "agentTestImplementation"(project(":agent-contract"))
     "agentTestImplementation"(libs.opentelemetry.proto)
     "agentTestImplementation"(libs.jackson.databind)
+    "agentTestImplementation"(libs.testcontainers)
+    "agentTestImplementation"(libs.testcontainers.kafka)
 }
 
 tasks.shadowJar {
