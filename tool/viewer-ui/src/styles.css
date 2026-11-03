@@ -359,6 +359,8 @@ h1, h2, h3, p { margin: 0; }
 .seq-message.is-response .seq-label { fill: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .seq-label.is-client-error { fill: var(--amber); font-weight: 650; }
 .seq-label.is-server-error { fill: var(--danger); font-weight: 650; }
+.seq-message.is-async { color: var(--edge-kafka); }
+.seq-note { font-size: 11px; fill: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
 .seq-message:hover .seq-arrow-line, .seq-message:focus-visible .seq-arrow-line { stroke-width: 2.4; }
 .seq-message:hover .seq-label, .seq-message:focus-visible .seq-label { fill: var(--accent); }
 .seq-message.is-selected { color: var(--accent); }
@@ -367,6 +369,7 @@ h1, h2, h3, p { margin: 0; }
 .seq-head-solid { fill: #344054; }
 .seq-head-open { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .seq-head-selected { fill: var(--accent); }
+.seq-head-open-selected { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .seq-thumb { cursor: pointer; outline: none; }
 .seq-thumb-frame { fill: none; stroke: var(--border-strong); stroke-width: 1; }
 .seq-thumb:hover .seq-thumb-frame, .seq-thumb:focus-visible .seq-thumb-frame { stroke: var(--accent); }

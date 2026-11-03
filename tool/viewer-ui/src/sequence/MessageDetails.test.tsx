@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test, vi } from 'vitest';
-import { createOrderFlow, loadStep, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
+import { describe, expect, test, vi } from 'vitest';
+import { consumeStep, createOrderFlow, kafkaStep, loadStep, methodStep, produceStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
 import { MessageDetails } from './MessageDetails';
 
 const [request, insert] = createOrderFlow.steps;
@@ -192,4 +192,96 @@ test('a screenshot that fails to load says so', () => {
 test('a ui step without a screenshot shows no image', () => {
   render(<MessageDetails runId="run-6" step={loadStep} kind="request" />);
   expect(screen.queryByRole('img')).toBeNull();
+});
+
+describe('kafka', () => {
+  const MS = 1_000_000;
+  const produce = { ...produceStep, startEpochNanos: consumeStep.startEpochNanos - 18 * MS, durationNanos: 4 * MS } as typeof produceStep;
+  const consume = { ...consumeStep, causedBy: 'produce' } as typeof consumeStep;
+  const fact = (name: string) => screen.getByText(name, { selector: 'dt' }).nextSibling;
+
+  test('a produce lists topic, partition, offset, key and size', () => {
+    render(<MessageDetails runId="run-1" step={produce} kind="request" steps={[produce, consume]} />);
+    expect(screen.getByRole('heading', { name: 'produce order-events' })).toBeInTheDocument();
+    expect(fact('Topic')).toHaveTextContent('order-events');
+    expect(fact('Partition')).toHaveTextContent('0');
+    expect(fact('Offset')).toHaveTextContent('7');
+    expect(fact('Key')).toHaveTextContent('order-1');
+    expect(fact('Size')).toHaveTextContent('31 bytes');
+    expect(fact('Duration')).toHaveTextContent('4 ms');
+  });
+
+  test('a produce shows its headers and its value as formatted JSON', () => {
+    const withHeaders = { ...produce, event: { ...produce.event, headers: { traceparent: ['00-abc'] } } } as typeof produce;
+    render(<MessageDetails runId="run-1" step={withHeaders} kind="request" steps={[withHeaders]} />);
+    const table = screen.getByRole('table', { name: 'Record headers' });
+    expect(within(table).getByText('traceparent')).toBeInTheDocument();
+    expect(within(table).getByText('00-abc')).toBeInTheDocument();
+    expect(screen.getByText(/"status": "CREATED"/).textContent).toContain('{\n  "orderId": 1,');
+  });
+
+  test('a value the recording cut short is flagged', () => {
+    const cut = { ...produce, event: { ...produce.event, value: '{"cut":', valueTruncated: true } } as typeof produce;
+    render(<MessageDetails runId="run-1" step={cut} kind="request" steps={[cut]} />);
+    expect(screen.getByText('{"cut":')).toBeInTheDocument();
+    expect(screen.getByText(/recording cut it short/)).toBeInTheDocument();
+  });
+
+  test('a record without a key or a value says so', () => {
+    const bare = kafkaStep('produce', 'produce', { key: null, value: null });
+    render(<MessageDetails runId="run-1" step={bare} kind="request" steps={[bare]} />);
+    expect(fact('Key')).toHaveTextContent('none');
+    expect(screen.getByText('no value')).toBeInTheDocument();
+  });
+
+  test('a produce says who consumed it and how long after', () => {
+    render(<MessageDetails runId="run-1" step={produce} kind="request" steps={[produce, consume]} />);
+    expect(screen.getByText('Consumed by shipping-service (group shipping), +14 ms')).toBeInTheDocument();
+  });
+
+  test('the group is left out when the consumer has none, and a negative gap is shown as it is', () => {
+    const early = { ...consume, startEpochNanos: produce.startEpochNanos + 2 * MS, event: { ...consume.event, consumerGroup: null } } as typeof consume;
+    render(<MessageDetails runId="run-1" step={produce} kind="request" steps={[produce, early]} />);
+    expect(screen.getByText('Consumed by shipping-service, -2 ms')).toBeInTheDocument();
+  });
+
+  test('every consume caused by the produce is listed', () => {
+    const second = { ...consume, stepId: 'consume-2', to: 'audit-service', event: { ...consume.event, consumerGroup: 'audit' } } as typeof consume;
+    render(<MessageDetails runId="run-1" step={produce} kind="request" steps={[produce, consume, second]} />);
+    expect(screen.getByText('Consumed by shipping-service (group shipping), +14 ms')).toBeInTheDocument();
+    expect(screen.getByText('Consumed by audit-service (group audit), +14 ms')).toBeInTheDocument();
+  });
+
+  test('a produce nobody consumed says so', () => {
+    render(<MessageDetails runId="run-1" step={produce} kind="request" steps={[produce]} />);
+    expect(screen.getByText('Not consumed in this run')).toBeInTheDocument();
+  });
+
+  test('a consume names its producer and its group', () => {
+    render(<MessageDetails runId="run-1" step={consume} kind="request" steps={[produce, consume]} />);
+    expect(screen.getByRole('heading', { name: 'consume order-events' })).toBeInTheDocument();
+    expect(screen.getByText('Produced by orders-service')).toBeInTheDocument();
+    expect(fact('Consumer group')).toHaveTextContent('shipping');
+    expect(screen.queryByText(/Consumed by|Not consumed/)).not.toBeInTheDocument();
+  });
+
+  test('a consume with no cause has no producer line', () => {
+    const orphan = { ...consume, causedBy: null } as typeof consume;
+    render(<MessageDetails runId="run-1" step={orphan} kind="request" steps={[orphan]} />);
+    expect(screen.queryByText(/Produced by/)).not.toBeInTheDocument();
+    expect(fact('Consumer group')).toHaveTextContent('shipping');
+  });
+
+  test('a consume shows the listener method that handled it', () => {
+    const handler = methodDetails({ parameterNames: ['event'], arguments: ['{"orderId":1}'], returnValue: null }).event;
+    const handled = { ...consume, handler } as typeof consume;
+    render(<MessageDetails runId="run-1" step={handled} kind="request" steps={[handled]} />);
+    expect(screen.getByRole('region', { name: 'Handled by OrdersController.create' })).toBeInTheDocument();
+  });
+
+  test('a failed record shows its error', () => {
+    const failed = kafkaStep('produce', 'produce', { errorType: 'org.apache.kafka.common.errors.TimeoutException' });
+    render(<MessageDetails runId="run-1" step={failed} kind="request" steps={[failed]} />);
+    expect(fact('Error')).toHaveTextContent('org.apache.kafka.common.errors.TimeoutException');
+  });
 });

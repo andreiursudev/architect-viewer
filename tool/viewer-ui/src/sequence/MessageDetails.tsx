@@ -1,6 +1,7 @@
 import type { FlowStep, MethodEvent } from '../api/types';
 import { clientCallNote, formatMillis, UiFacts } from '../board/HopDetails';
 import { statusTone } from '../status';
+import { consumeGap } from './layoutSequence';
 import { ScreenshotImage } from './Screenshot';
 
 type Kind = 'request' | 'response';
@@ -19,11 +20,14 @@ export function MessageDetails({
   runId,
   step,
   kind,
+  steps = [],
   onOpenScreenshot,
 }: {
   runId: string;
   step: FlowStep;
   kind: Kind;
+  /** The steps of the run: a record is traced to its other end (the produce of a consume, the consumes of a produce) among them. */
+  steps?: readonly FlowStep[];
   /** Opens the step's screenshot at its own size. */
   onOpenScreenshot?: () => void;
 }) {
@@ -98,6 +102,31 @@ export function MessageDetails({
               </>
             )}
           </>
+        ) : event.type === 'kafka.produce' || event.type === 'kafka.consume' ? (
+          <>
+            <dt>Topic</dt>
+            <dd>{event.topic}</dd>
+            <dt>Partition</dt>
+            <dd>{event.partition ?? 'unknown'}</dd>
+            <dt>Offset</dt>
+            <dd>{event.offset ?? 'unknown'}</dd>
+            <dt>Key</dt>
+            <dd>{event.key ?? 'none'}</dd>
+            <dt>Size</dt>
+            <dd>{event.valueBytes == null ? 'unknown' : event.valueBytes === 1 ? '1 byte' : `${event.valueBytes} bytes`}</dd>
+            {event.type === 'kafka.consume' && event.consumerGroup && (
+              <>
+                <dt>Consumer group</dt>
+                <dd>{event.consumerGroup}</dd>
+              </>
+            )}
+            {event.errorType && (
+              <>
+                <dt>Error</dt>
+                <dd>{event.errorType}</dd>
+              </>
+            )}
+          </>
         ) : (
           <UiFacts event={event} />
         )}
@@ -137,6 +166,24 @@ export function MessageDetails({
         <Section title={kind === 'request' ? 'Request' : 'Response'} selected>
           <p className="muted md-note">{clientCallNote(step)}</p>
         </Section>
+      ) : event.type === 'kafka.produce' || event.type === 'kafka.consume' ? (
+        <>
+          <Section title="Record" selected>
+            {event.type === 'kafka.produce' ? (
+              <Consumers produce={step} steps={steps} />
+            ) : (
+              <Producer consume={step} steps={steps} />
+            )}
+            <Headers title="Record headers" headers={event.headers} />
+            <Body title="Value" what="value" empty="no value" text={event.value} truncated={event.valueTruncated} />
+          </Section>
+          {step.handler && (
+            <Section title={`Handled by ${simpleName(step.handler.className)}.${step.handler.methodName}`} selected={false}>
+              <Arguments method={step.handler} />
+              <Outcome method={step.handler} />
+            </Section>
+          )}
+        </>
       ) : event.type === 'method' ? (
         <>
           <Section title="Arguments" selected={kind === 'request'}>
@@ -185,16 +232,50 @@ function Headers({ title, headers }: { title: string; headers: Record<string, st
   );
 }
 
-function Body({ what, text, truncated }: { what: string; text: string | null | undefined; truncated: boolean }) {
+function Body({
+  what,
+  text,
+  truncated,
+  title = 'Body',
+  empty = `no ${what} body`,
+}: {
+  what: string;
+  text: string | null | undefined;
+  truncated: boolean;
+  title?: string;
+  empty?: string;
+}) {
   return (
     <>
       <h4>
-        Body
+        {title}
         {truncated && <span className="hop-truncated"> (recording cut it short)</span>}
       </h4>
-      {text ? <pre className="md-code">{prettyBody(text)}</pre> : <p className="muted md-note">no {what} body</p>}
+      {text ? <pre className="md-code">{prettyBody(text)}</pre> : <p className="muted md-note">{empty}</p>}
     </>
   );
+}
+
+/** Where a produced record went: every consume of the run that it caused, and how long each took to start. */
+function Consumers({ produce, steps }: { produce: FlowStep; steps: readonly FlowStep[] }) {
+  const consumes = steps.filter((s) => s.causedBy === produce.stepId && s.event.type === 'kafka.consume');
+  if (consumes.length === 0) return <p className="muted md-note">Not consumed in this run</p>;
+  return (
+    <>
+      {consumes.map((consume) => (
+        <p key={consume.stepId} className="md-note">
+          Consumed by {consume.to}
+          {consume.event.type === 'kafka.consume' && consume.event.consumerGroup ? ` (group ${consume.event.consumerGroup})` : ''}, {consumeGap(produce, consume)}
+        </p>
+      ))}
+    </>
+  );
+}
+
+/** Who sent a consumed record; nothing when the run does not hold its produce. */
+function Producer({ consume, steps }: { consume: FlowStep; steps: readonly FlowStep[] }) {
+  const produce = consume.causedBy == null ? undefined : steps.find((s) => s.stepId === consume.causedBy);
+  return produce ? <p className="md-note">Produced by {produce.from}</p> : null;
 }
 
 function Parameters({ values }: { values: (string | null)[] }) {

@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import type { Flow, FlowStep } from '../api/types';
-import { createOrderFlow, loadStep, methodFlow, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
+import { createOrderFlow, kafkaStep, loadStep, methodFlow, methodStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
 import { GROUP_BAND, HEADER_HEIGHT, MARGIN_X, SHOT_ROW_GAP, classCounts, layoutSequence } from './layoutSequence';
 
 test('sequence rows are request, nested request, nested response, response', () => {
@@ -245,4 +245,100 @@ test('only the request row of a ui step carries its screenshot', () => {
   const load = { ...loadStep, screenshot: shotA };
   const l = layoutSequence(flowOf([load, fetchUnder(load)]));
   expect(l.messages.map((m) => m.screenshot)).toEqual([shotA, null, null]);
+});
+
+describe('kafka steps', () => {
+  const MS = 1_000_000;
+  /** A produce under `parent`, and the consume it caused; times are relative to the flow start, in ms. */
+  const produceAt = (parent: string | null, at: number, over: Partial<FlowStep> = {}): FlowStep => ({
+    ...kafkaStep('produce', 'produce'),
+    parentStepId: parent,
+    startEpochNanos: createOrderFlow.steps[0].startEpochNanos + at * MS,
+    durationNanos: 4 * MS,
+    ...over,
+  });
+  const consumeAt = (at: number, over: Partial<FlowStep> = {}): FlowStep => ({
+    ...kafkaStep('consume', 'consume'),
+    causedBy: 'produce',
+    startEpochNanos: createOrderFlow.steps[0].startEpochNanos + at * MS,
+    ...over,
+  });
+  const dbUnder = (parent: string, at: number): FlowStep =>
+    step({ stepId: 'ship-db', parentStepId: parent, from: 'shipping-service', to: 'postgresql-shipping', startEpochNanos: createOrderFlow.steps[0].startEpochNanos + at * MS });
+  const request = step({ stepId: 'req', from: 'e2e-client', to: 'orders-service', startEpochNanos: createOrderFlow.steps[0].startEpochNanos });
+  const tag = (l: ReturnType<typeof layoutSequence>) => l.messages.map((m) => `${m.kind}:${m.stepId}`);
+
+  test('a kafka step has a request row and no response row, drawn async', () => {
+    const l = layoutSequence({ ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(20)] });
+    expect(tag(l)).toEqual(['request:req', 'request:produce', 'response:req', 'request:consume']);
+    expect(l.messages.map((m) => m.async)).toEqual([false, true, false, true]);
+    expect(l.participants.map((p) => p.id)).toEqual(['e2e-client', 'orders-service', 'topic-order-events', 'shipping-service']);
+  });
+
+  test('the produce row runs from the producer to the topic and the consume row from the topic to the consumer', () => {
+    const l = layoutSequence({ ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(20)] });
+    const x = Object.fromEntries(l.participants.map((p) => [p.id, p.x]));
+    const [, produce, , consume] = l.messages;
+    expect([produce.fromX, produce.toX]).toEqual([x['orders-service'], x['topic-order-events']]);
+    expect([consume.fromX, consume.toX]).toEqual([x['topic-order-events'], x['shipping-service']]);
+    expect(produce.label).toBe('produce order-events');
+    expect(consume.label).toBe('consume order-events');
+  });
+
+  test('the produce has no bar and the consume bar runs to the last row of its subtree', () => {
+    const flow = { ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(20), dbUnder('consume', 22)] };
+    const l = layoutSequence(flow);
+    expect(tag(l)).toEqual(['request:req', 'request:produce', 'response:req', 'request:consume', 'request:ship-db', 'response:ship-db']);
+    const x = Object.fromEntries(l.participants.map((p) => [p.id, p.x]));
+    const y = (i: number) => l.messages[i].y;
+    expect(l.bars.map((b) => b.stepId)).toEqual(['req', 'consume', 'ship-db']);
+    expect(l.bars).toEqual([
+      { stepId: 'req', x: x['orders-service'], from: y(0), to: y(2) },
+      { stepId: 'consume', x: x['shipping-service'], from: y(3), to: y(5) },
+      { stepId: 'ship-db', x: x['postgresql-shipping'], from: y(4), to: y(5) },
+    ]);
+  });
+
+  test('a consume without children has a bar of its own row', () => {
+    const l = layoutSequence({ ...createOrderFlow, steps: [consumeAt(20, { causedBy: null })] });
+    expect(l.bars).toEqual([{ stepId: 'consume', x: l.participants[1].x, from: l.messages[0].y, to: l.messages[0].y }]);
+  });
+
+  test('every other step keeps its bar from request to response, a ui step on its own row', () => {
+    const l = layoutSequence(createOrderFlow);
+    const x = Object.fromEntries(l.participants.map((p) => [p.id, p.x]));
+    const [req, dbReq, dbRes, res] = l.messages;
+    expect(l.bars).toEqual([
+      { stepId: req.stepId, x: x['orders-service'], from: req.y, to: res.y },
+      { stepId: dbReq.stepId, x: x['postgresql-orders'], from: dbReq.y, to: dbRes.y },
+    ]);
+    const ui = layoutSequence({ ...createOrderFlow, steps: [submitStep] });
+    expect(ui.bars).toEqual([{ stepId: 'submit', x: ui.participants[1].x, from: ui.messages[0].y, to: ui.messages[0].y }]);
+  });
+
+  test('the consume row carries the gap from the end of its produce, rounded to whole ms', () => {
+    // the produce starts at 2 ms and lasts 4 ms: it ends at 6 ms; the consume starts at 20 ms
+    const l = layoutSequence({ ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(20)] });
+    expect(l.messages.map((m) => m.note)).toEqual([null, null, null, '+14 ms']);
+    const rounded = layoutSequence({ ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(20.4)] });
+    expect(rounded.messages[3].note).toBe('+14 ms');
+  });
+
+  test('a consume that started before its produce ended shows the real signed gap', () => {
+    const l = layoutSequence({ ...createOrderFlow, steps: [request, produceAt('req', 2), consumeAt(4)] });
+    expect(l.messages[3].note).toBe('-2 ms');
+  });
+
+  test('a consume with no cause, or one that is not in the flow, has no note', () => {
+    expect(layoutSequence({ ...createOrderFlow, steps: [consumeAt(20, { causedBy: null })] }).messages[0].note).toBeNull();
+    expect(layoutSequence({ ...createOrderFlow, steps: [consumeAt(20, { causedBy: 'gone' })] }).messages[0].note).toBeNull();
+  });
+
+  test('the consume comes after the whole subtree of the request that produced it, even if it started earlier than the response', () => {
+    const late = step({ stepId: 'late', parentStepId: 'req', from: 'orders-service', to: 'postgresql-orders', startEpochNanos: request.startEpochNanos + 30 * MS });
+    const l = layoutSequence({ ...createOrderFlow, steps: [consumeAt(10), request, produceAt('req', 2), late] });
+    expect(tag(l)).toEqual([
+      'request:req', 'request:produce', 'request:late', 'response:late', 'response:req', 'request:consume',
+    ]);
+  });
 });

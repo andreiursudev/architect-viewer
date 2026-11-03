@@ -19,15 +19,19 @@ const ARROW_GAP = 7; // the arrow stops short of the lifeline so activation bars
 const BAR_WIDTH = 10;
 const LABEL_CHAR_WIDTH = 6.7;
 const LOOP_WIDTH = 34;
+const NOTE_GAP = 8;
 
 function fit(label: string, room: number): string {
   const max = Math.max(6, Math.floor(room / LABEL_CHAR_WIDTH));
   return label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label;
 }
 
-/** A failed response is coloured by its error status; a call that failed without one (no answer, or an error after a 2xx) is a server-side-looking failure. */
+/**
+ * A failed response is coloured by its error status; a call that failed without one (no answer, or an error after a
+ * 2xx) is a server-side-looking failure. A record has no response, so a failed one colours its request.
+ */
 function tone(step: FlowStep | undefined, kind: SequenceMessage['kind']): string {
-  if (kind !== 'response' || !step || !isFailedStep(step)) return '';
+  if (!step || !isFailedStep(step) || (kind !== 'response' && step.kind !== 'kafka')) return '';
   return ` ${step.status != null && step.status >= 400 ? statusTone(step.status) : 'is-server-error'}`;
 }
 
@@ -52,7 +56,7 @@ export function SequenceDiagram({
   const layout = useMemo(() => layoutSequence(flow, expanded), [flow, expanded]);
   const counts = useMemo(() => classCounts(flow), [flow]);
   const steps = useMemo(() => new Map(flow.steps.map((s) => [s.stepId, s])), [flow]);
-  const { participants, messages, height, headerHeight } = layout;
+  const { participants, messages, bars, height, headerHeight } = layout;
   const width = participants.length === 0 ? 0 : participants[participants.length - 1].x + MARGIN_X;
   // screenshots whose image did not load: their thumbnail is an empty, dashed frame
   const [missing, setMissing] = useState<ReadonlySet<string>>(new Set());
@@ -61,17 +65,6 @@ export function SequenceDiagram({
   useEffect(() => {
     svg.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [selected]);
-
-  // each step's activation bar: the callee is busy from the request until the response
-  const bars = useMemo(() => {
-    const byStep = new Map<string, { x: number; from: number; to: number }>();
-    for (const m of messages) {
-      const bar = byStep.get(m.stepId);
-      if (m.kind === 'request') byStep.set(m.stepId, { x: m.toX, from: m.y, to: m.y });
-      else if (bar) bar.to = m.y;
-    }
-    return [...byStep.entries()];
-  }, [messages]);
 
   return (
     <div className="seq-canvas" style={{ width }}>
@@ -93,6 +86,9 @@ export function SequenceDiagram({
           <marker id="seq-arrow-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
             <path d="M1 1 L9 5 L1 9" className="seq-head-open" />
           </marker>
+          <marker id="seq-arrow-open-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+            <path d="M1 1 L9 5 L1 9" className="seq-head-open-selected" />
+          </marker>
           <marker id="seq-arrow-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
             <path d="M0 0.5 L10 5 L0 9.5 z" className="seq-head-selected" />
           </marker>
@@ -101,9 +97,9 @@ export function SequenceDiagram({
         {participants.map((p) => (
           <line key={p.id} className="seq-lifeline" x1={p.x} x2={p.x} y1={headerHeight - 12} y2={height - 12} />
         ))}
-        {bars.map(([stepId, bar]) => (
+        {bars.map((bar, i) => (
           <rect
-            key={stepId}
+            key={`${bar.stepId}:${i}`}
             className="seq-bar"
             x={bar.x - BAR_WIDTH / 2}
             y={bar.from - 8}
@@ -120,13 +116,17 @@ export function SequenceDiagram({
           const dir = Math.sign(m.toX - m.fromX);
           const x1 = m.fromX + (self ? BAR_WIDTH / 2 : dir * ARROW_GAP);
           const x2 = m.toX - (self ? -BAR_WIDTH / 2 : dir * ARROW_GAP);
-          const label = fit(m.label, self ? 170 : Math.abs(m.toX - m.fromX) - 28);
-          const classes = ['seq-message', response ? 'is-response' : 'is-request', isSelected ? 'is-selected' : ''];
-          const marker = isSelected ? 'seq-arrow-selected' : response ? 'seq-arrow-open' : 'seq-arrow';
+          // the note sits right of the label, which then gets the room that is left
+          const noteRoom = m.note == null ? 0 : m.note.length * LABEL_CHAR_WIDTH + NOTE_GAP;
+          const label = fit(m.label, (self ? 170 : Math.abs(m.toX - m.fromX) - 28) - noteRoom);
+          const classes = ['seq-message', response ? 'is-response' : 'is-request', m.async ? 'is-async' : '', isSelected ? 'is-selected' : ''];
+          const labelWidth = label.length * LABEL_CHAR_WIDTH;
+          const open = response || m.async;
+          const marker = isSelected ? (m.async ? 'seq-arrow-open-selected' : 'seq-arrow-selected') : open ? 'seq-arrow-open' : 'seq-arrow';
           const path = self
             ? `M${x1} ${m.y - 7} H${x1 + LOOP_WIDTH} V${m.y + 7} H${x1 + 2}`
             : `M${x1} ${m.y} H${x2}`;
-          const mid = self ? x1 + LOOP_WIDTH + 8 : (m.fromX + m.toX) / 2;
+          const mid = self ? x1 + LOOP_WIDTH + 8 : (m.fromX + m.toX) / 2 - noteRoom / 2;
           const step = steps.get(m.stepId);
           return (
             <g
@@ -156,6 +156,17 @@ export function SequenceDiagram({
               >
                 {label}
               </text>
+              {m.note != null && (
+                <text
+                  className="seq-note"
+                  x={mid + (self ? labelWidth : labelWidth / 2) + NOTE_GAP}
+                  y={m.y - (self ? 0 : 7)}
+                  textAnchor="start"
+                  dominantBaseline={self ? 'middle' : undefined}
+                >
+                  {m.note}
+                </text>
+              )}
             </g>
           );
         })}

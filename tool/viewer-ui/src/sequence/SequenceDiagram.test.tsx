@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { FlowStep } from '../api/types';
 import userEvent from '@testing-library/user-event';
-import { createOrderFlow, loadStep, methodFlow, unrecordedHostStep } from '../board/testData';
+import { consumeStep, createOrderFlow, kafkaStep, loadStep, methodFlow, produceStep, unrecordedHostStep } from '../board/testData';
 import { SequenceDiagram, type MessageSelection } from './SequenceDiagram';
 
 function renderSteps(steps: FlowStep[], expanded: string[] = [], onToggle: (component: string) => void = () => {}) {
@@ -124,4 +124,40 @@ test('a thumbnail that fails to load says so', () => {
   expect(thumbnail.querySelector('image')).toBeNull();
   expect(thumbnail.querySelector('rect')).toHaveClass('is-missing');
   expect(thumbnail.querySelector('title')).toHaveTextContent('Screenshot not available');
+});
+
+const MS = 1_000_000;
+/** A produce that ended 14 ms before the consume it caused started. */
+const earlyProduce = { ...produceStep, startEpochNanos: consumeStep.startEpochNanos - 18 * MS, durationNanos: 4 * MS };
+const caused = { ...consumeStep, causedBy: 'produce' } as FlowStep;
+
+test('a kafka row is async: an open arrowhead and no response row', () => {
+  const diagram = renderSteps([earlyProduce, caused]);
+  const produce = within(diagram).getByRole('button', { name: 'request produce order-events' });
+  expect(produce.querySelector('.seq-arrow-line')).toHaveAttribute('marker-end', 'url(#seq-arrow-open)');
+  expect(produce).toHaveClass('is-async');
+  expect(within(diagram).queryByRole('button', { name: /^response/ })).not.toBeInTheDocument();
+});
+
+test('a consume row carries its gap note beside the label; a produce row has none', () => {
+  const diagram = renderSteps([earlyProduce, caused]);
+  const consume = within(diagram).getByRole('button', { name: 'request consume order-events' });
+  expect(consume.querySelector('.seq-note')).toHaveTextContent('+14 ms');
+  expect(consume.querySelector('.seq-label')).toHaveTextContent('consume order-events');
+  expect(within(diagram).getByRole('button', { name: 'request produce order-events' }).querySelector('.seq-note')).toBeNull();
+});
+
+test('a consume without a known produce has no note', () => {
+  const diagram = renderSteps([{ ...consumeStep, causedBy: null } as FlowStep]);
+  expect(within(diagram).getByRole('button', { name: 'request consume order-events' }).querySelector('.seq-note')).toBeNull();
+});
+
+test('a failed kafka step is drawn with the error tone, as a failed response is', () => {
+  const diagram = renderSteps([kafkaStep('produce', 'produce', { errorType: 'org.apache.kafka.common.errors.TimeoutException' })]);
+  expect(labelOf(diagram, 'request produce order-events')).toHaveClass('is-server-error');
+});
+
+test('a consume draws an activation bar on its consumer and a produce draws none', () => {
+  const diagram = renderSteps([earlyProduce, caused]);
+  expect(diagram.querySelectorAll('.seq-bar')).toHaveLength(1);
 });
