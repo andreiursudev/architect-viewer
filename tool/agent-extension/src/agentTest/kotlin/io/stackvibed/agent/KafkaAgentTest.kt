@@ -75,9 +75,15 @@ class KafkaAgentTest {
         call.status shouldBe 202
 
         val hop = hop(call)
-        hop.producer.attr(StackAttributes.KAFKA_VALUE).orEmpty() shouldContain "widget-kafka"
-        hop.consumer.attr(StackAttributes.KAFKA_VALUE).orEmpty() shouldContain "widget-kafka"
-        hop.consumer.attr(StackAttributes.KAFKA_HEADERS).orEmpty() shouldContain "traceparent"
+        // The producer's Map rendered as JSON; the consumer's String (from StringDeserializer) as is, not re-quoted.
+        hop.producer.attr(StackAttributes.KAFKA_VALUE) shouldBe """{"name":"widget-kafka"}"""
+        hop.consumer.attr(StackAttributes.KAFKA_VALUE) shouldBe """{"name":"widget-kafka"}"""
+        for (span in listOf(hop.producer, hop.consumer)) {
+            span.attr(StackAttributes.KAFKA_VALUE_TRUNCATED) shouldBe "false"
+            span.attr("messaging.kafka.message.key") shouldBe "widget-kafka"
+            span.attr(StackAttributes.KAFKA_HEADERS).orEmpty() shouldContain "\"traceparent\":"
+            span.attr(StackAttributes.KAFKA_HEADERS).orEmpty() shouldContain "\"baggage\":"
+        }
         serverSpan(call, "/kafka/events").attr(StackAttributes.KAFKA_VALUE).shouldBeNull()
     }
 
@@ -86,7 +92,10 @@ class KafkaAgentTest {
         val call = post("/kafka/bytes", "")
         call.status shouldBe 202
 
-        producerSpan(call, "fixture-bytes").attr(StackAttributes.KAFKA_VALUE) shouldBe "<5 bytes>"
+        val producer = producerSpan(call, "fixture-bytes")
+        producer.attr(StackAttributes.KAFKA_VALUE) shouldBe "<5 bytes>"
+        // The record has no key: the agent then writes no key attribute at all.
+        producer.attr("messaging.kafka.message.key").shouldBeNull()
     }
 
     /** Always passes: the attributes as exported, for the step 6 notes and the reporter's mapping. */

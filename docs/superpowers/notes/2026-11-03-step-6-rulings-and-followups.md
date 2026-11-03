@@ -53,6 +53,8 @@ is `key = value (OTLP value type)`.
 - Not present in this setup: `messaging.operation.type`, `messaging.consumer.group.name`,
   `messaging.kafka.destination.partition`, `error.type` (no failed send was recorded). `messaging.message.body.size`
   is on the consumer only.
+- `messaging.kafka.message.key` is absent when the record has no key (the `fixture-bytes` send has a null key;
+  `KafkaAgentTest.bytesAreAPlaceholder` pins it): the reporter must not assume a key.
 
 ```text
 == producer: name=fixture-events publish kind=SPAN_KIND_PRODUCER links=0
