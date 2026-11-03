@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { FlowStep } from './api/types';
-import { createOrderFlow, loadStep, methodStep, submitStep, unrecordedHostStep } from './board/testData';
+import { consumeStep, createOrderFlow, kafkaStep, loadStep, methodStep, produceStep, submitStep, unrecordedHostStep } from './board/testData';
 import { isFailedStep, responseText, statusTone } from './status';
 
 const [request, insert] = createOrderFlow.steps;
@@ -85,4 +85,17 @@ test('ui steps never fail', () => {
     expect(isFailedStep(step)).toBe(false);
     expect(responseText(step)).toBe('');
   }
+});
+
+test('aKafkaStepFailsOnlyWithAnErrorType', () => {
+  expect(isFailedStep(produceStep)).toBe(false);
+  expect(isFailedStep(consumeStep)).toBe(false);
+  expect(isFailedStep(kafkaStep('p', 'produce', { errorType: 'org.apache.kafka.common.errors.TimeoutException' }))).toBe(true);
+  expect(isFailedStep(kafkaStep('c', 'consume', { errorType: 'java.lang.IllegalStateException' }))).toBe(true);
+});
+
+test('aKafkaStepHasNoResponseText', () => {
+  expect(responseText(produceStep)).toBe('');
+  expect(responseText(consumeStep)).toBe('');
+  expect(responseText(kafkaStep('c', 'consume', { errorType: 'java.lang.IllegalStateException' }))).toBe('');
 });

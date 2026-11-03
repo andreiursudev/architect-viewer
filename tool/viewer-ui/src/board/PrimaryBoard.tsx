@@ -156,6 +156,7 @@ function Board() {
           <span className="legend-item"><i className="legend-line is-dashed" /> unverified</span>
           <span className="legend-item"><i className="legend-line is-discovered" /> discovered</span>
           <span className="legend-item"><i className="legend-line is-failed" /> failed</span>
+          <span className="legend-item"><i className="legend-line is-kafka" /> kafka</span>
         </Panel>
         {hiddenHops > 0 && (
           <Panel position="top-center" className="path-note">

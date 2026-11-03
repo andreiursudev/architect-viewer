@@ -13,8 +13,12 @@ export const DISCOVERED_EDGE_COLOR = '#d97706';
 export const PATH_COLOR = '#1d4ed8';
 export const UNVERIFIED_DASH = '7 5';
 
+/** Same value as `--edge-kafka` in styles.css (the legend line); the SVG marker needs the literal colour. */
+export const KAFKA_EDGE_COLOR = '#0891b2';
+
 export function edgeColor(connection: BoardConnection): string {
-  return connection.state === 'discovered' ? DISCOVERED_EDGE_COLOR : EDGE_COLOR;
+  if (connection.state === 'discovered') return DISCOVERED_EDGE_COLOR;
+  return connection.kind === 'kafka' ? KAFKA_EDGE_COLOR : EDGE_COLOR;
 }
 
 /**

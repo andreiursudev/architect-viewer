@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { HopDetails } from './HopDetails';
-import { createOrderFlow, loadStep, submitStep, unrecordedHostStep } from './testData';
+import { consumeStep, createOrderFlow, kafkaStep, loadStep, produceStep, submitStep, unrecordedHostStep } from './testData';
 
 const [request, insert] = createOrderFlow.steps;
 
@@ -59,4 +59,25 @@ test('a ui hop shows what the browser did', () => {
   expect(screen.getByText('Target').nextSibling).toHaveTextContent('order-form');
   expect(screen.getByText('Event').nextSibling).toHaveTextContent('submit');
   expect(screen.getByText('Route').nextSibling).toHaveTextContent('/order');
+});
+
+test('a produce hop shows the topic, the key and the value', () => {
+  render(<HopDetails steps={[produceStep]} />);
+  expect(screen.getByText('produce order-events')).toBeInTheDocument();
+  expect(screen.getByText('Topic').nextSibling).toHaveTextContent('order-events');
+  expect(screen.getByText('Key').nextSibling).toHaveTextContent('order-1');
+  expect(screen.getByText(/"status":"CREATED"/)).toBeInTheDocument();
+  expect(screen.queryByText('Consumer group')).not.toBeInTheDocument();
+});
+
+test('a consume hop shows the consumer group', () => {
+  render(<HopDetails steps={[consumeStep]} />);
+  expect(screen.getByText('Consumer group').nextSibling).toHaveTextContent('shipping');
+  expect(screen.getByText('Topic').nextSibling).toHaveTextContent('order-events');
+});
+
+test('a failed kafka hop shows its error type, and a long value is cut', () => {
+  render(<HopDetails steps={[kafkaStep('bad', 'consume', { errorType: 'java.lang.IllegalStateException', value: 'v'.repeat(500) })]} />);
+  expect(screen.getByText('java.lang.IllegalStateException')).toBeInTheDocument();
+  expect(screen.getByText(`${'v'.repeat(200)}…`)).toBeInTheDocument();
 });

@@ -37,6 +37,14 @@ export function TypeIcon({ type }: { type: ComponentType }) {
           <path d="M6.5 6.5h.01M9.5 6.5h.01M12.5 6.5h.01" />
         </svg>
       );
+    case 'topic':
+      return (
+        <svg {...common} data-icon="topic">
+          <path d="M3 7h6c2 0 2.5 3 5 3h7" />
+          <path d="M3 12h18" />
+          <path d="M3 17h6c2 0 2.5-3 5-3h7" />
+        </svg>
+      );
     default:
       return (
         <svg {...common} data-icon="service">

@@ -44,3 +44,9 @@ test('frontend node shows the browser icon', () => {
   expect(service).toHaveAttribute('data-icon', 'service');
   expect(frontendDrawing).not.toBe(service.innerHTML);
 });
+
+test('a topic node shows the stream icon and its own type class', () => {
+  const topic = renderNode('topic-order-events', null, { type: 'topic' });
+  expect(topic).toHaveClass('type-topic');
+  expect(topic.querySelector('svg')).toHaveAttribute('data-icon', 'topic');
+});

@@ -8,6 +8,7 @@ import { createQueryClient } from '../api/queryClient';
 import { ConnectionEdge } from './ConnectionEdge';
 import { highlightFor, HighlightContext } from './highlight';
 import { conn, createOrderFlow, unrecordedHostStep } from './testData';
+import { edgeColor } from './toFlowElements';
 import type { ConnectionEdgeType } from './toFlowElements';
 
 // The edge label portal only exists inside a mounted canvas; render it in place instead.
@@ -18,9 +19,13 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 function edgeProps(id: string, label?: string | null): EdgeProps<ConnectionEdgeType> {
   const isDb = id.includes('postgres');
+  const isKafka = id.includes('topic-');
   return {
     id,
-    data: conn(id, 'accepted', { label: label !== undefined ? label : isDb ? null : 'POST /orders', kind: isDb ? 'db' : 'http' }),
+    data: conn(id, 'accepted', {
+      label: label !== undefined ? label : isDb || isKafka ? null : 'POST /orders',
+      kind: isKafka ? 'kafka' : isDb ? 'db' : 'http',
+    }),
     source: 'a',
     target: 'b',
     sourceX: 0,
@@ -158,4 +163,15 @@ test('a failed hop elsewhere on the path does not mark this chip', () => {
   const [request, insert] = createOrderFlow.steps;
   renderEdge('orders-service--postgresql-orders', { ...createOrderFlow, steps: [{ ...request, status: 409 }, insert] });
   expect(chip()).not.toHaveClass('is-failed');
+});
+
+test('a kafka connection is drawn in its own colour, distinct from http and db', () => {
+  renderEdge('orders-service--topic-order-events', null);
+  const kafka = edgeColor(conn('a--b', 'accepted', { kind: 'kafka' }));
+  const probe = document.createElement('span');
+  probe.style.color = kafka; // the browser normalises a colour the way it did the stroke
+  expect(path().style.stroke).toBe(probe.style.color);
+  expect(kafka).not.toBe(edgeColor(conn('a--b', 'accepted', { kind: 'http' })));
+  expect(kafka).not.toBe(edgeColor(conn('a--b', 'accepted', { kind: 'db' })));
+  expect(chipLabel()).toHaveTextContent('kafka');
 });

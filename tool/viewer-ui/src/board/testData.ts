@@ -252,3 +252,54 @@ export function uiStep(stepId: string, event: { type: 'ui.navigation'; url: stri
 export const loadStep = uiStep('load', { type: 'ui.navigation', url: 'http://localhost:5173/', route: '/', kind: 'load', durationNanos: 120_000_000 }, 0);
 export const routeStep = uiStep('route', { type: 'ui.navigation', url: 'http://localhost:5173/order', route: '/order', kind: 'route', durationNanos: 2_000_000 }, 1);
 export const submitStep = uiStep('submit', { type: 'ui.action', action: 'submit', target: 'order-form', route: '/order' }, 2);
+
+/** A kafka step; `produce` goes producer to topic, `consume` topic to consumer (the shapes the backend builds). */
+export function kafkaStep(
+  stepId: string,
+  kind: 'produce' | 'consume',
+  over: { value?: string | null; key?: string | null; errorType?: string | null; consumerGroup?: string | null } = {},
+): FlowStep {
+  const produce = kind === 'produce';
+  const component = produce ? 'orders-service' : 'shipping-service';
+  const base = {
+    schemaVersion: 5,
+    eventId: stepId,
+    runId: 'run-1',
+    traceId: 'trace',
+    spanId: stepId,
+    parentSpanId: null,
+    component,
+    startEpochNanos: T0,
+    durationNanos: 4_000_000,
+    topic: 'order-events',
+    partition: 0,
+    offset: 7,
+    key: over.key === undefined ? 'order-1' : over.key,
+    headers: {},
+    value: over.value === undefined ? '{"orderId":1,"status":"CREATED"}' : over.value,
+    valueBytes: 31,
+    valueTruncated: false,
+    errorType: over.errorType ?? null,
+  };
+  return {
+    stepId,
+    parentStepId: null,
+    from: produce ? component : 'topic-order-events',
+    to: produce ? 'topic-order-events' : component,
+    fromUnit: null,
+    toUnit: null,
+    connectionId: produce ? 'orders-service--topic-order-events' : 'topic-order-events--shipping-service',
+    kind: 'kafka',
+    label: `${kind} order-events`,
+    startEpochNanos: T0,
+    durationNanos: 4_000_000,
+    status: null,
+    event: produce
+      ? { ...base, type: 'kafka.produce' }
+      : { ...base, type: 'kafka.consume', consumerGroup: over.consumerGroup === undefined ? 'shipping' : over.consumerGroup },
+    handler: null,
+  } as FlowStep;
+}
+
+export const produceStep = kafkaStep('produce', 'produce');
+export const consumeStep = kafkaStep('consume', 'consume');

@@ -85,6 +85,27 @@ export function HopDetails({ steps }: { steps: FlowStep[] }) {
               {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
               <p className="muted">{clientCallNote(step)}</p>
             </>
+          ) : step.event.type === 'kafka.produce' || step.event.type === 'kafka.consume' ? (
+            <>
+              <dl className="facts hop-facts">
+                <dt>Topic</dt>
+                <dd>{step.event.topic}</dd>
+                {step.event.type === 'kafka.consume' && step.event.consumerGroup && (
+                  <>
+                    <dt>Consumer group</dt>
+                    <dd>{step.event.consumerGroup}</dd>
+                  </>
+                )}
+                {step.event.key != null && (
+                  <>
+                    <dt>Key</dt>
+                    <dd>{step.event.key}</dd>
+                  </>
+                )}
+              </dl>
+              {step.event.errorType && <p className="hop-error">{step.event.errorType}</p>}
+              <Payload title="Value" text={step.event.value} truncated={step.event.valueTruncated} />
+            </>
           ) : step.event.type === 'ui.action' || step.event.type === 'ui.navigation' ? (
             <dl className="facts hop-facts">
               <UiFacts event={step.event} />

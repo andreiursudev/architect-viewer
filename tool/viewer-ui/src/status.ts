@@ -19,12 +19,13 @@ export function isFailedStep(step: FlowStep): boolean {
   if (step.status != null && step.status >= 400) return true;
   const event = step.event;
   if (event.type === 'method') return event.exceptionType != null;
+  if (event.type === 'kafka.produce' || event.type === 'kafka.consume') return event.errorType != null;
   return event.type === 'http.client' && event.errorType != null;
 }
 
 /** What a step answers with: the HTTP status, the error that stopped the call, the rows a statement touched, what a method returned or threw, or `ok`. */
 export function responseText(step: FlowStep): string {
-  if (step.kind === 'ui') return ''; // a browser step is an arrow only: nothing answers it
+  if (step.kind === 'ui' || step.kind === 'kafka') return ''; // an arrow only: nothing answers a browser step or a record sent to a topic
   if (step.status != null) return String(step.status);
   const event = step.event;
   if (event.type === 'http.client' && event.errorType != null) return simpleName(event.errorType);
