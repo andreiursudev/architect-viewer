@@ -48,6 +48,7 @@ enum class FlowStepKind {
     @JsonProperty("db") DB,
     @JsonProperty("method") METHOD,
     @JsonProperty("ui") UI,
+    @JsonProperty("kafka") KAFKA,
 }
 
 data class FlowStep(
@@ -71,6 +72,8 @@ data class FlowStep(
     val handler: MethodEvent?,
     /** On a ui step: the id of the screenshot of its result; null on other steps and when none was taken. */
     val screenshot: String? = null,
+    /** On a consume step: the step id of the produce that sent its record; null on other steps and when the produce was not recorded. */
+    val causedBy: String? = null,
 )
 
 data class Flow(

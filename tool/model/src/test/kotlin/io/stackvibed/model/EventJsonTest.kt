@@ -48,7 +48,7 @@ class EventJsonTest {
         val json = mapper.writeValueAsString(sampleUiNavigationEvent)
         json shouldContain "\"type\":\"ui.navigation\""
         json shouldContain "\"kind\":\"route\""
-        json shouldContain "\"schemaVersion\":4"
+        json shouldContain "\"schemaVersion\":$SCHEMA_VERSION"
         mapper.readValue<RecordingEvent>(json) shouldBe sampleUiNavigationEvent
     }
 
@@ -57,8 +57,39 @@ class EventJsonTest {
         val json = mapper.writeValueAsString(sampleUiActionEvent)
         json shouldContain "\"type\":\"ui.action\""
         json shouldContain "\"event\":\"submit\""
-        json shouldContain "\"schemaVersion\":4"
+        json shouldContain "\"schemaVersion\":$SCHEMA_VERSION"
         mapper.readValue<RecordingEvent>(json) shouldBe sampleUiActionEvent
+    }
+
+    @Test
+    fun `kafka produce event round-trips with type discriminator`() {
+        val json = mapper.writeValueAsString(sampleKafkaProduceEvent)
+        json shouldContain "\"type\":\"kafka.produce\""
+        json shouldContain "\"schemaVersion\":5"
+        mapper.readValue<RecordingEvent>(json) shouldBe sampleKafkaProduceEvent
+    }
+
+    @Test
+    fun `kafka consume event round-trips with type discriminator`() {
+        val json = mapper.writeValueAsString(sampleKafkaConsumeEvent)
+        json shouldContain "\"type\":\"kafka.consume\""
+        json shouldContain "\"consumerGroup\":\"shipping\""
+        mapper.readValue<RecordingEvent>(json) shouldBe sampleKafkaConsumeEvent
+    }
+
+    @Test
+    fun `version 4 lines still read`() {
+        val line = """{"type":"http.server","schemaVersion":4,"eventId":"0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331","runId":"run-4","traceId":"0af7651916cd43dd8448eb211c80319c","spanId":"b7ad6b7169203331","parentSpanId":null,"component":"orders-service","startEpochNanos":1760000000000000000,"durationNanos":42000000,"method":"POST","route":"/orders","path":"/orders","status":201,"requestHeaders":{},"responseHeaders":{},"requestBody":null,"responseBody":null,"requestBodyTruncated":false,"responseBodyTruncated":false}"""
+        val event = mapper.readValue<RecordingEvent>(line)
+        event.schemaVersion shouldBe 4
+        event.shouldBeInstanceOf<HttpServerEvent>()
+    }
+
+    @Test
+    fun `kafka kinds and topic type serialise lowercase`() {
+        mapper.writeValueAsString(ComponentType.TOPIC) shouldBe "\"topic\""
+        mapper.writeValueAsString(FlowStepKind.KAFKA) shouldBe "\"kafka\""
+        mapper.writeValueAsString(ConnectionKind.KAFKA) shouldBe "\"kafka\""
     }
 
     @Test

@@ -7,15 +7,17 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 /**
  * Version of the recorded-event / manifest JSON format. Any change to the schema snapshot is deliberate.
  * Version 2 added [HttpClientEvent], version 3 added [MethodEvent], version 4 added [UiNavigationEvent] and
- * [UiActionEvent]; older recordings still deserialise unchanged.
+ * [UiActionEvent], version 5 added [KafkaProduceEvent] and [KafkaConsumeEvent]; older recordings still deserialise
+ * unchanged.
  */
-const val SCHEMA_VERSION = 4
+const val SCHEMA_VERSION = 5
 
 enum class ComponentType {
     @JsonProperty("service") SERVICE,
     @JsonProperty("database") DATABASE,
     @JsonProperty("client") CLIENT,
     @JsonProperty("frontend") FRONTEND,
+    @JsonProperty("topic") TOPIC,
 }
 
 enum class RecordingKind {
@@ -32,6 +34,8 @@ enum class RecordingKind {
     JsonSubTypes.Type(value = MethodEvent::class, name = "method"),
     JsonSubTypes.Type(value = UiNavigationEvent::class, name = "ui.navigation"),
     JsonSubTypes.Type(value = UiActionEvent::class, name = "ui.action"),
+    JsonSubTypes.Type(value = KafkaProduceEvent::class, name = "kafka.produce"),
+    JsonSubTypes.Type(value = KafkaConsumeEvent::class, name = "kafka.consume"),
 )
 sealed interface RecordingEvent {
     val schemaVersion: Int
@@ -185,4 +189,59 @@ data class UiActionEvent(
     val target: String,
     /** The route the page was on when the action happened. */
     val route: String,
+) : RecordingEvent
+
+/** A record sent to Kafka, observed by the producer; the consumer's [KafkaConsumeEvent] is its other end. */
+data class KafkaProduceEvent(
+    override val schemaVersion: Int = SCHEMA_VERSION,
+    override val eventId: String,
+    override val runId: String,
+    override val traceId: String,
+    override val spanId: String,
+    override val parentSpanId: String?,
+    /** The producer. */
+    override val component: String,
+    override val startEpochNanos: Long,
+    override val durationNanos: Long,
+    val topic: String,
+    /** Null when no ack arrived. */
+    val partition: Int?,
+    /** Null when no ack arrived. */
+    val offset: Long?,
+    val key: String?,
+    /** Header values are UTF-8 strings when they decode, else `<n bytes>`. */
+    val headers: Map<String, List<String>>,
+    val value: String?,
+    val valueTruncated: Boolean = false,
+    /** Serialised size of the value, when the agent reports it. */
+    val valueBytes: Long?,
+    /** Set when the send failed. */
+    val errorType: String?,
+) : RecordingEvent
+
+/** A record handed to a consumer's listener, observed by the consumer. */
+data class KafkaConsumeEvent(
+    override val schemaVersion: Int = SCHEMA_VERSION,
+    override val eventId: String,
+    override val runId: String,
+    override val traceId: String,
+    override val spanId: String,
+    override val parentSpanId: String?,
+    /** The consumer. */
+    override val component: String,
+    override val startEpochNanos: Long,
+    override val durationNanos: Long,
+    val topic: String,
+    val partition: Int?,
+    val offset: Long?,
+    val key: String?,
+    val consumerGroup: String?,
+    /** Header values are UTF-8 strings when they decode, else `<n bytes>`. */
+    val headers: Map<String, List<String>>,
+    val value: String?,
+    val valueTruncated: Boolean = false,
+    /** Serialised size of the value, when the agent reports it. */
+    val valueBytes: Long?,
+    /** Set when the listener threw. */
+    val errorType: String?,
 ) : RecordingEvent

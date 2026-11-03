@@ -4,6 +4,8 @@ import io.stackvibed.model.ComponentIds
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpClientEvent
 import io.stackvibed.model.HttpServerEvent
+import io.stackvibed.model.KafkaConsumeEvent
+import io.stackvibed.model.KafkaProduceEvent
 import io.stackvibed.model.MethodEvent
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
@@ -107,6 +109,7 @@ class FlowBuilder {
                     label = "${event.event.name.lowercase(Locale.ROOT)} ${event.target}", status = null,
                     screenshot = screenshotOf[event.spanId],
                 )
+                is KafkaProduceEvent, is KafkaConsumeEvent -> null // no flow step for Kafka records yet
             }
         }
         return Flow(manifest.runId, manifest.scenarioId, steps)

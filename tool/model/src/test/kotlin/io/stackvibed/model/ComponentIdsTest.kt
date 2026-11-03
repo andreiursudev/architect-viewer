@@ -16,6 +16,12 @@ class ComponentIdsTest {
     }
 
     @Test
+    fun `topic id carries the topic prefix and a slug`() {
+        ComponentIds.topic("order-placed") shouldBe "topic-order-placed"
+        ComponentIds.topic("Orders.V1") shouldBe "topic-orders-v1"
+    }
+
+    @Test
     fun `slug strips windows illegal characters`() {
         ComponentIds.slug("db:orders/main?") shouldBe "db-orders-main"
     }

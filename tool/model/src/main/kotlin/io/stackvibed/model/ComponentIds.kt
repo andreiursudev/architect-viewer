@@ -6,6 +6,9 @@ import java.util.Locale
 object ComponentIds {
     const val E2E_CLIENT = "e2e-client"
 
+    /** Keeps a topic `orders` apart from a service `orders`. */
+    const val TOPIC_PREFIX = "topic-"
+
     private val NON_SLUG = Regex("[^a-z0-9]+")
 
     fun slug(raw: String): String = raw.lowercase(Locale.ROOT).replace(NON_SLUG, "-").trim('-')
@@ -14,4 +17,6 @@ object ComponentIds {
 
     fun database(dbSystem: String, dbName: String?): String =
         slug(listOfNotNull(dbSystem, dbName).joinToString("-"))
+
+    fun topic(name: String): String = TOPIC_PREFIX + slug(name)
 }

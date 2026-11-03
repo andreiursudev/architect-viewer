@@ -87,6 +87,7 @@ class TopologyService(
             FlowStepKind.DB -> ConnectionKind.DB
             FlowStepKind.METHOD -> return
             FlowStepKind.UI -> ConnectionKind.UI
+            FlowStepKind.KAFKA -> ConnectionKind.KAFKA
         }
         // The e2e client calls from outside; the caller of an HTTP hop or a database is a service (a frontend once it is seen
         // with ui steps); a ui step's target is the frontend.

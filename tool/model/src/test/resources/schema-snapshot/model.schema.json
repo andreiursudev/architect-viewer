@@ -1,11 +1,11 @@
 {
   "$defs" : {
     "ComponentType" : {
-      "enum" : [ "service", "database", "client", "frontend" ],
+      "enum" : [ "service", "database", "client", "frontend", "topic" ],
       "type" : "string"
     },
     "ConnectionKind" : {
-      "enum" : [ "http", "db", "ui" ],
+      "enum" : [ "http", "db", "ui", "kafka" ],
       "type" : "string"
     },
     "ConnectionState" : {
@@ -197,6 +197,147 @@
         }
       },
       "required" : [ "component", "durationNanos", "eventId", "method", "path", "requestBodyTruncated", "requestHeaders", "responseBodyTruncated", "responseHeaders", "runId", "schemaVersion", "spanId", "startEpochNanos", "status", "traceId", "type" ],
+      "type" : "object"
+    },
+    "KafkaConsumeEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "consumerGroup" : {
+          "type" : [ "string", "null" ]
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "errorType" : {
+          "type" : [ "string", "null" ]
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "$ref" : "#/$defs/Map(String,List(String))"
+        },
+        "key" : {
+          "type" : [ "string", "null" ]
+        },
+        "offset" : {
+          "format" : "int64",
+          "type" : [ "integer", "null" ]
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "partition" : {
+          "format" : "int32",
+          "type" : [ "integer", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "topic" : {
+          "type" : "string"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "kafka.consume"
+        },
+        "value" : {
+          "type" : [ "string", "null" ]
+        },
+        "valueBytes" : {
+          "format" : "int64",
+          "type" : [ "integer", "null" ]
+        },
+        "valueTruncated" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "component", "durationNanos", "eventId", "headers", "runId", "schemaVersion", "spanId", "startEpochNanos", "topic", "traceId", "type", "valueTruncated" ],
+      "type" : "object"
+    },
+    "KafkaProduceEvent" : {
+      "properties" : {
+        "component" : {
+          "type" : "string"
+        },
+        "durationNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "errorType" : {
+          "type" : [ "string", "null" ]
+        },
+        "eventId" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "$ref" : "#/$defs/Map(String,List(String))"
+        },
+        "key" : {
+          "type" : [ "string", "null" ]
+        },
+        "offset" : {
+          "format" : "int64",
+          "type" : [ "integer", "null" ]
+        },
+        "parentSpanId" : {
+          "type" : [ "string", "null" ]
+        },
+        "partition" : {
+          "format" : "int32",
+          "type" : [ "integer", "null" ]
+        },
+        "runId" : {
+          "type" : "string"
+        },
+        "schemaVersion" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "spanId" : {
+          "type" : "string"
+        },
+        "startEpochNanos" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "topic" : {
+          "type" : "string"
+        },
+        "traceId" : {
+          "type" : "string"
+        },
+        "type" : {
+          "const" : "kafka.produce"
+        },
+        "value" : {
+          "type" : [ "string", "null" ]
+        },
+        "valueBytes" : {
+          "format" : "int64",
+          "type" : [ "integer", "null" ]
+        },
+        "valueTruncated" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "component", "durationNanos", "eventId", "headers", "runId", "schemaVersion", "spanId", "startEpochNanos", "topic", "traceId", "type", "valueTruncated" ],
       "type" : "object"
     },
     "Map(String,List(String))" : {
@@ -487,6 +628,9 @@
         "steps" : {
           "items" : {
             "properties" : {
+              "causedBy" : {
+                "type" : [ "string", "null" ]
+              },
               "connectionId" : {
                 "type" : [ "string", "null" ]
               },
@@ -507,6 +651,10 @@
                   "$ref" : "#/$defs/UiNavigationEvent"
                 }, {
                   "$ref" : "#/$defs/UiActionEvent"
+                }, {
+                  "$ref" : "#/$defs/KafkaProduceEvent"
+                }, {
+                  "$ref" : "#/$defs/KafkaConsumeEvent"
                 } ]
               },
               "from" : {
@@ -523,7 +671,7 @@
                 } ]
               },
               "kind" : {
-                "enum" : [ "http", "db", "method", "ui" ],
+                "enum" : [ "http", "db", "method", "ui", "kafka" ],
                 "type" : "string"
               },
               "label" : {
@@ -575,6 +723,10 @@
         "$ref" : "#/$defs/UiNavigationEvent"
       }, {
         "$ref" : "#/$defs/UiActionEvent"
+      }, {
+        "$ref" : "#/$defs/KafkaProduceEvent"
+      }, {
+        "$ref" : "#/$defs/KafkaConsumeEvent"
       } ]
     },
     "recordingManifest" : {

@@ -9,12 +9,12 @@
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ComponentType".
  */
-export type ComponentType = "service" | "database" | "client" | "frontend";
+export type ComponentType = "service" | "database" | "client" | "frontend" | "topic";
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ConnectionKind".
  */
-export type ConnectionKind = "http" | "db" | "ui";
+export type ConnectionKind = "http" | "db" | "ui" | "kafka";
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema
  * via the `definition` "ConnectionState".
@@ -50,13 +50,22 @@ export interface ModelSchema {
     runId: string;
     scenarioId?: string | null;
     steps: {
+      causedBy?: string | null;
       connectionId?: string | null;
       durationNanos: number;
-      event: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent | UiNavigationEvent | UiActionEvent;
+      event:
+        | HttpServerEvent
+        | DbClientEvent
+        | HttpClientEvent
+        | MethodEvent
+        | UiNavigationEvent
+        | UiActionEvent
+        | KafkaProduceEvent
+        | KafkaConsumeEvent;
       from: string;
       fromUnit?: string | null;
       handler?: null | MethodEvent;
-      kind: "http" | "db" | "method" | "ui";
+      kind: "http" | "db" | "method" | "ui" | "kafka";
       label: string;
       parentStepId?: string | null;
       screenshot?: string | null;
@@ -67,7 +76,15 @@ export interface ModelSchema {
       toUnit?: string | null;
     }[];
   };
-  recordingEvent: HttpServerEvent | DbClientEvent | HttpClientEvent | MethodEvent | UiNavigationEvent | UiActionEvent;
+  recordingEvent:
+    | HttpServerEvent
+    | DbClientEvent
+    | HttpClientEvent
+    | MethodEvent
+    | UiNavigationEvent
+    | UiActionEvent
+    | KafkaProduceEvent
+    | KafkaConsumeEvent;
   recordingManifest: {
     componentsSeen: string[];
     kind: "e2e" | "manual" | "test";
@@ -270,6 +287,57 @@ export interface UiActionEvent {
   target: string;
   traceId: string;
   type: "ui.action";
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "KafkaProduceEvent".
+ */
+export interface KafkaProduceEvent {
+  component: string;
+  durationNanos: number;
+  errorType?: string | null;
+  eventId: string;
+  headers: MapStringListString;
+  key?: string | null;
+  offset?: number | null;
+  parentSpanId?: string | null;
+  partition?: number | null;
+  runId: string;
+  schemaVersion: number;
+  spanId: string;
+  startEpochNanos: number;
+  topic: string;
+  traceId: string;
+  type: "kafka.produce";
+  value?: string | null;
+  valueBytes?: number | null;
+  valueTruncated: boolean;
+}
+/**
+ * This interface was referenced by `ModelSchema`'s JSON-Schema
+ * via the `definition` "KafkaConsumeEvent".
+ */
+export interface KafkaConsumeEvent {
+  component: string;
+  consumerGroup?: string | null;
+  durationNanos: number;
+  errorType?: string | null;
+  eventId: string;
+  headers: MapStringListString;
+  key?: string | null;
+  offset?: number | null;
+  parentSpanId?: string | null;
+  partition?: number | null;
+  runId: string;
+  schemaVersion: number;
+  spanId: string;
+  startEpochNanos: number;
+  topic: string;
+  traceId: string;
+  type: "kafka.consume";
+  value?: string | null;
+  valueBytes?: number | null;
+  valueTruncated: boolean;
 }
 /**
  * This interface was referenced by `ModelSchema`'s JSON-Schema
