@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useFlow, useWorkspace } from '../api/queries';
 import { MessageDetails } from './MessageDetails';
 import { ScreenshotCarousel, type ScreenshotSlide } from './Screenshot';
 import { classCounts } from './layoutSequence';
 import { SequenceDiagram, type MessageSelection, type ParticipantInfo } from './SequenceDiagram';
+import { useDragToScroll } from './useDragToScroll';
 
 /** The page of one recorded run: its calls as a sequence diagram, and the payload of the message clicked. */
 export function SequenceView() {
@@ -16,6 +17,9 @@ export function SequenceView() {
   const [viewing, setViewing] = useState(false);
   // services drawn as one lifeline per class; every run opens fully collapsed
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // a large diagram is dragged around from its empty spots, not only by its scrollbars
+  const scroll = useRef<HTMLDivElement>(null);
+  useDragToScroll(scroll);
 
   const components = useMemo(() => {
     const byId: Record<string, ParticipantInfo> = {};
@@ -81,7 +85,7 @@ export function SequenceView() {
             </span>
           )}
         </div>
-        <div className="sequence-scroll">
+        <div className="sequence-scroll" ref={scroll}>
           {flow.isLoading && <p className="muted sequence-message">Loading the run…</p>}
           {flow.isError && <p className="error sequence-message">Could not load the run: {flow.error.message}</p>}
           {flow.data && flow.data.steps.length === 0 && <p className="muted sequence-message">This run recorded no calls.</p>}

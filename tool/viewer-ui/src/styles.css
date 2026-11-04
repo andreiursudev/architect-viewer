@@ -305,7 +305,9 @@ h1, h2, h3, p { margin: 0; }
 .sequence-bar h2 { font-size: 15px; font-weight: 650; }
 .sequence-run { padding: 1px 7px; border-radius: 5px; background: #eef0f4; color: var(--muted); }
 .sequence-count { margin-left: auto; font-size: 12px; }
-.sequence-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--bg); }
+.sequence-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--bg); cursor: grab; }
+.sequence-scroll.is-panning { cursor: grabbing; user-select: none; }
+.sequence-scroll.is-panning * { cursor: grabbing; }
 .sequence-message { padding: 24px; }
 .sequence-details { width: 420px; }
 .sequence-hint { padding: 24px 18px; }

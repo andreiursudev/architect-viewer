@@ -36,3 +36,25 @@ test('an unknown run says so and leads back to the board', async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator('.react-flow__node')).toHaveCount(9);
 });
+
+test('a large diagram is dragged around from an empty spot, and a message still opens', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.goto('/sequence/run-7'); // create-order across kafka: eight lifelines, wider and taller than this window
+  const diagram = page.getByRole('group', { name: 'Sequence diagram' });
+  await expect(diagram).toBeVisible();
+  await page.getByRole('button', { name: 'Expand all' }).click();
+
+  const pane = page.locator('.sequence-scroll');
+  const box = (await pane.boundingBox())!;
+  // the margin left of the first lifeline holds nothing to click
+  const x = box.x + 40;
+  const y = box.y + box.height - 40;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 150, y - 120, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => pane.evaluate((el) => [el.scrollLeft, el.scrollTop])).toEqual([150, 120]);
+
+  await diagram.getByRole('button', { name: 'request consume order-placed' }).click();
+  await expect(page.getByRole('complementary', { name: 'Message details' })).toContainText('Produced by');
+});
