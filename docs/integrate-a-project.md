@@ -2,7 +2,8 @@
 
 You are setting up the stack tool for a real project the user works on. When you are done, the user can start
 the project's services locally under the tool's agent, run a set of e2e scenarios, and look at what each scenario
-did (every HTTP hop, request/response bodies, SQL) on the stack viewer's board and in its sequence view.
+did (every HTTP hop, request/response bodies, SQL, Kafka records, and optionally method calls and browser steps) on the
+stack viewer's board and in its sequence view.
 
 Everything you create goes into a **separate personal repository** (called the *stack repo* below). The project's
 own repositories stay untouched: the scenarios are personal documentation and exploration, not part of the
@@ -74,7 +75,8 @@ has a browser frontend, see [Frontends](#frontends)):
 | Outgoing HTTP calls (RestClient, RestTemplate, WebClient, Feign…). Callee under the agent: one hop with the callee's bodies. Callee not under the agent: a box named after its host, status only | gRPC: dropped entirely |
 | Scenario attribution through the W3C `baggage` header | Scheduled jobs and other work no test request starts (it lands in `recordings/_unassigned`) |
 | **Kafka** with the Java client: each send and each `@KafkaListener` receive, with value and headers, through a topic node (see [Kafka](#kafka)) | Kafka consumers without Spring Kafka (plain `poll()` loops) and batch listeners: the receive shows, without the value. Retries and dead-letter topics, schema registries (Avro, protobuf), Kafka Streams |
-| | Method calls inside a service, and non-JVM services (only their callers' view of them) |
+| Method calls of the service's own Spring beans, with arguments and return values, **when switched on** (step 6) | Method calls outside Spring stereotype classes, and any method call while method capture is off |
+| A browser frontend that loads `@stackvibed/browser`: page loads, clicks, submits, their fetches and screenshots (see [Frontends](#frontends)) | Non-JVM services (only their callers' view of them) |
 
 Also check each service for:
 
@@ -88,8 +90,9 @@ Also check each service for:
   Testcontainers setup in the repo, and its README.
 - **How it's built and run**: Gradle or Maven, the jar name, the main class, the port, and a local profile if it
   has one.
-- **Endpoints and flows**: list the main controllers. Propose **3–6 flows** that are synchronous HTTP + database,
-  at most 2–4 hops deep, plus **one that fails on purpose** (a 4xx); the viewer marks failed hops red.
+- **Endpoints and flows**: list the main controllers and `@KafkaListener`s. Propose **3–6 flows** of HTTP + database
+  calls, at most 2–4 hops deep (a hop across a Kafka topic counts, when its consumer is a Spring Kafka record
+  listener), plus **one that fails on purpose** (a 4xx); the viewer marks failed hops red.
 
 **Stop and report to the user**: one short table per service (fits / partly / doesn't fit, with the reason), what
 each needs to start locally and how you plan to provide it (container, stub, or another service under the agent),
@@ -464,7 +467,10 @@ Verify the recordings yourself before you hand over:
   `events.jsonl`.
 - `manifest.json` → `componentsSeen` lists every service the flow should cross.
 - `events.jsonl` has `http.server` events with `requestBody`/`responseBody`, `db.client` events with `statement`
-  and `parameters`, and `http.client` events for outgoing calls.
+  and `parameters`, and `http.client` events for outgoing calls. Depending on what the project uses, also:
+  `kafka.produce` and `kafka.consume` events with `topic`, `value` and `headers` (a flow across a topic needs both);
+  `method` events when method capture is on; `ui.navigation` and `ui.action` events for a recorded frontend, and with
+  screenshots on, a `screenshots/` folder and `screenshots.jsonl` beside them.
 - Nothing from a tagged test is only in `recordings/_unassigned/`. If something is, the scenario baggage didn't
   reach that service; find out why.
 
@@ -579,6 +585,8 @@ carries `traceparent` and `baggage` in the record headers, so the consumer's spa
 - **Headers.** All the record's headers, including the injected `traceparent` and `baggage`: a UTF-8 value as text,
   anything else as `<n bytes>`; not cut. The producer's list is the one at `send`, so it lacks headers the value
   serializer adds while serializing (Spring's `__TypeId__`), which the consumer's has.
+- **Failures.** A send that fails, or a listener that throws, is marked failed (red) like a failed hop, with the
+  exception's type in its details (else just `error`). Nothing needs switching on for this.
 - **The topic is a node.** Its id is `topic-<name>` and its name the topic's name (`order-placed`), type `topic`, with
   the connections `<producer>--topic-<name>` and `topic-<name>--<consumer>` (kind `kafka`), discovered and accepted
   like the others. A topic nothing consumed in the run still shows, with its produce marked "Not consumed in this
