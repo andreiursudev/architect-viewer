@@ -4,6 +4,11 @@ import { create } from 'zustand';
 export interface UiState {
   selectedComponentId: string | null;
   selectedConnectionId: string | null;
+  /**
+   * A step of the highlighted run, picked by its number on the board: the side panel then shows what it carried, as the
+   * sequence view's details panel does.
+   */
+  selectedStepId: string | null;
   /** The scenario the run picker is showing; [selectedRunId] is the run whose path is highlighted on the board. */
   selectedScenarioId: string | null;
   selectedRunId: string | null;
@@ -19,6 +24,7 @@ export interface UiState {
   errors: { id: number; message: string }[];
   selectComponent: (id: string | null) => void;
   selectConnection: (id: string | null) => void;
+  selectStep: (id: string | null) => void;
   selectScenario: (scenarioId: string | null, runId: string | null) => void;
   selectRun: (id: string | null) => void;
   hoverConnection: (id: string | null) => void;
@@ -33,17 +39,20 @@ let nextErrorId = 1;
 export const useUiStore = create<UiState>((set) => ({
   selectedComponentId: null,
   selectedConnectionId: null,
+  selectedStepId: null,
   selectedScenarioId: null,
   selectedRunId: null,
   hoveredConnectionId: null,
   showAllConnections: false,
   noteDrafts: {},
   errors: [],
-  // a component and a connection are never selected together: the side panel shows one of them
-  selectComponent: (id) => set({ selectedComponentId: id, selectedConnectionId: null }),
-  selectConnection: (id) => set({ selectedConnectionId: id, selectedComponentId: null }),
-  selectScenario: (scenarioId, runId) => set({ selectedScenarioId: scenarioId, selectedRunId: runId }),
-  selectRun: (id) => set({ selectedRunId: id }),
+  // a component, a connection and a step are never selected together: the side panel shows one of them
+  selectComponent: (id) => set({ selectedComponentId: id, selectedConnectionId: null, selectedStepId: null }),
+  selectConnection: (id) => set({ selectedConnectionId: id, selectedComponentId: null, selectedStepId: null }),
+  selectStep: (id) => set({ selectedStepId: id, selectedComponentId: null, selectedConnectionId: null }),
+  // a step belongs to one run, so picking another run lets it go
+  selectScenario: (scenarioId, runId) => set({ selectedScenarioId: scenarioId, selectedRunId: runId, selectedStepId: null }),
+  selectRun: (id) => set((s) => (s.selectedRunId === id ? s : { selectedRunId: id, selectedStepId: null })),
   hoverConnection: (id) => set({ hoveredConnectionId: id }),
   setShowAllConnections: (show) => set({ showAllConnections: show }),
   setNoteDraft: (targetId, draft) =>

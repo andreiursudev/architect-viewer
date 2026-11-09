@@ -61,6 +61,7 @@ function renderEdge(id: string, flow: typeof createOrderFlow | null, label?: str
 }
 
 afterEach(() => useUiStore.getState().selectConnection(null));
+afterEach(() => useUiStore.getState().selectStep(null));
 
 const chip = () => document.querySelector('.edge-chip') as HTMLElement;
 const path = () => document.querySelector('.react-flow__edge-path') as SVGPathElement;
@@ -114,16 +115,37 @@ test('on the path of a run the chip carries only the numbers of its steps, in ru
   expect(chip()).not.toHaveTextContent('POST /orders');
 });
 
-test('a step number opens the sequence view of the run at its first call', () => {
+test('a step number selects its first call, for the side panel to show, and is marked as picked', async () => {
+  const user = userEvent.setup();
   const [request, insert] = createOrderFlow.steps;
   const read = { ...request, stepId: 'read', label: 'GET /orders/{id}', startEpochNanos: request.startEpochNanos + 100_000_000 };
   const again = { ...request, stepId: 'again', startEpochNanos: request.startEpochNanos + 200_000_000 };
+  useUiStore.getState().selectConnection('e2e-client--orders-service');
   renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [request, insert, read, again] });
-  expect(screen.getByRole('link', { name: 'Step 1, open in the sequence view' })).toHaveAttribute(
-    'href',
-    `/sequence/run-1?step=${encodeURIComponent(request.stepId)}`,
+
+  await user.click(screen.getByRole('button', { name: 'Step 3' }));
+  expect(useUiStore.getState().selectedStepId).toBe('read');
+  expect(useUiStore.getState().selectedConnectionId).toBeNull(); // the panel shows the step, not the connection
+  expect(screen.getByRole('button', { name: 'Step 3' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Step 1' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.queryByRole('link')).not.toBeInTheDocument(); // nothing leaves the board
+});
+
+test('a step number keeps its click from the board, which would select the connection instead', async () => {
+  const user = userEvent.setup();
+  const boardClick = vi.fn(); // React Flow's edge click, which the portalled label still bubbles to
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <HighlightContext.Provider value={highlightFor(createOrderFlow)}>
+        <svg onClick={boardClick}>
+          <ConnectionEdge {...edgeProps('e2e-client--orders-service')} />
+        </svg>
+      </HighlightContext.Provider>
+    </QueryClientProvider>,
   );
-  expect(screen.getByRole('link', { name: 'Step 3, open in the sequence view' })).toHaveAttribute('href', '/sequence/run-1?step=read');
+  await user.click(screen.getByRole('button', { name: 'Step 1' }));
+  expect(boardClick).not.toHaveBeenCalled();
+  expect(useUiStore.getState().selectedStepId).toBe(createOrderFlow.steps[0].stepId);
 });
 
 test('hovering a step number tells its calls and what they answered, without a details box', async () => {

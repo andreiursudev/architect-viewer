@@ -22,7 +22,7 @@ test('board shows the frontend between the e2e client and the services', async (
   }
 });
 
-test('the path carries only step numbers, and a number opens the sequence view at that step', async ({ page }) => {
+test('the path carries only step numbers, and a number shows its step in the side panel', async ({ page }) => {
   await page.goto('/');
   await pickBrowserScenario(page);
 
@@ -30,7 +30,18 @@ test('the path carries only step numbers, and a number opens the sequence view a
   await expect(chip.locator('.step-badge').first()).toHaveText(/^1/); // the run starts in the browser
   await expect(chip.locator('.edge-label')).toHaveCount(0);
 
-  await page.getByRole('link', { name: 'Step 1, open in the sequence view' }).click();
+  await page.getByRole('button', { name: 'Step 1', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/); // the board stays
+  const panel = page.getByRole('complementary', { name: 'Details' });
+  await expect(panel).toContainText('Step 1 of');
+  await expect(panel).toContainText('page load');
+
+  await panel.getByRole('button', { name: 'Next step' }).click();
+  await expect(panel).toContainText('Step 2 of');
+  await expect(page.getByRole('button', { name: 'Step 2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+  await panel.getByRole('button', { name: 'Previous step' }).click();
+  await panel.getByRole('link', { name: 'Sequence view' }).click();
   await expect(page).toHaveURL(/\/sequence\/run-6\?step=/);
   await expect(diagram(page).getByRole('button', { name: 'request load /' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('complementary', { name: 'Message details' })).toContainText('page load');

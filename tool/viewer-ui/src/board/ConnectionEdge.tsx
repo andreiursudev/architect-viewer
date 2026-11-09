@@ -1,5 +1,4 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
-import { Link } from 'react-router';
 import { useSetConnectionState } from '../api/queries';
 import { isFailedStep, responseText } from '../status';
 import { useUiStore } from '../store/uiStore';
@@ -15,17 +14,14 @@ function hopTitle(hop: Hop): string {
   return [`Step ${hop.order} of the run`, ...calls].join('\n');
 }
 
-/** Where a step number leads: the sequence view of the run, with the step's first call selected. */
-export function sequenceLink(runId: string, hop: Hop): string {
-  return `/sequence/${encodeURIComponent(runId)}?step=${encodeURIComponent(hop.steps[0].stepId)}`;
-}
-
 export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   const { id, data, style, markerEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
   const hovered = useUiStore((s) => s.hoveredConnectionId === id);
   const selected = useUiStore((s) => s.selectedConnectionId === id);
   const hover = useUiStore((s) => s.hoverConnection);
   const select = useUiStore((s) => s.selectConnection);
+  const selectStep = useUiStore((s) => s.selectStep);
+  const selectedStepId = useUiStore((s) => s.selectedStepId);
   const setState = useSetConnectionState();
   const highlight = useHighlight();
 
@@ -40,7 +36,7 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
   if (!data) return null;
 
   const discovered = data.state === 'discovered';
-  // On the path of a run the edge carries only the numbers of its steps; the sequence view tells what they did.
+  // On the path of a run the edge carries only the numbers of its steps; a number shows its step in the side panel.
   const hops = highlight?.hopsByConnection.get(id);
   const text = data.label ?? (data.kind === 'db' ? 'SQL' : '');
   const classes = ['edge-chip'];
@@ -76,18 +72,31 @@ export function ConnectionEdge(props: EdgeProps<ConnectionEdgeType>) {
         >
           <div className="edge-row">
             {hops && highlight ? (
-              hops.map((hop) => (
-                <Link
-                  key={hop.order}
-                  to={sequenceLink(highlight.runId, hop)}
-                  className={`step-badge${hop.steps.some(isFailedStep) ? ' is-failed' : ''}`}
-                  title={hopTitle(hop)}
-                  aria-label={`Step ${hop.order}, open in the sequence view`}
-                >
-                  {hop.order}
-                  {hop.steps.length > 1 && <small>×{hop.steps.length}</small>}
-                </Link>
-              ))
+              hops.map((hop) => {
+                const picked = hop.steps.some((st) => st.stepId === selectedStepId);
+                const classes = ['step-badge'];
+                if (hop.steps.some(isFailedStep)) classes.push('is-failed');
+                if (picked) classes.push('is-selected');
+                return (
+                  <button
+                    key={hop.order}
+                    type="button"
+                    className={classes.join(' ')}
+                    onClick={(e) => {
+                      // the label is portalled out of the edge, but React still bubbles the click to the board's
+                      // edge click, which would select the connection over the step
+                      e.stopPropagation();
+                      selectStep(hop.steps[0].stepId);
+                    }}
+                    title={hopTitle(hop)}
+                    aria-label={`Step ${hop.order}`}
+                    aria-pressed={picked}
+                  >
+                    {hop.order}
+                    {hop.steps.length > 1 && <small>×{hop.steps.length}</small>}
+                  </button>
+                );
+              })
             ) : (
               <button type="button" className="edge-label" onClick={() => select(id)} title={data.id}>
                 <span className="edge-kind">{data.kind}</span>

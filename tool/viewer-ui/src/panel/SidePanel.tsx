@@ -4,12 +4,15 @@ import { TypeIcon } from '../board/icons';
 import { useUiStore } from '../store/uiStore';
 import { endpointsOf, type Endpoint } from './endpoints';
 import { NotesPanel } from './NotesPanel';
+import { StepDetails } from './StepDetails';
 import { useResizableWidth } from './useResizableWidth';
 
 export function SidePanel() {
   const { data: view } = useWorkspace();
   const componentId = useUiStore((s) => s.selectedComponentId);
   const connectionId = useUiStore((s) => s.selectedConnectionId);
+  const runId = useUiStore((s) => s.selectedRunId);
+  const stepId = useUiStore((s) => s.selectedStepId);
   const { width, dragging, handleProps } = useResizableWidth();
 
   const component = view?.components.find((c) => c.id === componentId);
@@ -19,7 +22,9 @@ export function SidePanel() {
     <aside className="side-panel" aria-label="Details" style={{ width }}>
       <div className={`panel-resizer${dragging ? ' is-dragging' : ''}`} title="Drag to resize · double-click to reset" {...handleProps} />
       <div className="side-panel-scroll">
-        {!view ? null : component ? (
+        {runId && stepId ? (
+          <StepDetails runId={runId} stepId={stepId} />
+        ) : !view ? null : component ? (
           <ComponentDetails key={component.id} component={component} view={view} />
         ) : connection ? (
           <ConnectionDetails key={connection.id} connection={connection} view={view} />
