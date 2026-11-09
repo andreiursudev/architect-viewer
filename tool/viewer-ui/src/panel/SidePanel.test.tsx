@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { comp, conn, viewWith } from '../board/testData';
@@ -64,4 +64,60 @@ test('an unsaved note draft survives deselecting and reselecting', async () => {
   act(() => useUiStore.getState().selectComponent('a'));
   expect(await screen.findByRole('textbox')).toHaveValue('half written');
   expect(screen.getByText('unsaved')).toBeInTheDocument();
+});
+
+test('a component lists its connections by direction, each with its endpoints', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      url === '/api/workspace'
+        ? Response.json(
+            viewWith({
+              components: [comp('a'), comp('b'), comp('c')],
+              connections: [
+                conn('a--b', 'accepted', { label: 'POST /b/register, GET /b/items/{id}' }),
+                conn('c--a', 'discovered', { label: 'GET /a' }),
+              ],
+            }),
+          )
+        : new Response('', { status: 404 }),
+    ),
+  );
+  const user = userEvent.setup();
+  useUiStore.getState().selectComponent('a');
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SidePanel />
+    </QueryClientProvider>,
+  );
+
+  const outgoing = await screen.findByRole('region', { name: 'Outgoing connections' });
+  expect(within(outgoing).getAllByRole('listitem').filter((li) => li.classList.contains('endpoint')).map((li) => li.textContent)).toEqual([
+    'GET/b/items/{id}',
+    'POST/b/register',
+  ]);
+  const incoming = screen.getByRole('region', { name: 'Incoming connections' });
+  expect(within(incoming).getByText('/a')).toBeInTheDocument();
+
+  await user.click(within(outgoing).getByRole('button', { name: /b/ }));
+  expect(useUiStore.getState().selectedConnectionId).toBe('a--b');
+});
+
+test('the panel can be resized from its left edge and remembers its width', () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SidePanel />
+    </QueryClientProvider>,
+  );
+  const handle = screen.getByRole('separator', { name: 'Resize details panel' });
+  const panel = screen.getByRole('complementary', { name: 'Details' });
+  const start = parseInt(panel.style.width, 10);
+
+  fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+  expect(parseInt(panel.style.width, 10)).toBe(start + 24);
+  expect(window.localStorage.getItem('stack-viewer.side-panel-width')).toBe(String(start + 24));
+
+  fireEvent.doubleClick(handle);
+  expect(panel.style.width).toBe('360px');
 });

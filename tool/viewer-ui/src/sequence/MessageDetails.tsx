@@ -1,8 +1,8 @@
 import type { FlowStep, MethodEvent } from '../api/types';
-import { clientCallNote, formatMillis, UiFacts } from '../board/HopDetails';
 import { statusTone } from '../status';
 import { consumeGap } from './layoutSequence';
 import { ScreenshotImage } from './Screenshot';
+import { clientCallNote, formatMillis, UiFacts } from './stepFacts';
 
 type Kind = 'request' | 'response';
 

@@ -6,7 +6,7 @@ async function pickBrowserScenario(page: Page) {
   await page.getByRole('option', { name: /place-order-in-browser/ }).click();
 }
 
-const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[id="${id}"]`);
+const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[data-connection="${id}"]`);
 const heads = (page: Page) => page.locator('.seq-head');
 const diagram = (page: Page) => page.getByRole('group', { name: 'Sequence diagram' });
 
@@ -22,27 +22,18 @@ test('board shows the frontend between the e2e client and the services', async (
   }
 });
 
-test('hop details stay open while the pointer moves from the chip onto them, and scroll there', async ({ page }) => {
+test('the path carries only step numbers, and a number opens the sequence view at that step', async ({ page }) => {
   await page.goto('/');
   await pickBrowserScenario(page);
 
-  const chip = page.locator('.edge-chip.on-path').filter({ hasText: 'load /' });
-  await chip.locator('.edge-label').hover();
-  const details = chip.locator('.hop-details');
-  await expect(details).toBeVisible();
+  const chip = page.locator('.edge-chip.on-path[data-connection="e2e-client--frontend"]');
+  await expect(chip.locator('.step-badge').first()).toHaveText(/^1/); // the run starts in the browser
+  await expect(chip.locator('.edge-label')).toHaveCount(0);
 
-  // straight down from the chip, through the gap above the details, into them
-  const from = (await chip.locator('.edge-label').boundingBox())!;
-  const to = (await details.boundingBox())!;
-  const x = from.x + from.width / 2;
-  await page.mouse.move(x, to.y + 20, { steps: 20 });
-  await expect(details).toBeVisible();
-
-  // the wheel scrolls the details, not the board's zoom
-  const zoom = await page.locator('.react-flow__viewport').getAttribute('style');
-  await page.mouse.wheel(0, 200);
-  await expect.poll(() => details.evaluate((d) => d.scrollTop)).toBeGreaterThan(0);
-  await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style', zoom!);
+  await page.getByRole('link', { name: 'Step 1, open in the sequence view' }).click();
+  await expect(page).toHaveURL(/\/sequence\/run-6\?step=/);
+  await expect(diagram(page).getByRole('button', { name: 'request load /' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('complementary', { name: 'Message details' })).toContainText('page load');
 });
 
 test('sequence shows the browser steps first', async ({ page }) => {

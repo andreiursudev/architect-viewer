@@ -8,7 +8,7 @@ async function pickShippingScenario(page: Page) {
 }
 
 const node = (page: Page, id: string) => page.locator(`.component-node[title="${id}"]`);
-const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[id="${id}"]`);
+const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[data-connection="${id}"]`);
 const diagram = (page: Page) => page.getByRole('group', { name: 'Sequence diagram' });
 
 test('board highlights the hop from orders-service through order-placed to shipping-service', async ({ page }) => {

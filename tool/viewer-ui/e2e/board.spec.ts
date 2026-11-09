@@ -13,6 +13,8 @@ test('board shows components and highlights create-order', async ({ page }) => {
     await expect(nodes.filter({ hasText: name })).toBeVisible();
   }
   await expect(page.locator('.path-edge')).toHaveCount(0);
+  await expect(page.locator('.react-flow__edge')).toHaveCount(0); // no lines until something is selected
+  await expect(page.locator('.edge-chip')).toHaveCount(0);
 
   await pickCreateOrder(page);
   await page.getByLabel('Run').selectOption('run-1'); // the newest run crosses every component, which would not show a selective highlight
@@ -20,6 +22,37 @@ test('board shows components and highlights create-order', async ({ page }) => {
   await expect(page.locator('.react-flow__edge-path.path-edge')).toHaveCount(2);
   await expect(page.locator('.component-node.on-path')).toHaveCount(3);
   await expect(page.locator('.component-node:not(.on-path)')).toHaveCount(6); // inventory-service, shipping-service, their databases, the frontend and the topic stay unhighlighted
+  await expect(page.locator('.react-flow__edge')).toHaveCount(2); // only the run's path is drawn
+});
+
+test('a selected component draws its connections and lists their endpoints', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.react-flow__node').filter({ hasText: 'Orders service' }).click();
+  await expect(page.locator('.react-flow__edge').first()).toBeVisible();
+  const drawn = await page.locator('.react-flow__edge').count();
+  expect(drawn).toBeGreaterThan(1);
+
+  const outgoing = page.getByRole('region', { name: 'Outgoing connections' });
+  await expect(outgoing.locator('.endpoint').first()).toBeVisible();
+
+  await page.getByRole('checkbox', { name: 'Show all connections' }).check();
+  expect(await page.locator('.react-flow__edge').count()).toBeGreaterThan(drawn);
+});
+
+test('the details panel can be widened by dragging its edge', async ({ page }) => {
+  await page.goto('/');
+  const panel = page.getByRole('complementary', { name: 'Details' });
+  const before = (await panel.boundingBox())!;
+  const handle = (await page.getByRole('separator', { name: 'Resize details panel' }).boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 - 150, handle.y + 200, { steps: 6 });
+  await page.mouse.up();
+  const after = (await panel.boundingBox())!;
+  expect(after.width - before.width).toBeGreaterThan(140);
+
+  await page.reload();
+  expect(Math.abs((await panel.boundingBox())!.width - after.width)).toBeLessThanOrEqual(2);
 });
 
 test('dragging a node persists its position', async ({ page }) => {

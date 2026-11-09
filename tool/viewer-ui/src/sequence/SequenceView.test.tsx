@@ -1,11 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient';
 import { comp, createOrderFlow, loadStep, methodFlow, routeStep, submitStep, viewWith } from '../board/testData';
-import { SequenceView } from './SequenceView';
+import { SEQUENCE_PANEL_WIDTH, SequenceView } from './SequenceView';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -245,4 +245,29 @@ test('moving in the carousel scrolls the selected step into view behind it', asy
   } finally {
     delete (Element.prototype as Partial<Element>).scrollIntoView;
   }
+});
+
+test('a step linked from the board opens selected, with its details shown', async () => {
+  const [, insert] = createOrderFlow.steps;
+  renderAt(`/sequence/run-1?step=${encodeURIComponent(insert.stepId)}`);
+  const diagram = await screen.findByRole('group', { name: 'Sequence diagram' });
+  expect(within(diagram).getByRole('button', { name: `request ${insert.label.trim()}` })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('complementary', { name: 'Message details' })).toHaveTextContent('SQL statement');
+});
+
+test('the details panel can be resized from its left edge and remembers its own width', async () => {
+  window.localStorage.clear();
+  renderAt('/sequence/run-1');
+  await screen.findByRole('group', { name: 'Sequence diagram' });
+  const handle = screen.getByRole('separator', { name: 'Resize message details panel' });
+  const panel = screen.getByRole('complementary', { name: 'Message details' });
+  expect(panel.style.width).toBe(`${SEQUENCE_PANEL_WIDTH}px`);
+
+  fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+  expect(panel.style.width).toBe(`${SEQUENCE_PANEL_WIDTH + 24}px`);
+  expect(window.localStorage.getItem('stack-viewer.sequence-panel-width')).toBe(String(SEQUENCE_PANEL_WIDTH + 24));
+  expect(window.localStorage.getItem('stack-viewer.side-panel-width')).toBeNull(); // the board's panel keeps its own
+
+  fireEvent.doubleClick(handle);
+  expect(panel.style.width).toBe(`${SEQUENCE_PANEL_WIDTH}px`);
 });

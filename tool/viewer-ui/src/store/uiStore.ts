@@ -8,6 +8,11 @@ export interface UiState {
   selectedScenarioId: string | null;
   selectedRunId: string | null;
   hoveredConnectionId: string | null;
+  /**
+   * Every connection is drawn on the board. Off by default: the board then draws only the path of the selected run, or
+   * the connections of the selected component, so a large workspace does not drown in lines.
+   */
+  showAllConnections: boolean;
   /** Unsaved note drafts by target id: they survive deselecting and reselecting, so a stray click loses nothing. */
   noteDrafts: Record<string, string>;
   /** Failed background actions (accepting, saving the layout...) waiting to be dismissed. */
@@ -17,6 +22,7 @@ export interface UiState {
   selectScenario: (scenarioId: string | null, runId: string | null) => void;
   selectRun: (id: string | null) => void;
   hoverConnection: (id: string | null) => void;
+  setShowAllConnections: (show: boolean) => void;
   setNoteDraft: (targetId: string, draft: string | null) => void;
   reportError: (message: string) => void;
   dismissError: (id: number) => void;
@@ -30,6 +36,7 @@ export const useUiStore = create<UiState>((set) => ({
   selectedScenarioId: null,
   selectedRunId: null,
   hoveredConnectionId: null,
+  showAllConnections: false,
   noteDrafts: {},
   errors: [],
   // a component and a connection are never selected together: the side panel shows one of them
@@ -38,6 +45,7 @@ export const useUiStore = create<UiState>((set) => ({
   selectScenario: (scenarioId, runId) => set({ selectedScenarioId: scenarioId, selectedRunId: runId }),
   selectRun: (id) => set({ selectedRunId: id }),
   hoverConnection: (id) => set({ hoveredConnectionId: id }),
+  setShowAllConnections: (show) => set({ showAllConnections: show }),
   setNoteDraft: (targetId, draft) =>
     set((s) => {
       const { [targetId]: _dropped, ...rest } = s.noteDrafts;

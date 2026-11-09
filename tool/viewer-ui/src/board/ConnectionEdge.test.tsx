@@ -3,8 +3,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Position, type EdgeProps } from '@xyflow/react';
 import type { ReactNode } from 'react';
-import { expect, test, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
+import { afterEach, expect, test, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient';
+import { useUiStore } from '../store/uiStore';
 import { ConnectionEdge } from './ConnectionEdge';
 import { highlightFor, HighlightContext } from './highlight';
 import { conn, createOrderFlow, unrecordedHostStep } from './testData';
@@ -47,14 +49,18 @@ function renderEdge(id: string, flow: typeof createOrderFlow | null, label?: str
   const highlight = flow ? highlightFor(flow) : null;
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <HighlightContext.Provider value={highlight}>
-        <svg>
-          <ConnectionEdge {...edgeProps(id, label)} />
-        </svg>
-      </HighlightContext.Provider>
+      <MemoryRouter>
+        <HighlightContext.Provider value={highlight}>
+          <svg>
+            <ConnectionEdge {...edgeProps(id, label)} />
+          </svg>
+        </HighlightContext.Provider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => useUiStore.getState().selectConnection(null));
 
 const chip = () => document.querySelector('.edge-chip') as HTMLElement;
 const path = () => document.querySelector('.react-flow__edge-path') as SVGPathElement;
@@ -89,74 +95,81 @@ test('repeated calls over one connection add a multiplier to the badge', () => {
 });
 
 const chipLabel = () => document.querySelector('.edge-label') as HTMLElement;
+const badges = () => [...document.querySelectorAll<HTMLElement>('.step-badge')];
 
 test('without a run the chip shows the stored connection label', () => {
   renderEdge('e2e-client--orders-service', null, 'POST /orders, GET /orders/{id}');
   expect(chipLabel()).toHaveTextContent('POST /orders, GET /orders/{id}');
 });
 
-test('on the path of a run the chip shows what the run did on that hop, once per distinct label', () => {
+test('on the path of a run the chip carries only the numbers of its steps, in run order', () => {
   const [request, insert] = createOrderFlow.steps;
   const read = { ...request, stepId: 'read', label: 'GET /orders/{id}', startEpochNanos: request.startEpochNanos + 100_000_000 };
   const again = { ...request, stepId: 'again', startEpochNanos: request.startEpochNanos + 200_000_000 };
+  // the request (1), its insert (2), then the read and the repeated request in a row (3)
   renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [request, insert, read, again] }, 'Orders API');
-  expect(chipLabel()).toHaveTextContent('POST /orders, GET /orders/{id}');
-  expect(chipLabel()).not.toHaveTextContent('Orders API');
-  expect(document.querySelector('.step-badge')).toHaveTextContent('1×3');
+  expect(badges().map((b) => b.textContent)).toEqual(['1', '3×2']);
+  expect(document.querySelector('.edge-label')).toBeNull(); // no label: the sequence view tells what the steps did
+  expect(chip()).not.toHaveTextContent('Orders API');
+  expect(chip()).not.toHaveTextContent('POST /orders');
 });
 
-test('off the path of a run the chip keeps the stored label', () => {
+test('a step number opens the sequence view of the run at its first call', () => {
+  const [request, insert] = createOrderFlow.steps;
+  const read = { ...request, stepId: 'read', label: 'GET /orders/{id}', startEpochNanos: request.startEpochNanos + 100_000_000 };
+  const again = { ...request, stepId: 'again', startEpochNanos: request.startEpochNanos + 200_000_000 };
+  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [request, insert, read, again] });
+  expect(screen.getByRole('link', { name: 'Step 1, open in the sequence view' })).toHaveAttribute(
+    'href',
+    `/sequence/run-1?step=${encodeURIComponent(request.stepId)}`,
+  );
+  expect(screen.getByRole('link', { name: 'Step 3, open in the sequence view' })).toHaveAttribute('href', '/sequence/run-1?step=read');
+});
+
+test('hovering a step number tells its calls and what they answered, without a details box', async () => {
+  const user = userEvent.setup();
+  const [request, insert] = createOrderFlow.steps;
+  const again = { ...insert, stepId: 'again', label: 'select * from orders', startEpochNanos: insert.startEpochNanos + 1_000_000 };
+  renderEdge('orders-service--postgresql-orders', { ...createOrderFlow, steps: [request, insert, again] });
+  expect(badges()[0].getAttribute('title')!.split('\n')).toEqual([
+    'Step 2 of the run',
+    `${insert.label} → 1 row`,
+    'select * from orders → 1 row',
+  ]);
+  await user.hover(chip());
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+});
+
+test('off the path of a run the chip keeps the stored label, and clicking it selects the connection', async () => {
+  const user = userEvent.setup();
   renderEdge('orders-service--billing-service', createOrderFlow, 'Invoices');
   expect(chipLabel()).toHaveTextContent('Invoices');
+  await user.click(chipLabel());
+  expect(useUiStore.getState().selectedConnectionId).toBe('orders-service--billing-service');
 });
 
-test('hovering a path edge shows its hop details, and leaving hides them', async () => {
-  const user = userEvent.setup();
-  renderEdge('e2e-client--orders-service', createOrderFlow);
-  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-
-  await user.hover(chip());
-  expect(await screen.findByRole('tooltip')).toHaveTextContent('POST /orders');
-  expect(screen.getByRole('tooltip')).toHaveTextContent('201');
-
-  await user.unhover(chip());
-  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-});
-
-test('hovering an edge outside the path shows no hop details', async () => {
-  const user = userEvent.setup();
-  renderEdge('orders-service--billing-service', createOrderFlow);
-  await user.hover(chip());
-  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-});
-
-test('a hop that failed on the path is marked on its chip', () => {
+test('a step that failed is marked on its number and on the chip, and its number tells the response', () => {
   const [request, insert] = createOrderFlow.steps;
-  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [{ ...request, status: 409 }, insert] });
+  const read = { ...request, stepId: 'read', startEpochNanos: request.startEpochNanos + 100_000_000 };
+  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [{ ...request, status: 409 }, insert, read] });
   expect(chip()).toHaveClass('is-failed');
+  const [failed, fine] = badges();
+  expect(failed).toHaveClass('is-failed');
+  expect(failed.getAttribute('title')).toContain('POST /orders → 409');
+  expect(fine).not.toHaveClass('is-failed');
 });
 
-test('a failed chip shows the response of the first failed step in run order', () => {
-  const [request, insert] = createOrderFlow.steps;
-  const conflict = { ...request, stepId: 'conflict', status: 409, startEpochNanos: request.startEpochNanos + 100_000_000 };
-  const error = { ...request, stepId: 'error', status: 500, startEpochNanos: request.startEpochNanos + 200_000_000 };
-  const ok = { ...request, stepId: 'ok', startEpochNanos: request.startEpochNanos + 300_000_000 };
-  // listed out of run order on purpose
-  renderEdge('e2e-client--orders-service', { ...createOrderFlow, steps: [error, ok, conflict, insert] });
-  expect(document.querySelector('.edge-response')).toHaveTextContent('409');
-  expect(document.querySelector('.edge-response')).not.toHaveTextContent('500');
-});
-
-test('a failed chip shows the error type of a call that got no answer', () => {
+test('a call that got no answer marks its number with the error type', () => {
   renderEdge('orders-service--tax-service', { ...createOrderFlow, steps: [unrecordedHostStep] });
   expect(chip()).toHaveClass('is-failed');
-  expect(document.querySelector('.edge-response')).toHaveTextContent('ConnectException');
+  expect(badges()[0]).toHaveClass('is-failed');
+  expect(badges()[0].getAttribute('title')!).toContain('ConnectException');
 });
 
-test('a hop that succeeded is not marked as failed and shows no response text', () => {
+test('a step that succeeded is not marked as failed', () => {
   renderEdge('e2e-client--orders-service', createOrderFlow);
   expect(chip()).not.toHaveClass('is-failed');
-  expect(document.querySelector('.edge-response')).toBeNull();
+  expect(badges()[0]).not.toHaveClass('is-failed');
 });
 
 test('a failed hop elsewhere on the path does not mark this chip', () => {

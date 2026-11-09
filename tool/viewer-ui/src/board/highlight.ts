@@ -1,47 +1,61 @@
 import type { Edge } from '@xyflow/react';
 import { createContext, useContext } from 'react';
 import type { Flow, FlowStep } from '../api/types';
+import { stepsInRunOrder } from '../runOrder';
 import { isFailedStep } from '../status';
 import { PATH_COLOR } from './toFlowElements';
 
-/** What a recorded run touches: the components and connections of its path, and what happened on each connection. */
+/**
+ * One numbered step of a run on the board: a call over a connection, together with the calls right after it over the
+ * same connection. A connection the run comes back to later gets another hop, so the numbers follow the run.
+ */
+export interface Hop {
+  connectionId: string;
+  /** 1-based position along the run: its number on the board. */
+  order: number;
+  /** The calls of the hop in run order; more than one when the run used the connection several times in a row. */
+  steps: FlowStep[];
+}
+
+/** What a recorded run touches: the components and connections of its path, and its hops in run order. */
 export interface Highlight {
+  runId: string;
   nodeIds: Set<string>;
   /** Connection ids in the order the run first used them. */
   edgeIds: Set<string>;
-  stepsByEdge: Map<string, FlowStep[]>;
+  hops: Hop[];
+  /** The hops over each connection of the path, in run order: the numbers on its edge. */
+  hopsByConnection: Map<string, Hop[]>;
   /** Connections on which at least one step of the run failed. */
   failedEdgeIds: Set<string>;
-  /** 1-based position of each highlighted connection along the path: the number of its badge. */
-  orderByEdge: Map<string, number>;
 }
 
-/** Steps are taken in the order they started, whatever order the backend listed them in. */
+/** Steps are taken in the order the sequence diagram draws them, whatever order the backend listed them in. */
 export function highlightFor(flow: Flow): Highlight {
-  const steps = [...flow.steps].sort((a, b) => a.startEpochNanos - b.startEpochNanos);
   const nodeIds = new Set<string>();
   const edgeIds = new Set<string>();
-  const stepsByEdge = new Map<string, FlowStep[]>();
-  const orderByEdge = new Map<string, number>();
+  const hops: Hop[] = [];
+  const hopsByConnection = new Map<string, Hop[]>();
   const failedEdgeIds = new Set<string>();
 
-  for (const step of steps) {
-    // A method step happens inside a component: it adds no connection to the board.
+  for (const step of stepsInRunOrder(flow)) {
+    // A method step happens inside a component: it adds no connection to the board, nor does it break a run of calls.
     const connectionId = step.connectionId;
     if (connectionId == null) continue;
     nodeIds.add(step.from);
     nodeIds.add(step.to);
     edgeIds.add(connectionId);
     if (isFailedStep(step)) failedEdgeIds.add(connectionId);
-    const onEdge = stepsByEdge.get(connectionId);
-    if (onEdge) {
-      onEdge.push(step);
+    const last = hops.at(-1);
+    if (last?.connectionId === connectionId) {
+      last.steps.push(step);
     } else {
-      stepsByEdge.set(connectionId, [step]);
-      orderByEdge.set(connectionId, orderByEdge.size + 1);
+      const hop = { connectionId, order: hops.length + 1, steps: [step] };
+      hops.push(hop);
+      hopsByConnection.set(connectionId, [...(hopsByConnection.get(connectionId) ?? []), hop]);
     }
   }
-  return { nodeIds, edgeIds, stepsByEdge, orderByEdge, failedEdgeIds };
+  return { runId: flow.runId, nodeIds, edgeIds, hops, hopsByConnection, failedEdgeIds };
 }
 
 /** Path edges are drawn above the dimmed ones and their arrowheads take the path colour; the others stay as they are. */
@@ -56,6 +70,29 @@ export function emphasizePath<E extends Edge>(edges: E[], highlight: Highlight |
         }
       : e,
   );
+}
+
+/** What the board is focused on: it decides which connections are drawn. */
+export interface EdgeFocus {
+  highlight: Highlight | null;
+  componentId: string | null;
+  connectionId: string | null;
+  showAll: boolean;
+}
+
+/**
+ * Hides the connections the user is not looking at, so a large workspace does not drown in lines and labels. With a run
+ * selected only its path is drawn; otherwise only the connections of the selected component. The selected connection
+ * always stays, and [EdgeFocus.showAll] draws everything.
+ */
+export function focusEdges<E extends Edge>(edges: E[], focus: EdgeFocus): E[] {
+  if (focus.showAll) return edges;
+  const shown = (e: E) => {
+    if (e.id === focus.connectionId) return true;
+    if (focus.highlight) return focus.highlight.edgeIds.has(e.id);
+    return focus.componentId !== null && (e.source === focus.componentId || e.target === focus.componentId);
+  };
+  return edges.map((e) => (shown(e) ? e : { ...e, hidden: true }));
 }
 
 /** How many hops of the run have no edge on the board (a hidden connection, or a component that is not listed). */

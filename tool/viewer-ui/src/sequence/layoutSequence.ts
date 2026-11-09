@@ -1,4 +1,5 @@
 import type { Flow, FlowStep } from '../api/types';
+import { stepChildren } from '../runOrder';
 import { responseText } from '../status';
 
 export const COLUMN_GAP = 220;
@@ -102,16 +103,7 @@ export function classCounts(flow: Flow): Map<string, number> {
  * none (the topic is not busy), and a consume's runs to the last row of its subtree.
  */
 export function layoutSequence(flow: Flow, expanded: ReadonlySet<string> = new Set()): SequenceLayout {
-  const ids = new Set(flow.steps.map((s) => s.stepId));
-  const children = new Map<string | null, FlowStep[]>();
-  for (const step of flow.steps) {
-    // a step whose parent is not part of the flow is a root
-    const parent = step.parentStepId != null && ids.has(step.parentStepId) ? step.parentStepId : null;
-    const siblings = children.get(parent);
-    if (siblings) siblings.push(step);
-    else children.set(parent, [step]);
-  }
-  for (const siblings of children.values()) siblings.sort((a, b) => a.startEpochNanos - b.startEpochNanos);
+  const children = stepChildren(flow);
 
   const found: { id: string; component: string; unit: string | null }[] = [];
   /** The lifeline an end of a step sits on; it is noted the first time it is used. */

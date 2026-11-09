@@ -1,18 +1,25 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useFlow, useWorkspace } from '../api/queries';
 import { MessageDetails } from './MessageDetails';
 import { ScreenshotCarousel, type ScreenshotSlide } from './Screenshot';
 import { classCounts } from './layoutSequence';
 import { SequenceDiagram, type MessageSelection, type ParticipantInfo } from './SequenceDiagram';
+import { useResizableWidth } from '../panel/useResizableWidth';
 import { useDragToScroll } from './useDragToScroll';
+
+/** The details panel's width until it is resized: payloads need more room than the board's panel. */
+export const SEQUENCE_PANEL_WIDTH = 420;
 
 /** The page of one recorded run: its calls as a sequence diagram, and the payload of the message clicked. */
 export function SequenceView() {
   const { runId = '' } = useParams();
   const flow = useFlow(runId);
   const workspace = useWorkspace();
-  const [selected, setSelected] = useState<MessageSelection | null>(null);
+  // a step number clicked on the board opens the run with that step's request selected (`?step=<step id>`)
+  const [search] = useSearchParams();
+  const linked = search.get('step');
+  const [selected, setSelected] = useState<MessageSelection | null>(linked ? { stepId: linked, kind: 'request' } : null);
   // the selected step's screenshot at its own size, a carousel over the run's ui steps
   const [viewing, setViewing] = useState(false);
   // services drawn as one lifeline per class; every run opens fully collapsed
@@ -20,6 +27,12 @@ export function SequenceView() {
   // a large diagram is dragged around from its empty spots, not only by its scrollbars
   const scroll = useRef<HTMLDivElement>(null);
   useDragToScroll(scroll);
+  // the details panel is resized like the board's, and remembers its own width
+  const panel = useResizableWidth({
+    storageKey: 'stack-viewer.sequence-panel-width',
+    defaultWidth: SEQUENCE_PANEL_WIDTH,
+    label: 'Resize message details panel',
+  });
 
   const components = useMemo(() => {
     const byId: Record<string, ParticipantInfo> = {};
@@ -101,12 +114,19 @@ export function SequenceView() {
           )}
         </div>
       </div>
-      <aside className="side-panel sequence-details" aria-label="Message details">
-        {step && selected ? (
-          <MessageDetails runId={runId} step={step} kind={selected.kind} steps={steps} onOpenScreenshot={() => setViewing(true)} />
-        ) : (
-          <p className="muted sequence-hint">Select a message to see its payload.</p>
-        )}
+      <aside className="side-panel sequence-details" aria-label="Message details" style={{ width: panel.width }}>
+        <div
+          className={`panel-resizer${panel.dragging ? ' is-dragging' : ''}`}
+          title="Drag to resize · double-click to reset"
+          {...panel.handleProps}
+        />
+        <div className="side-panel-scroll">
+          {step && selected ? (
+            <MessageDetails runId={runId} step={step} kind={selected.kind} steps={steps} onOpenScreenshot={() => setViewing(true)} />
+          ) : (
+            <p className="muted sequence-hint">Select a message to see its payload.</p>
+          )}
+        </div>
       </aside>
       {viewing && step && (
         <ScreenshotCarousel runId={runId} slides={slides} current={step.stepId} onMove={showStep} onClose={closeViewing} />

@@ -6,8 +6,8 @@ async function pickOutOfStock(page: Page) {
 }
 
 const node = (page: Page, id: string) => page.locator(`.component-node[title="${id}"]`);
-const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[id="${id}"]`);
-const chip = (page: Page, id: string) => page.locator('.edge-chip', { has: page.locator(`button[title="${id}"]`) });
+const pathEdge = (page: Page, id: string) => page.locator(`.react-flow__edge-path.path-edge[data-connection="${id}"]`);
+const chip = (page: Page, id: string) => page.locator(`.edge-chip[data-connection="${id}"]`);
 
 test('board shows inventory-service and its database', async ({ page }) => {
   await page.goto('/');

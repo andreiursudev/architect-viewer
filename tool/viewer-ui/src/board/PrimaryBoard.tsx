@@ -17,7 +17,7 @@ import { useUiStore } from '../store/uiStore';
 import { autoLayout } from './autoLayout';
 import { ComponentNode } from './ComponentNode';
 import { ConnectionEdge } from './ConnectionEdge';
-import { emphasizePath, HighlightContext, highlightFor, hopsOffBoard } from './highlight';
+import { emphasizePath, focusEdges, HighlightContext, highlightFor, hopsOffBoard } from './highlight';
 import { useDebouncedSave } from './useDebouncedSave';
 import { toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
 
@@ -44,6 +44,10 @@ function Board() {
   const selectConnection = useUiStore((s) => s.selectConnection);
   const runId = useUiStore((s) => s.selectedRunId);
   const runFlow = useFlow(runId);
+  const selectedComponentId = useUiStore((s) => s.selectedComponentId);
+  const selectedConnectionId = useUiStore((s) => s.selectedConnectionId);
+  const showAll = useUiStore((s) => s.showAllConnections);
+  const setShowAll = useUiStore((s) => s.setShowAllConnections);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ConnectionEdgeType>([]);
@@ -53,7 +57,16 @@ function Board() {
 
   // The path of the selected run; nothing is highlighted while its flow is loading or when it failed to load.
   const highlight = useMemo(() => (runId && runFlow.data ? highlightFor(runFlow.data) : null), [runId, runFlow.data]);
-  const shownEdges = useMemo(() => emphasizePath(edges, highlight), [edges, highlight]);
+  const shownEdges = useMemo(
+    () =>
+      focusEdges(emphasizePath(edges, highlight), {
+        highlight,
+        componentId: selectedComponentId,
+        connectionId: selectedConnectionId,
+        showAll,
+      }),
+    [edges, highlight, selectedComponentId, selectedConnectionId, showAll],
+  );
   const hiddenHops = useMemo(() => hopsOffBoard(highlight, edges.map((e) => e.id)), [edges, highlight]);
   const layoutLoaded = !layoutQuery.isPending;
   const layout = layoutQuery.data ?? null;
@@ -151,6 +164,12 @@ function Board() {
       >
         <Background gap={20} size={1.2} />
         <Controls showInteractive={false} />
+        <Panel position="top-right" className="edge-toggle">
+          <label>
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+            Show all connections
+          </label>
+        </Panel>
         <Panel position="bottom-center" className="legend">
           <span className="legend-item"><i className="legend-line" /> verified</span>
           <span className="legend-item"><i className="legend-line is-dashed" /> unverified</span>
