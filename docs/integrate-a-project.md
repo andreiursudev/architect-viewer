@@ -482,6 +482,9 @@ Then open the viewer and look at the board and each scenario's sequence view:
 
 It serves http://localhost:8090. Leave accepting components and connections to the user: that's their curation.
 
+One viewer serves several workspaces: the project name in the header is a switcher, and `Add workspace…` takes the
+pasted folder of another stack repo's workspace. The list lives in `~/.stack-viewer/workspaces.yaml`.
+
 Write the stack repo's `README.md`: prerequisites, the commands above, the IntelliJ run configuration values, what
 each scenario documents, and what isn't recorded for this project. Commit everything except `recordings/` and
 `build/`.

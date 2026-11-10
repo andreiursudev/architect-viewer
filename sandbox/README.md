@@ -88,6 +88,10 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    tool/viewer-backend/build/stack-viewer/stack-viewer --workspace=sandbox/stack --recordings=sandbox/recordings
    ```
 
+   One viewer serves several workspaces. The project name in the header is a switcher: pick another workspace from
+   it, or choose `Add workspace…` and paste the folder of another project's workspace. The list is kept in
+   `~/.stack-viewer/workspaces.yaml`.
+
 6. Stop the stack when done:
 
    ```sh
