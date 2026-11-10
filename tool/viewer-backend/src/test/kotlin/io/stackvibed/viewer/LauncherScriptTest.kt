@@ -99,6 +99,14 @@ class LauncherScriptTest {
     )
 
     @Test
+    fun `usage lines show --workspace as optional`() {
+        for (name in listOf("stack-viewer", "stack-viewer.cmd")) {
+            val usage = Files.readAllLines(script.resolveSibling(name)).single { "Usage:" in it }
+            usage shouldContain "stack-viewer [--workspace=<path>] "
+        }
+    }
+
+    @Test
     fun `launcher starts the viewer`() {
         val workspace = createTempDirectory("ws with space")
         val result = run(

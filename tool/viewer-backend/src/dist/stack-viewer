@@ -1,6 +1,6 @@
 #!/bin/sh
 # Stack viewer launcher (POSIX sh).
-# Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--workspaces-file=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
+# Usage: stack-viewer [--workspace=<path>] [--recordings=<path>] [--workspaces-file=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
 # Needs Java 25+: from $STACK_VIEWER_JAVA_HOME/bin/java when that is set (a Java for the viewer only, leaving JAVA_HOME
 # and PATH to the machine's default Java), else from $JAVA_HOME/bin/java when that is set, otherwise `java` on PATH.
 
