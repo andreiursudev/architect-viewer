@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 // run-5 is create-order across both services, with the methods inside them recorded
 async function openRun(page: Page) {
-  await page.goto('/sequence/run-5');
+  await page.goto('/w/orders-demo/sequence/run-5');
   await expect(page.getByRole('group', { name: 'Sequence diagram' })).toBeVisible();
 }
 

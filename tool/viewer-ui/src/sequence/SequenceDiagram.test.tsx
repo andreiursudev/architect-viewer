@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render as renderPlain, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { FlowStep } from '../api/types';
 import userEvent from '@testing-library/user-event';
 import { consumeStep, createOrderFlow, kafkaStep, loadStep, methodFlow, produceStep, unrecordedHostStep } from '../board/testData';
+import { InWorkspace } from '../test/inWorkspace';
 import { SequenceDiagram, type MessageSelection } from './SequenceDiagram';
+
+// the components read their workspace from the route, as they do under `WorkspaceScope`
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: InWorkspace });
 
 function renderSteps(steps: FlowStep[], expanded: string[] = [], onToggle: (component: string) => void = () => {}) {
   render(
@@ -100,7 +105,7 @@ test('a thumbnail sits beside its ui arrow and selects the step', async () => {
   const onSelect = vi.fn();
   const thumbnail = renderBrowserRun(null, onSelect);
   const image = thumbnail.querySelector('image')!;
-  expect(image.getAttribute('href')).toBe(`/api/runs/run-6/screenshots/${shot}`);
+  expect(image.getAttribute('href')).toBe(`/api/w/test/runs/run-6/screenshots/${shot}`);
   expect(image.getAttribute('x')).toBe('7');
   expect(image.getAttribute('y')).toBe('73'); // the arrow's row (100) minus half a thumbnail
   expect(image.getAttribute('width')).toBe('96');

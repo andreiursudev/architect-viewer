@@ -5,25 +5,44 @@ import { SidePanel } from './panel/SidePanel';
 import { ScenarioPicker } from './scenarios/ScenarioPicker';
 import { SequenceView } from './sequence/SequenceView';
 import { useWorkspace } from './api/queries';
+import { Home } from './workspaces/Home';
+import { WorkspaceScope } from './workspaces/WorkspaceScope';
+import { useWorkspaceName } from './workspaces/useWorkspaceName';
 
-/** The shell every page shares: a header with the project name and the page below it. New pages are new routes here. */
+/**
+ * The shell every page shares: a header with the project name and the page below it. New pages are new routes here; a
+ * workspace's pages sit under `/w/:ws`.
+ */
 export function App() {
   return (
     <div className="app">
-      <Header />
-      <ErrorBanner />
       <Routes>
-        <Route path="/" element={<BoardPage />} />
-        <Route path="/sequence/:runId" element={<SequenceView />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/w/:ws/*" element={<WorkspacePages />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
   );
 }
 
+function WorkspacePages() {
+  const ws = useWorkspaceName();
+  return (
+    <WorkspaceScope>
+      <Header />
+      <ErrorBanner />
+      <Routes>
+        <Route path="" element={<BoardPage />} />
+        <Route path="sequence/:runId" element={<SequenceView />} />
+        <Route path="*" element={<Navigate to={`/w/${encodeURIComponent(ws)}/`} replace />} />
+      </Routes>
+    </WorkspaceScope>
+  );
+}
+
 function Header() {
   const { data } = useWorkspace();
-  const onSequence = useMatch('/sequence/:runId') !== null;
+  const onSequence = useMatch('/w/:ws/sequence/:runId') !== null;
   return (
     <header className="app-header">
       <span className="app-logo" aria-hidden="true" />

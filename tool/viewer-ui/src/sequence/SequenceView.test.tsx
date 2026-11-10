@@ -11,7 +11,7 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      if (url === '/api/workspace') {
+      if (url === '/api/w/test/workspace') {
         return Response.json(
           viewWith({
             components: [
@@ -22,10 +22,10 @@ beforeEach(() => {
           }),
         );
       }
-      if (url === '/api/runs/run-1/flow') return Response.json(createOrderFlow);
-      if (url === '/api/runs/methods/flow') return Response.json(methodFlow);
-      if (url === '/api/runs/shots/flow') return Response.json(shotsFlow);
-      if (url === '/api/runs/empty/flow') return Response.json({ ...createOrderFlow, runId: 'empty', steps: [] });
+      if (url === '/api/w/test/runs/run-1/flow') return Response.json(createOrderFlow);
+      if (url === '/api/w/test/runs/methods/flow') return Response.json(methodFlow);
+      if (url === '/api/w/test/runs/shots/flow') return Response.json(shotsFlow);
+      if (url === '/api/w/test/runs/empty/flow') return Response.json({ ...createOrderFlow, runId: 'empty', steps: [] });
       return Response.json({ error: 'unknown run' }, { status: 404 });
     }),
   );
@@ -50,8 +50,8 @@ function renderAt(path: string) {
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/" element={<p>the board</p>} />
-          <Route path="/sequence/:runId" element={<SequenceView />} />
+          <Route path="/w/:ws/" element={<p>the board</p>} />
+          <Route path="/w/:ws/sequence/:runId" element={<SequenceView />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -59,14 +59,14 @@ function renderAt(path: string) {
 }
 
 test('shows the participants of the run with their display names', async () => {
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   expect(await screen.findByText('E2E client')).toBeInTheDocument();
   expect(screen.getByText('Orders service')).toBeInTheDocument();
   expect(screen.getByText('Orders DB')).toBeInTheDocument();
 });
 
 test('every message is a button; the details panel asks for a selection first', async () => {
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   const diagram = await screen.findByRole('group', { name: /sequence diagram/i });
   expect(within(diagram).getAllByRole('button')).toHaveLength(4);
   expect(screen.getByText(/select a message/i)).toBeInTheDocument();
@@ -74,7 +74,7 @@ test('every message is a button; the details panel asks for a selection first', 
 
 test('clicking a message shows its payload', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   await user.click(await screen.findByRole('button', { name: /request POST \/orders/ }));
   expect(screen.getByText(/"customerId": "c-1"/)).toBeInTheDocument();
   expect(screen.queryByText(/select a message/i)).not.toBeInTheDocument();
@@ -82,20 +82,20 @@ test('clicking a message shows its payload', async () => {
 
 test('clicking a database response shows the statement of the same step', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   await user.click(await screen.findByRole('button', { name: /response 1 row$/ }));
   expect(screen.getByText(/values \(\?, \?, \?, \?\)/)).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Response' })).toHaveClass('is-selected');
 });
 
 test('an empty run says so', async () => {
-  renderAt('/sequence/empty');
+  renderAt('/w/test/sequence/empty');
   expect(await screen.findByText(/recorded no calls/i)).toBeInTheDocument();
 });
 
 test('an unknown run shows the error and a way back', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/nope');
+  renderAt('/w/test/sequence/nope');
   // the query client retries a failed load once, after a delay
   expect(await screen.findByText(/could not load the run/i, {}, { timeout: 4000 })).toBeInTheDocument();
   await user.click(screen.getByRole('link', { name: /board/i }));
@@ -103,22 +103,22 @@ test('an unknown run shows the error and a way back', async () => {
 });
 
 test('the bar counts calls, and method calls when there are any', async () => {
-  const first = renderAt('/sequence/run-1');
+  const first = renderAt('/w/test/sequence/run-1');
   expect(await screen.findByText('2 calls')).toBeInTheDocument();
   first.unmount();
-  renderAt('/sequence/methods');
+  renderAt('/w/test/sequence/methods');
   expect(await screen.findByText('4 calls · 4 method calls')).toBeInTheDocument();
 });
 
 test('without method steps there is nothing to expand', async () => {
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   await screen.findByText('2 calls');
   expect(screen.queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument();
 });
 
 test('expand all and collapse all', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/methods');
+  renderAt('/w/test/sequence/methods');
   const diagram = await screen.findByRole('group', { name: /sequence diagram/i });
   expect(within(diagram).getAllByRole('button')).toHaveLength(8); // 4 calls, request and response each
   expect(screen.getByRole('button', { name: '▸ 4 classes' })).toBeInTheDocument();
@@ -135,7 +135,7 @@ test('expand all and collapse all', async () => {
 
 test('a service expands on its own toggle and collapses on its group button', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/methods');
+  renderAt('/w/test/sequence/methods');
   await user.click(await screen.findByRole('button', { name: '▸ 4 classes' }));
   expect(screen.getByText('OrderService')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Collapse Orders service' }));
@@ -144,7 +144,7 @@ test('a service expands on its own toggle and collapses on its group button', as
 
 test('collapsing a service clears a selected method step of it', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/methods');
+  renderAt('/w/test/sequence/methods');
   await user.click(await screen.findByRole('button', { name: 'Expand all' }));
   const diagram = screen.getByRole('group', { name: /sequence diagram/i });
   await user.click(within(diagram).getByRole('button', { name: /OrderService\.placeOrder/ }));
@@ -158,7 +158,7 @@ test('collapsing a service clears a selected method step of it', async () => {
 
 test('collapse all clears a selected method step, but keeps a selected call', async () => {
   const user = userEvent.setup();
-  renderAt('/sequence/methods');
+  renderAt('/w/test/sequence/methods');
   await user.click(await screen.findByRole('button', { name: 'Expand all' }));
   const diagram = screen.getByRole('group', { name: /sequence diagram/i });
   const panel = screen.getByRole('complementary', { name: 'Message details' });
@@ -175,7 +175,7 @@ test('collapse all clears a selected method step, but keeps a selected call', as
 
 async function openCarouselAt(label: string) {
   const user = userEvent.setup();
-  renderAt('/sequence/shots');
+  renderAt('/w/test/sequence/shots');
   const diagram = await screen.findByRole('group', { name: /sequence diagram/i });
   await user.click(within(diagram).getByRole('button', { name: `screenshot ${label}` }));
   await user.click(screen.getByRole('img', { name: `Screenshot after ${label}` }));
@@ -186,7 +186,7 @@ const panelHeading = () => within(screen.getByRole('complementary', { name: 'Mes
 
 test('the panel screenshot opens a carousel over the run\'s browser steps', async () => {
   const { dialog } = await openCarouselAt('load /');
-  expect(within(dialog).getByRole('img')).toHaveAttribute('src', `/api/runs/shots/screenshots/${first}`);
+  expect(within(dialog).getByRole('img')).toHaveAttribute('src', `/api/w/test/runs/shots/screenshots/${first}`);
   expect(within(dialog).getByText('load / · 1 of 3')).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Previous screenshot' })).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Next screenshot' })).toBeEnabled();
@@ -197,7 +197,7 @@ test('the arrow keys and buttons move one step at a time and select it in the se
 
   await user.keyboard('{ArrowRight}');
   expect(within(dialog).getByText('→ /order · 2 of 3')).toBeInTheDocument();
-  expect(within(dialog).getByRole('img')).toHaveAttribute('src', `/api/runs/shots/screenshots/${shared}`);
+  expect(within(dialog).getByRole('img')).toHaveAttribute('src', `/api/w/test/runs/shots/screenshots/${shared}`);
   expect(within(diagram).getByRole('button', { name: 'request → /order' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(diagram).getByRole('button', { name: 'screenshot → /order' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(diagram).getByRole('button', { name: 'request load /' })).toHaveAttribute('aria-pressed', 'false');
@@ -249,7 +249,7 @@ test('moving in the carousel scrolls the selected step into view behind it', asy
 
 test('a step linked from the board opens selected, with its details shown', async () => {
   const [, insert] = createOrderFlow.steps;
-  renderAt(`/sequence/run-1?step=${encodeURIComponent(insert.stepId)}`);
+  renderAt(`/w/test/sequence/run-1?step=${encodeURIComponent(insert.stepId)}`);
   const diagram = await screen.findByRole('group', { name: 'Sequence diagram' });
   expect(within(diagram).getByRole('button', { name: `request ${insert.label.trim()}` })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('complementary', { name: 'Message details' })).toHaveTextContent('SQL statement');
@@ -257,7 +257,7 @@ test('a step linked from the board opens selected, with its details shown', asyn
 
 test('the details panel can be resized from its left edge and remembers its own width', async () => {
   window.localStorage.clear();
-  renderAt('/sequence/run-1');
+  renderAt('/w/test/sequence/run-1');
   await screen.findByRole('group', { name: 'Sequence diagram' });
   const handle = screen.getByRole('separator', { name: 'Resize message details panel' });
   const panel = screen.getByRole('complementary', { name: 'Message details' });

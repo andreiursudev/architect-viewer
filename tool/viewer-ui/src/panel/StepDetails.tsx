@@ -5,10 +5,11 @@ import { highlightFor } from '../board/highlight';
 import { MessageDetails } from '../sequence/MessageDetails';
 import { ScreenshotCarousel, type ScreenshotSlide } from '../sequence/Screenshot';
 import { useUiStore } from '../store/uiStore';
+import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 
 /** Where the sequence view of a run opens with one of its steps selected. */
-export function sequenceLink(runId: string, stepId: string): string {
-  return `/sequence/${encodeURIComponent(runId)}?step=${encodeURIComponent(stepId)}`;
+export function sequenceLink(ws: string, runId: string, stepId: string): string {
+  return `/w/${encodeURIComponent(ws)}/sequence/${encodeURIComponent(runId)}?step=${encodeURIComponent(stepId)}`;
 }
 
 /**
@@ -16,6 +17,7 @@ export function sequenceLink(runId: string, stepId: string): string {
  * is walked from here one number at a time, and a number that stands for several calls in a row lists them to pick from.
  */
 export function StepDetails({ runId, stepId }: { runId: string; stepId: string }) {
+  const ws = useWorkspaceName();
   const flow = useFlow(runId);
   const selectStep = useUiStore((s) => s.selectStep);
   const [viewing, setViewing] = useState(false);
@@ -63,7 +65,7 @@ export function StepDetails({ runId, stepId }: { runId: string; stepId: string }
         >
           ›
         </button>
-        <Link to={sequenceLink(runId, stepId)} className="btn btn-small step-nav-open">
+        <Link to={sequenceLink(ws, runId, stepId)} className="btn btn-small step-nav-open">
           Sequence view
         </Link>
       </nav>

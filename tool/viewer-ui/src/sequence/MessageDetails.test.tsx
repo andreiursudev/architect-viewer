@@ -1,8 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render as renderPlain, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { consumeStep, createOrderFlow, kafkaStep, loadStep, methodStep, produceStep, routeStep, submitStep, unrecordedHostStep } from '../board/testData';
+import { InWorkspace } from '../test/inWorkspace';
 import { MessageDetails } from './MessageDetails';
+
+// the components read their workspace from the route, as they do under `WorkspaceScope`
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: InWorkspace });
 
 const [request, insert] = createOrderFlow.steps;
 
@@ -176,7 +181,7 @@ test('a ui step shows its screenshot, and a click on it asks to open it full siz
   const open = vi.fn();
   render(<MessageDetails runId="run-6" step={{ ...loadStep, screenshot: shot }} kind="request" onOpenScreenshot={open} />);
   const image = screen.getByRole('img', { name: 'Screenshot after load /' });
-  expect(image).toHaveAttribute('src', `/api/runs/run-6/screenshots/${shot}`);
+  expect(image).toHaveAttribute('src', `/api/w/test/runs/run-6/screenshots/${shot}`);
 
   await userEvent.click(image);
   expect(open).toHaveBeenCalledOnce();

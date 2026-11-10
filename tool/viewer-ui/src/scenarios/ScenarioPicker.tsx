@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useFlow, useScenarioRuns, useWorkspace } from '../api/queries';
 import type { RecordingManifest, ScenarioSummary } from '../api/types';
 import { useUiStore } from '../store/uiStore';
+import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 
 function when(startedAt: string): string {
   const date = new Date(startedAt);
@@ -22,6 +23,7 @@ export function ScenarioPicker() {
   const runId = useUiStore((s) => s.selectedRunId);
   const selectScenario = useUiStore((s) => s.selectScenario);
   const selectRun = useUiStore((s) => s.selectRun);
+  const ws = useWorkspaceName();
   const navigate = useNavigate();
   const runs = useScenarioRuns(scenarioId);
   const flow = useFlow(runId);
@@ -48,7 +50,7 @@ export function ScenarioPicker() {
               ))}
             </select>
           </label>
-          <button type="button" className="btn btn-primary" disabled={runId === null} onClick={() => navigate(`/sequence/${runId}`)}>
+          <button type="button" className="btn btn-primary" disabled={runId === null} onClick={() => navigate(`/w/${encodeURIComponent(ws)}/sequence/${runId}`)}>
             Open sequence
           </button>
           <button type="button" className="btn btn-quiet" onClick={() => selectScenario(null, null)}>

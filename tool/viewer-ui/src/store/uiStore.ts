@@ -18,7 +18,7 @@ export interface UiState {
    * the connections of the selected component, so a large workspace does not drown in lines.
    */
   showAllConnections: boolean;
-  /** Unsaved note drafts by target id: they survive deselecting and reselecting, so a stray click loses nothing. */
+  /** Unsaved note drafts by `${workspace}/${target id}`: they survive deselecting and reselecting, so a stray click loses nothing. */
   noteDrafts: Record<string, string>;
   /** Failed background actions (accepting, saving the layout...) waiting to be dismissed. */
   errors: { id: number; message: string }[];
@@ -29,7 +29,9 @@ export interface UiState {
   selectRun: (id: string | null) => void;
   hoverConnection: (id: string | null) => void;
   setShowAllConnections: (show: boolean) => void;
-  setNoteDraft: (targetId: string, draft: string | null) => void;
+  setNoteDraft: (draftKey: string, draft: string | null) => void;
+  /** Switching workspace lets go of everything selected in the old one; drafts and errors stay. */
+  resetSelection: () => void;
   reportError: (message: string) => void;
   dismissError: (id: number) => void;
 }
@@ -55,10 +57,19 @@ export const useUiStore = create<UiState>((set) => ({
   selectRun: (id) => set((s) => (s.selectedRunId === id ? s : { selectedRunId: id, selectedStepId: null })),
   hoverConnection: (id) => set({ hoveredConnectionId: id }),
   setShowAllConnections: (show) => set({ showAllConnections: show }),
-  setNoteDraft: (targetId, draft) =>
+  setNoteDraft: (draftKey, draft) =>
     set((s) => {
-      const { [targetId]: _dropped, ...rest } = s.noteDrafts;
-      return { noteDrafts: draft === null ? rest : { ...rest, [targetId]: draft } };
+      const { [draftKey]: _dropped, ...rest } = s.noteDrafts;
+      return { noteDrafts: draft === null ? rest : { ...rest, [draftKey]: draft } };
+    }),
+  resetSelection: () =>
+    set({
+      selectedComponentId: null,
+      selectedConnectionId: null,
+      selectedStepId: null,
+      selectedScenarioId: null,
+      selectedRunId: null,
+      hoveredConnectionId: null,
     }),
   // the same failure repeating (a layout save after every drag) shows once
   reportError: (message) =>

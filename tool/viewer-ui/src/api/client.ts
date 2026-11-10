@@ -36,6 +36,32 @@ export async function putJson(path: string, body: unknown): Promise<void> {
   if (!res.ok) throw await failure(res, 'PUT', path);
 }
 
+/** POST a JSON body and read the JSON that comes back (the created resource). */
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await failure(res, 'POST', path);
+  return (await res.json()) as T;
+}
+
+export async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await failure(res, 'PATCH', path);
+  return (await res.json()) as T;
+}
+
+export async function deleteRequest(path: string): Promise<void> {
+  const res = await fetch(path, { method: 'DELETE' });
+  if (!res.ok) throw await failure(res, 'DELETE', path);
+}
+
 /** Notes are `text/markdown`; a missing note is `null`. */
 export async function getMarkdown(path: string): Promise<string | null> {
   const res = await fetch(path, { headers: { Accept: 'text/markdown' } });

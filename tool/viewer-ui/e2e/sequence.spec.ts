@@ -23,14 +23,14 @@ test('clicking a message shows its payload', async ({ page }) => {
 });
 
 test('the sequence of a run survives a reload', async ({ page }) => {
-  await page.goto('/sequence/run-1');
+  await page.goto('/w/orders-demo/sequence/run-1');
   await page.reload();
   await expect(page.getByRole('group', { name: 'Sequence diagram' })).toBeVisible();
   await expect(page.locator('.seq-head')).toHaveCount(3);
 });
 
 test('an unknown run says so and leads back to the board', async ({ page }) => {
-  await page.goto('/sequence/no-such-run');
+  await page.goto('/w/orders-demo/sequence/no-such-run');
   await expect(page.getByText(/could not load the run/i)).toBeVisible();
   await page.getByRole('link', { name: /board/i }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -39,7 +39,7 @@ test('an unknown run says so and leads back to the board', async ({ page }) => {
 
 test('a large diagram is dragged around from an empty spot, and a message still opens', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 600 });
-  await page.goto('/sequence/run-7'); // create-order across kafka: eight lifelines, wider and taller than this window
+  await page.goto('/w/orders-demo/sequence/run-7'); // create-order across kafka: eight lifelines, wider and taller than this window
   const diagram = page.getByRole('group', { name: 'Sequence diagram' });
   await expect(diagram).toBeVisible();
   await page.getByRole('button', { name: 'Expand all' }).click();

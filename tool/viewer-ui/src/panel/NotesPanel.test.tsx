@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { InWorkspace } from '../test/inWorkspace';
 import { NotesPanel } from './NotesPanel';
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -20,7 +21,9 @@ function renderPanel(targetId = 'orders-service') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <NotesPanel targetId={targetId} />
+      <InWorkspace>
+        <NotesPanel targetId={targetId} />
+      </InWorkspace>
     </QueryClientProvider>,
   );
 }
@@ -41,7 +44,7 @@ test('notes panel renders markdown and saves edits', async () => {
   await waitFor(() => {
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
     expect(put).toBeDefined();
-    expect(put![0]).toBe('/api/notes/orders-service');
+    expect(put![0]).toBe('/api/w/test/notes/orders-service');
     expect(put![1].body).toBe('new text');
     expect(new Headers(put![1].headers).get('Content-Type')).toBe('text/markdown');
   });

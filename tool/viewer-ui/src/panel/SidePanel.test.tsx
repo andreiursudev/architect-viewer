@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { comp, conn, viewWith } from '../board/testData';
+import { InWorkspace } from '../test/inWorkspace';
 import { useUiStore } from '../store/uiStore';
 import { SidePanel } from './SidePanel';
 
@@ -10,7 +11,7 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      if (url === '/api/workspace') {
+      if (url === '/api/w/test/workspace') {
         return Response.json(
           viewWith({ components: [comp('a'), comp('b')], connections: [conn('a--b', 'accepted', { unverified: true })] }),
         );
@@ -30,7 +31,9 @@ test('an unverified connection says it has no current evidence', async () => {
   useUiStore.getState().selectConnection('a--b');
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <SidePanel />
+      <InWorkspace>
+        <SidePanel />
+      </InWorkspace>
     </QueryClientProvider>,
   );
 
@@ -46,7 +49,9 @@ test('an unsaved note draft survives deselecting and reselecting', async () => {
   useUiStore.getState().selectComponent('a');
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <SidePanel />
+      <InWorkspace>
+        <SidePanel />
+      </InWorkspace>
     </QueryClientProvider>,
   );
 
@@ -70,7 +75,7 @@ test('a component lists its connections by direction, each with its endpoints', 
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) =>
-      url === '/api/workspace'
+      url === '/api/w/test/workspace'
         ? Response.json(
             viewWith({
               components: [comp('a'), comp('b'), comp('c')],
@@ -87,7 +92,9 @@ test('a component lists its connections by direction, each with its endpoints', 
   useUiStore.getState().selectComponent('a');
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <SidePanel />
+      <InWorkspace>
+        <SidePanel />
+      </InWorkspace>
     </QueryClientProvider>,
   );
 
@@ -107,7 +114,9 @@ test('the panel can be resized from its left edge and remembers its width', () =
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <SidePanel />
+      <InWorkspace>
+        <SidePanel />
+      </InWorkspace>
     </QueryClientProvider>,
   );
   const handle = screen.getByRole('separator', { name: 'Resize details panel' });

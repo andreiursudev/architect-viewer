@@ -48,7 +48,7 @@ test('the path carries only step numbers, and a number shows its step in the sid
 });
 
 test('sequence shows the browser steps first', async ({ page }) => {
-  await page.goto('/sequence/run-6');
+  await page.goto('/w/orders-demo/sequence/run-6');
   await expect(diagram(page)).toBeVisible();
 
   await expect(heads(page).nth(0)).toHaveAttribute('title', 'e2e-client');
@@ -62,7 +62,7 @@ test('sequence shows the browser steps first', async ({ page }) => {
 });
 
 test('frontend has no class toggle', async ({ page }) => {
-  await page.goto('/sequence/run-6');
+  await page.goto('/w/orders-demo/sequence/run-6');
   await expect(diagram(page)).toBeVisible();
 
   const frontend = page.locator('.seq-head[title="frontend"]');
@@ -72,7 +72,7 @@ test('frontend has no class toggle', async ({ page }) => {
 });
 
 test('sequence shows a screenshot beside each browser step and in the details', async ({ page }) => {
-  await page.goto('/sequence/run-6');
+  await page.goto('/w/orders-demo/sequence/run-6');
   await expect(diagram(page)).toBeVisible();
 
   const thumbnails = diagram(page).getByRole('button', { name: /^screenshot / });

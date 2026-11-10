@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
+import { apiBase } from '../api/queries';
+import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 
 /** Where the viewer serves a run's screenshot. */
-export function screenshotUrl(runId: string, id: string): string {
-  return `/api/runs/${encodeURIComponent(runId)}/screenshots/${id}`;
+export function screenshotUrl(ws: string, runId: string, id: string): string {
+  return `${apiBase(ws)}/runs/${encodeURIComponent(runId)}/screenshots/${id}`;
 }
 
 /** A ui step's screenshot at the width of the details panel; a click asks to open it at its own size. */
 export function ScreenshotImage({ runId, id, alt, onOpen }: { runId: string; id: string; alt: string; onOpen?: () => void }) {
   const [failed, setFailed] = useState(false);
-  const src = screenshotUrl(runId, id);
+  const src = screenshotUrl(useWorkspaceName(), runId, id);
   // a step selected after another keeps this component, so a new screenshot starts over
   useEffect(() => setFailed(false), [src]);
 
@@ -44,6 +46,7 @@ export function ScreenshotCarousel({
   onMove: (stepId: string) => void;
   onClose: () => void;
 }) {
+  const ws = useWorkspaceName();
   const index = slides.findIndex((s) => s.stepId === current);
   const slide = slides[index];
   const previous = slides[index - 1];
@@ -88,7 +91,7 @@ export function ScreenshotCarousel({
       >
         ‹
       </button>
-      <img src={screenshotUrl(runId, slide.screenshot)} alt={`Screenshot after ${slide.label}`} />
+      <img src={screenshotUrl(ws, runId, slide.screenshot)} alt={`Screenshot after ${slide.label}`} />
       <button
         type="button"
         className="screenshot-step is-next"

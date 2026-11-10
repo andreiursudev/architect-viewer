@@ -7,12 +7,14 @@ import { classCounts } from './layoutSequence';
 import { SequenceDiagram, type MessageSelection, type ParticipantInfo } from './SequenceDiagram';
 import { useResizableWidth } from '../panel/useResizableWidth';
 import { useDragToScroll } from './useDragToScroll';
+import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 
 /** The details panel's width until it is resized: payloads need more room than the board's panel. */
 export const SEQUENCE_PANEL_WIDTH = 420;
 
 /** The page of one recorded run: its calls as a sequence diagram, and the payload of the message clicked. */
 export function SequenceView() {
+  const ws = useWorkspaceName();
   const { runId = '' } = useParams();
   const flow = useFlow(runId);
   const workspace = useWorkspace();
@@ -75,7 +77,7 @@ export function SequenceView() {
     <main className="sequence-page">
       <div className="sequence-main">
         <div className="sequence-bar">
-          <Link to="/" className="btn">
+          <Link to={`/w/${encodeURIComponent(ws)}/`} className="btn">
             ← Board
           </Link>
           <h2>Sequence</h2>

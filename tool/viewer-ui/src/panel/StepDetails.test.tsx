@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Flow } from '../api/types';
 import { comp, createOrderFlow, viewWith } from '../board/testData';
+import { InWorkspace } from '../test/inWorkspace';
 import { useUiStore } from '../store/uiStore';
 import { SidePanel } from './SidePanel';
 
@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) =>
-      url === '/api/workspace' ? Response.json(viewWith({ components: [comp('orders-service')] })) : Response.json(flow),
+      url === '/api/w/test/workspace' ? Response.json(viewWith({ components: [comp('orders-service')] })) : Response.json(flow),
     ),
   );
   useUiStore.getState().selectScenario('create-order', 'run-1');
@@ -32,9 +32,9 @@ afterEach(() => {
 function renderPanel() {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <InWorkspace>
         <SidePanel />
-      </MemoryRouter>
+      </InWorkspace>
     </QueryClientProvider>,
   );
 }
@@ -49,7 +49,7 @@ test('a picked step shows the same details the sequence view does', async () => 
   expect(within(panel).getByRole('region', { name: 'Response' })).toHaveTextContent('"status": "CREATED"');
   expect(within(panel).getByRole('link', { name: 'Sequence view' })).toHaveAttribute(
     'href',
-    `/sequence/run-1?step=${encodeURIComponent(request.stepId)}`,
+    `/w/test/sequence/run-1?step=${encodeURIComponent(request.stepId)}`,
   );
 });
 

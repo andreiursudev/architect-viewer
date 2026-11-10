@@ -3,6 +3,7 @@ import type { ComponentType, Flow, FlowStep } from '../api/types';
 import { isFailedStep, statusTone } from '../status';
 import { MARGIN_X, THUMB_HEIGHT, THUMB_WIDTH, classCounts, layoutSequence, type SequenceMessage } from './layoutSequence';
 import { screenshotUrl } from './Screenshot';
+import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 import { SequenceHeads } from './SequenceHeads';
 
 export interface ParticipantInfo {
@@ -53,6 +54,7 @@ export function SequenceDiagram({
   selected: MessageSelection | null;
   onSelect: (selection: MessageSelection) => void;
 }) {
+  const ws = useWorkspaceName();
   const layout = useMemo(() => layoutSequence(flow, expanded), [flow, expanded]);
   const counts = useMemo(() => classCounts(flow), [flow]);
   const steps = useMemo(() => new Map(flow.steps.map((s) => [s.stepId, s])), [flow]);
@@ -199,7 +201,7 @@ export function SequenceDiagram({
               <title>{failed ? 'Screenshot not available' : m.label}</title>
               {!failed && (
                 <image
-                  href={screenshotUrl(flow.runId, id)}
+                  href={screenshotUrl(ws, flow.runId, id)}
                   x={x}
                   y={y}
                   width={THUMB_WIDTH}

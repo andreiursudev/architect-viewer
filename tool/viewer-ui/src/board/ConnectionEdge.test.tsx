@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Position, type EdgeProps } from '@xyflow/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router';
+import { InWorkspace } from '../test/inWorkspace';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient';
 import { useUiStore } from '../store/uiStore';
@@ -49,13 +49,13 @@ function renderEdge(id: string, flow: typeof createOrderFlow | null, label?: str
   const highlight = flow ? highlightFor(flow) : null;
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter>
+      <InWorkspace>
         <HighlightContext.Provider value={highlight}>
           <svg>
             <ConnectionEdge {...edgeProps(id, label)} />
           </svg>
         </HighlightContext.Provider>
-      </MemoryRouter>
+      </InWorkspace>
     </QueryClientProvider>,
   );
 }
@@ -136,11 +136,13 @@ test('a step number keeps its click from the board, which would select the conne
   const boardClick = vi.fn(); // React Flow's edge click, which the portalled label still bubbles to
   render(
     <QueryClientProvider client={createQueryClient()}>
-      <HighlightContext.Provider value={highlightFor(createOrderFlow)}>
-        <svg onClick={boardClick}>
-          <ConnectionEdge {...edgeProps('e2e-client--orders-service')} />
-        </svg>
-      </HighlightContext.Provider>
+      <InWorkspace>
+        <HighlightContext.Provider value={highlightFor(createOrderFlow)}>
+          <svg onClick={boardClick}>
+            <ConnectionEdge {...edgeProps('e2e-client--orders-service')} />
+          </svg>
+        </HighlightContext.Provider>
+      </InWorkspace>
     </QueryClientProvider>,
   );
   await user.click(screen.getByRole('button', { name: 'Step 1' }));

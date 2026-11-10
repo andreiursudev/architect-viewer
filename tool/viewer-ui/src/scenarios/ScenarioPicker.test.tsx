@@ -32,11 +32,11 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      if (url === '/api/workspace') return Response.json(viewWith({ scenarios }));
-      if (url === '/api/scenarios/create-order/runs') {
+      if (url === '/api/w/test/workspace') return Response.json(viewWith({ scenarios }));
+      if (url === '/api/w/test/scenarios/create-order/runs') {
         return Response.json([manifest('run-2', '2026-10-27T23:10:00Z'), manifest('run-1', '2026-10-27T22:41:05Z')]);
       }
-      if (url.startsWith('/api/runs/')) return Response.json({ ...createOrderFlow, runId: url.split('/')[3] });
+      if (url.startsWith('/api/w/test/runs/')) return Response.json({ ...createOrderFlow, runId: url.split('/')[5] });
       return new Response(null, { status: 404 });
     }),
   );
@@ -51,9 +51,9 @@ function Where() {
 function renderPicker() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/w/test/']}>
         <Routes>
-          <Route path="*" element={<><ScenarioPicker /><Where /></>} />
+          <Route path="/w/:ws/*" element={<><ScenarioPicker /><Where /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -114,7 +114,7 @@ test('Open sequence navigates to the sequence page of the selected run', async (
   await user.click(within(await openList(user)).getByRole('option', { name: /create-order/ }));
   await user.click(await screen.findByRole('button', { name: 'Open sequence' }));
 
-  expect(screen.getByTestId('where')).toHaveTextContent('/sequence/run-2');
+  expect(screen.getByTestId('where')).toHaveTextContent('/w/test/sequence/run-2');
 });
 
 test('clearing the scenario removes the highlighted run', async () => {

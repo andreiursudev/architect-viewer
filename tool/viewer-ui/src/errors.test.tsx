@@ -6,6 +6,7 @@ import { createQueryClient } from './api/queryClient';
 import { useSaveLayout } from './api/queries';
 import { comp, conn, viewWith } from './board/testData';
 import { ErrorBanner } from './ErrorBanner';
+import { InWorkspace } from './test/inWorkspace';
 import { SidePanel } from './panel/SidePanel';
 import { useUiStore } from './store/uiStore';
 
@@ -19,7 +20,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'PUT') return Response.json({ error: 'disk full' }, { status: 500 });
-      if (url === '/api/workspace') return Response.json(view);
+      if (url === '/api/w/test/workspace') return Response.json(view);
       return new Response(null, { status: 404 });
     }),
   );
@@ -30,8 +31,12 @@ afterEach(() => vi.unstubAllGlobals());
 function renderWithBanner(ui: React.ReactNode) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      {ui}
-      <ErrorBanner />
+      <InWorkspace>
+        <>
+          {ui}
+          <ErrorBanner />
+        </>
+      </InWorkspace>
     </QueryClientProvider>,
   );
 }

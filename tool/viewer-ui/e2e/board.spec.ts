@@ -61,7 +61,7 @@ test('dragging a node persists its position', async ({ page }) => {
   await expect(node).toBeVisible();
   const before = (await node.boundingBox())!;
 
-  const saved = page.waitForResponse((r) => r.url().endsWith('/api/boards/primary/layout') && r.request().method() === 'PUT');
+  const saved = page.waitForResponse((r) => r.url().endsWith('/boards/primary/layout') && r.request().method() === 'PUT');
   await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
   await page.mouse.down();
   await page.mouse.move(before.x + before.width / 2 + 60, before.y + before.height / 2 + 90, { steps: 10 });
