@@ -76,6 +76,15 @@ class FileWorkspaceRegistryTest {
     }
 
     @Test
+    fun `a project root whose workspace yaml is broken is named after the root folder`() {
+        val root = tmp.resolve("Broken_Root")
+        root.resolve("stack").createDirectories()
+        root.resolve("stack/workspace.yaml").writeText("project: [unclosed\n")
+
+        registry().add(AddWorkspaceRequest(root.toString())).name shouldBe "broken-root"
+    }
+
+    @Test
     fun `a given name and recordings path win over the defaults`() {
         val root = projectRoot("sam", "Sam")
         val recordings = tmp.resolve("elsewhere")
@@ -212,6 +221,13 @@ class FileWorkspaceRegistryTest {
         entry shouldBe WorkspaceEntry("sam", root.resolve("stack"), root.resolve("recordings"))
         registry.list() shouldBe listOf(entry)
         registry.lastOpened() shouldBe "sam"
+    }
+
+    @Test
+    fun `registerStartup of a stack folder without workspace yaml is named after the root folder`() {
+        val stack = tmp.resolve("Sam_Proj/stack").createDirectories()
+
+        registry().registerStartup(stack, null).name shouldBe "sam-proj"
     }
 
     @Test

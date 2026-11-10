@@ -144,9 +144,14 @@ class FileWorkspaceRegistry(listFile: Path) : WorkspaceRegistry {
         require(taken == null) { "This folder is already in the list as '${taken?.name}'" }
     }
 
-    /** The slug of `project.name`, else of the root folder's name, else `workspace`. */
+    /**
+     * The slug of `project.name`, else of the root folder's name, else `workspace`. A missing or broken `workspace.yaml`
+     * has no project name (the store would fall back to the workspace folder's name, `stack`), so the root folder names it.
+     */
     private fun defaultName(root: Path, workspace: Path): String {
-        val projectName = WorkspaceStores.open(workspace).load().config.project.name
+        val loaded = WorkspaceStores.open(workspace).load()
+        val readable = Files.isRegularFile(workspace.resolve(WORKSPACE_FILE)) && loaded.problems.none { it.file == WORKSPACE_FILE }
+        val projectName = if (readable) loaded.config.project.name else ""
         return slug(projectName).ifEmpty { folderSlug(root) }
     }
 
