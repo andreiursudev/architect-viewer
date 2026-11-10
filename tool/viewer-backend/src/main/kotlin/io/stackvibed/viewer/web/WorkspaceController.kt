@@ -6,6 +6,7 @@ import io.stackvibed.model.workspace.ConnectionDefinition
 import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.viewer.registry.WorkspaceRegistry
 import io.stackvibed.viewer.topology.TopologyService
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -16,11 +17,18 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class WorkspaceController(private val topology: TopologyService, private val registry: WorkspaceRegistry) {
-    /** The board of a workspace; reading it also makes it the last opened one. */
+    /**
+     * The board of a workspace; reading it also makes it the last opened one. Failing to record that (the list file
+     * cannot be written) is logged and does not fail the board.
+     */
     @GetMapping("/api/w/{ws}/workspace")
     fun workspace(@PathVariable ws: String): WorkspaceView {
         val open = registry.open(ws)
-        registry.markOpened(ws)
+        try {
+            registry.markOpened(ws)
+        } catch (e: Exception) {
+            log.warn("Could not record '{}' as the last opened workspace: {}", ws, e.toString())
+        }
         return topology.workspaceView(open)
     }
 
@@ -40,5 +48,9 @@ class WorkspaceController(private val topology: TopologyService, private val reg
         require(def.state != ConnectionState.DISCOVERED) { "a connection cannot be saved as discovered" }
         require(def.id == id) { "connection id '$id' does not match '${def.id}'" }
         open.store.saveConnection(def)
+    }
+
+    private companion object {
+        val log = LoggerFactory.getLogger(WorkspaceController::class.java)
     }
 }

@@ -4,6 +4,7 @@ import io.stackvibed.model.view.AddWorkspaceRequest
 import io.stackvibed.model.view.RenameWorkspaceRequest
 import io.stackvibed.model.view.WorkspaceEntryView
 import io.stackvibed.model.view.WorkspaceListView
+import io.stackvibed.viewer.registry.UnknownWorkspaceException
 import io.stackvibed.viewer.registry.WorkspaceEntry
 import io.stackvibed.viewer.registry.WorkspaceRegistry
 import org.springframework.http.HttpStatus
@@ -19,8 +20,18 @@ import org.springframework.web.bind.annotation.RestController
 /** The list of workspaces the viewer serves (spec §6.2). Refusals are 400 with the reason, unknown names 404. */
 @RestController
 class WorkspacesController(private val registry: WorkspaceRegistry) {
+    /** An entry removed (or renamed) between reading the list and opening it is left out rather than failing the list. */
     @GetMapping("/api/workspaces")
-    fun list(): WorkspaceListView = WorkspaceListView(registry.list().map { view(it) }, registry.lastOpened())
+    fun list(): WorkspaceListView = WorkspaceListView(
+        registry.list().mapNotNull { entry ->
+            try {
+                view(entry)
+            } catch (_: UnknownWorkspaceException) {
+                null
+            }
+        },
+        registry.lastOpened(),
+    )
 
     @PostMapping("/api/workspaces")
     @ResponseStatus(HttpStatus.CREATED)
