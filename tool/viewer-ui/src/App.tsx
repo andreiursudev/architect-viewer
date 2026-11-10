@@ -4,9 +4,9 @@ import { PrimaryBoard } from './board/PrimaryBoard';
 import { SidePanel } from './panel/SidePanel';
 import { ScenarioPicker } from './scenarios/ScenarioPicker';
 import { SequenceView } from './sequence/SequenceView';
-import { useWorkspace } from './api/queries';
 import { Home } from './workspaces/Home';
 import { WorkspaceScope } from './workspaces/WorkspaceScope';
+import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
 import { useWorkspaceName } from './workspaces/useWorkspaceName';
 
 /**
@@ -41,12 +41,11 @@ function WorkspacePages() {
 }
 
 function Header() {
-  const { data } = useWorkspace();
   const onSequence = useMatch('/w/:ws/sequence/:runId') !== null;
   return (
     <header className="app-header">
       <span className="app-logo" aria-hidden="true" />
-      <h1>{data?.project.name ?? 'Stack viewer'}</h1>
+      <WorkspaceSwitcher />
       <span className="app-subtitle">{onSequence ? 'Sequence view' : 'Primary board'}</span>
     </header>
   );

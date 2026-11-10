@@ -43,6 +43,7 @@ function renderApp(path: string) {
 test('an unknown name shows Unknown workspace', async () => {
   renderApp('/w/nope/');
   expect(await screen.findByText('Unknown workspace')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Workspaces/ })).toHaveAttribute('aria-haspopup', 'menu');
 });
 
 test("switching workspace clears the selection but keeps each workspace's note drafts", async () => {

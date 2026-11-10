@@ -480,3 +480,54 @@ body.is-resizing .react-flow, body.is-resizing .sequence-scroll { pointer-events
 .screenshot-step.is-next { right: 12px; }
 .screenshot-step:hover:not(:disabled), .screenshot-step:focus-visible { background: var(--accent); }
 .screenshot-step:disabled { opacity: 0.3; cursor: default; }
+
+/* ---- workspace switcher and dialogs ---- */
+.switcher { position: relative; }
+.switcher h1 { margin: 0; }
+.switcher-button {
+  font: inherit; font-size: 15px; font-weight: 650; color: var(--text); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border: 1px solid transparent; border-radius: 7px; background: transparent;
+}
+.switcher-button:hover, .switcher-button[aria-expanded='true'] { background: #f0f2f6; border-color: var(--border); }
+.switcher-caret { color: var(--muted); font-size: 11px; }
+.switcher-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 240px;
+  display: flex; flex-direction: column; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
+}
+.switcher-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
+.switcher-item {
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+  display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent;
+}
+.switcher-item:hover, .switcher-item:focus-visible { background: var(--accent-soft); }
+.switcher-tick { width: 14px; flex: none; color: var(--accent); }
+.switcher-name { display: block; color: var(--muted); font-size: 11px; }
+
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+  background: rgba(16, 24, 40, 0.35);
+}
+.dialog {
+  width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 18px 20px;
+  background: var(--surface); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(16, 24, 40, 0.3);
+}
+.dialog h2, .add-screen h2 { font-size: 16px; }
+.dialog-form { display: flex; flex-direction: column; gap: 12px; }
+.dialog-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 550; }
+.dialog-form input, .manage-row input {
+  font: inherit; font-weight: 400; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
+}
+.dialog-form input:focus, .manage-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.manage-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.manage-row { display: flex; align-items: center; gap: 8px; }
+.manage-row label { flex: 1; min-width: 0; display: flex; }
+.manage-row input { flex: 1; min-width: 0; }
+.manage-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.manage-name code { color: var(--muted); }
+.manage-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 8px 10px; background: var(--amber-soft); border-radius: 6px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.add-screen { flex: 1; display: flex; flex-direction: column; gap: 14px; max-width: 480px; padding: 32px 24px; }

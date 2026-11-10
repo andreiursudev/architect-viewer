@@ -2,6 +2,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The server's own reason (`{error}`), when it sent one. */
+    readonly detail: string = '',
   ) {
     super(message);
   }
@@ -14,7 +16,7 @@ async function failure(res: Response, method: string, path: string): Promise<Api
   } catch {
     // no JSON body: the status line says enough
   }
-  return new ApiError(res.status, `${method} ${path} failed (${res.status})${detail ? `: ${detail}` : ''}`);
+  return new ApiError(res.status, `${method} ${path} failed (${res.status})${detail ? `: ${detail}` : ''}`, detail);
 }
 
 /** GET a JSON resource; a 404 is `null` when [notFoundIsNull] is set (a layout that was never saved, say). */

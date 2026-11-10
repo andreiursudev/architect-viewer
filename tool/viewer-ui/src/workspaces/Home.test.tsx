@@ -39,4 +39,6 @@ test('redirects to the last opened workspace', async () => {
 test('shows the add screen when the list is empty', async () => {
   renderHome({ workspaces: [], lastOpened: null });
   expect(await screen.findByRole('heading', { name: 'Add a workspace' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Folder')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
 });

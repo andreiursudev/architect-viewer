@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getJson, getMarkdown, putJson, putMarkdown } from './client';
+import { deleteRequest, getJson, getMarkdown, patchJson, postJson, putJson, putMarkdown } from './client';
 import { useWorkspaceName } from '../workspaces/useWorkspaceName';
 import type {
   BoardComponent,
@@ -8,8 +8,10 @@ import type {
   ComponentDefinition,
   ConnectionDefinition,
   ConnectionState,
+  AddWorkspaceRequest,
   Flow,
   RecordingManifest,
+  WorkspaceEntry,
   WorkspaceList,
   WorkspaceView,
 } from './types';
@@ -32,6 +34,32 @@ export const keys = {
 /** The listed workspaces and the one opened last. */
 export function useWorkspaces() {
   return useQuery({ queryKey: keys.workspaces, queryFn: () => getJson<WorkspaceList>('/api/workspaces') });
+}
+
+/** The mutations that change the list resolve once the list has been read again, so callers can navigate on it. */
+export function useAddWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: AddWorkspaceRequest) => postJson<WorkspaceEntry>('/api/workspaces', request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
+  });
+}
+
+export function useRenameWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ws, name }: { ws: string; name: string }) =>
+      patchJson<WorkspaceEntry>(`/api/workspaces/${encodeURIComponent(ws)}`, { name }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
+  });
+}
+
+export function useRemoveWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ws: string) => deleteRequest(`/api/workspaces/${encodeURIComponent(ws)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
+  });
 }
 
 export function useWorkspace() {
