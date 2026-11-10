@@ -3,10 +3,8 @@ package io.stackvibed.viewer.recordings.internal
 import io.stackvibed.model.RecordingEvent
 import io.stackvibed.model.RecordingManifest
 import io.stackvibed.model.ScreenshotRecord
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.RecordingRepository
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.jacksonMapperBuilder
 import java.nio.charset.StandardCharsets.UTF_8
@@ -20,10 +18,9 @@ import java.nio.file.Path
  * The reporter appends to these files while the viewer reads them, so reading is forgiving: a folder without a readable
  * manifest is skipped, and an unfinished last line of `events.jsonl` or `screenshots.jsonl` is ignored.
  */
-@Component
-class FileRecordingRepository(paths: ViewerPaths) : RecordingRepository {
-    private val recordingsRoot: Path = paths.recordings.toAbsolutePath().normalize()
-    private val referenceRoot: Path = paths.workspace.toAbsolutePath().normalize().resolve(REFERENCE_RECORDINGS)
+class FileRecordingRepository(recordings: Path, workspace: Path) : RecordingRepository {
+    private val recordingsRoot: Path = recordings.toAbsolutePath().normalize()
+    private val referenceRoot: Path = workspace.toAbsolutePath().normalize().resolve(REFERENCE_RECORDINGS)
 
     private val json: JsonMapper = jacksonMapperBuilder().build()
 

@@ -8,7 +8,6 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.stackvibed.model.DbClientEvent
 import io.stackvibed.model.HttpServerEvent
 import io.stackvibed.viewer.Fixtures
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.internal.FileRecordingRepository
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -24,7 +23,7 @@ class FileRecordingRepositoryTest {
     private val workspace get() = tmp.resolve("stack")
     private val recordings get() = tmp.resolve("recordings")
 
-    private fun repository(): RecordingRepository = FileRecordingRepository(ViewerPaths(workspace, recordings))
+    private fun repository(): RecordingRepository = FileRecordingRepository(recordings, workspace)
 
     @Test
     fun `reads manifests of all runs`() {

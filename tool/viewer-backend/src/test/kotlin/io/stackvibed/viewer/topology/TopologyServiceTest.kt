@@ -13,7 +13,6 @@ import io.stackvibed.model.workspace.ConnectionDefinition
 import io.stackvibed.model.workspace.ConnectionKind
 import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.viewer.Fixtures
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.internal.FileRecordingRepository
 import io.stackvibed.viewer.workspace.internal.FileWorkspaceStore
 import org.junit.jupiter.api.Test
@@ -30,9 +29,8 @@ class TopologyServiceTest {
     private val workspaceDir get() = tmp.resolve("stack")
     private val recordingsDir get() = tmp.resolve("recordings")
 
-    private val paths get() = ViewerPaths(workspaceDir, recordingsDir)
-    private val store get() = FileWorkspaceStore(paths)
-    private fun service() = TopologyService(store, FileRecordingRepository(paths), FlowBuilder())
+    private val store get() = FileWorkspaceStore(workspaceDir)
+    private fun service() = TopologyService(store, FileRecordingRepository(recordingsDir, workspaceDir), FlowBuilder())
 
     private val dbConnection = "orders-service--postgresql-orders"
     private val httpConnection = "e2e-client--orders-service"
@@ -189,7 +187,7 @@ class TopologyServiceTest {
         val events = Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, withoutMethodsDir).resolve("events.jsonl")
         val lines = events.readLines()
         events.writeText(lines.filterNot { "\"type\":\"method\"" in it }.joinToString("\n", postfix = "\n"))
-        val withoutMethods = TopologyService(store, FileRecordingRepository(ViewerPaths(workspaceDir, withoutMethodsDir)), FlowBuilder())
+        val withoutMethods = TopologyService(store, FileRecordingRepository(withoutMethodsDir, workspaceDir), FlowBuilder())
 
         val with = service().workspaceView()
         val without = withoutMethods.workspaceView()

@@ -20,7 +20,6 @@ import io.stackvibed.model.UiNavigationKind
 import io.stackvibed.model.view.FlowStep
 import io.stackvibed.model.view.FlowStepKind
 import io.stackvibed.viewer.Fixtures
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.recordings.internal.FileRecordingRepository
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -28,7 +27,7 @@ import java.time.Instant
 
 class FlowBuilderTest {
     private val builder = FlowBuilder()
-    private val repository = FileRecordingRepository(ViewerPaths(Path.of("unused"), Fixtures.recordings))
+    private val repository = FileRecordingRepository(Fixtures.recordings, Path.of("unused"))
 
     private val manifest get() = repository.manifests().first { it.runId == "run-1" }
     private val events get() = repository.events("run-1")

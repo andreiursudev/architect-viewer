@@ -13,7 +13,6 @@ import io.stackvibed.model.workspace.ConnectionKind
 import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.model.workspace.NodePosition
 import io.stackvibed.model.workspace.Viewport
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.workspace.internal.FileWorkspaceStore
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -32,7 +31,7 @@ class FileWorkspaceStoreTest {
     private fun workspaceDir(name: String = "orders-sandbox"): Path = tmp.resolve(name)
 
     private fun store(dir: Path = workspaceDir()): FileWorkspaceStore =
-        FileWorkspaceStore(ViewerPaths(dir, tmp.resolve("recordings")))
+        FileWorkspaceStore(dir)
 
     private val ordersService = ComponentDefinition("orders-service", ComponentType.SERVICE, "Orders Service", listOf("core"))
 
@@ -289,7 +288,7 @@ class FileWorkspaceStoreTest {
         val relative = Path.of("build", "tmp", "orders-sandbox-relative")
         Files.createDirectories(relative)
         try {
-            FileWorkspaceStore(ViewerPaths(relative, tmp)).load().config.project.name shouldBe "orders-sandbox-relative"
+            FileWorkspaceStore(relative).load().config.project.name shouldBe "orders-sandbox-relative"
         } finally {
             Files.deleteIfExists(relative)
         }

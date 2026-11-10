@@ -9,11 +9,9 @@ import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.model.workspace.ProjectInfo
 import io.stackvibed.model.workspace.ScenarioDefinition
 import io.stackvibed.model.workspace.WorkspaceConfig
-import io.stackvibed.viewer.ViewerPaths
 import io.stackvibed.viewer.workspace.LoadedWorkspace
 import io.stackvibed.viewer.workspace.WorkspaceStore
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.MapperFeature
 import tools.jackson.databind.SerializationFeature
@@ -28,16 +26,15 @@ import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 
 /**
- * The workspace folder on disk (spec §8):
+ * The workspace folder [root] on disk (spec §8):
  * `workspace.yaml`, `components/<id>.yaml`, `connections/<from>--<to>.yaml`, `scenarios/<id>.yaml`,
  * `notes/<id>.md`, `boards/<board>.layout.json`.
  *
  * Reading is forgiving (hand-edited files may be broken: a bad file is reported as a problem and the rest loads);
  * writing is strict (ids are validated before anything touches the disk) and atomic.
  */
-@Component
-class FileWorkspaceStore(paths: ViewerPaths) : WorkspaceStore {
-    private val root: Path = paths.workspace.toAbsolutePath().normalize()
+class FileWorkspaceStore(root: Path) : WorkspaceStore {
+    private val root: Path = root.toAbsolutePath().normalize()
 
     private val yaml: YAMLMapper = YAMLMapper.builder()
         .addModule(KotlinModule.Builder().build())
