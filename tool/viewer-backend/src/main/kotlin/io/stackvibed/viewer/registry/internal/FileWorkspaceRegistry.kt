@@ -103,8 +103,16 @@ class FileWorkspaceRegistry(listFile: Path) : WorkspaceRegistry {
         val folder = workspace.toAbsolutePath().normalize()
         val listed = entries.firstOrNull { identity(it.workspace) == identity(folder) }
         if (listed != null) {
-            markOpened(listed.name)
-            return listed
+            val newRecordings = recordings?.toAbsolutePath()?.normalize()
+            val updated = if (newRecordings == null || newRecordings == listed.recordings) listed else listed.copy(recordings = newRecordings)
+            if (updated != listed) {
+                entries = entries.map { if (it.name == listed.name) updated else it }
+                open.remove(listed.name)
+            }
+            val changedLast = lastOpened != listed.name
+            lastOpened = listed.name
+            if (updated != listed || changedLast) file.write(entries, lastOpened)
+            return updated
         }
         val root = folder.parent ?: folder
         val base = defaultName(root, folder)

@@ -228,6 +228,25 @@ class FileWorkspaceRegistryTest {
     }
 
     @Test
+    fun `registerStartup with recordings updates a listed folder's recordings`() {
+        val root = projectRoot("sam", "Sam")
+        val registry = registry()
+        registry.add(AddWorkspaceRequest(root.toString()))
+        registry.add(AddWorkspaceRequest(projectRoot("b", "B").toString()))
+        val before = registry.open("sam")
+        val custom = tmp.resolve("custom-rec")
+
+        val entry = registry.registerStartup(root.resolve("stack"), custom)
+
+        entry shouldBe WorkspaceEntry("sam", root.resolve("stack"), custom)
+        registry.lastOpened() shouldBe "sam"
+        FileWorkspaceRegistry(listFile).list().first().recordings shouldBe custom
+        val after = registry.open("sam")
+        (after === before) shouldBe false
+        after.entry.recordings shouldBe custom
+    }
+
+    @Test
     fun `registerStartup appends -2 on a name clash`() {
         val registry = registry()
         registry.add(AddWorkspaceRequest(projectRoot("one", "Sam").toString()))
