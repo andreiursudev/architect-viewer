@@ -124,7 +124,8 @@ Every existing endpoint moves under the workspace, otherwise unchanged:
 New:
 
 - `GET /api/workspaces`: `{ "workspaces": [{ "name", "workspace", "recordings", "projectName" }], "lastOpened" }`.
-  `projectName` is read from each `workspace.yaml` (null when unreadable) for the switcher's labels.
+  `projectName` is each workspace's `project.name`, or its folder's name when `workspace.yaml` is missing or broken
+  (what `FileWorkspaceStore` already falls back to); the switcher shows it.
 - `POST /api/workspaces`: body `{ "folder", "name"?, "recordings"? }`; 201 with the entry, or 400 with the reason.
 - `PATCH /api/workspaces/{ws}`: body `{ "name" }`; 200 with the entry, 400, or 404.
 - `DELETE /api/workspaces/{ws}`: 204, or 404.
