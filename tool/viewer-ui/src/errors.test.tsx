@@ -55,7 +55,7 @@ test('a failed connection accept shows an error message', async () => {
 
 function SaveLayoutButton() {
   const save = useSaveLayout('primary');
-  return <button onClick={() => save.mutate({ nodes: { a: { x: 1, y: 2 } }, viewport: null })}>save layout</button>;
+  return <button onClick={() => save.mutate({ ws: 'test', layout: { nodes: { a: { x: 1, y: 2 } }, viewport: null } })}>save layout</button>;
 }
 
 test('a failed layout save shows an error message', async () => {

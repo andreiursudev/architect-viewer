@@ -4,6 +4,7 @@ import { PrimaryBoard } from './board/PrimaryBoard';
 import { SidePanel } from './panel/SidePanel';
 import { ScenarioPicker } from './scenarios/ScenarioPicker';
 import { SequenceView } from './sequence/SequenceView';
+import { FreshSelection } from './workspaces/FreshSelection';
 import { Home } from './workspaces/Home';
 import { WorkspaceScope } from './workspaces/WorkspaceScope';
 import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
@@ -31,11 +32,16 @@ function WorkspacePages() {
     <WorkspaceScope>
       <Header />
       <ErrorBanner />
-      <Routes>
-        <Route path="" element={<BoardPage />} />
-        <Route path="sequence/:runId" element={<SequenceView />} />
-        <Route path="*" element={<Navigate to={`/w/${encodeURIComponent(ws)}/`} replace />} />
-      </Routes>
+      {/* React Router keeps an element mounted when only :ws changes; the key gives each workspace its own pages, so the
+          board of one never starts from the nodes of another. The header stays outside the key: the Manage dialog in it
+          stays open through renaming the current workspace. */}
+      <FreshSelection key={ws}>
+        <Routes>
+          <Route path="" element={<BoardPage />} />
+          <Route path="sequence/:runId" element={<SequenceView />} />
+          <Route path="*" element={<Navigate to={`/w/${encodeURIComponent(ws)}/`} replace />} />
+        </Routes>
+      </FreshSelection>
     </WorkspaceScope>
   );
 }

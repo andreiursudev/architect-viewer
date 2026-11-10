@@ -11,14 +11,14 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFlow, useLayout, useSaveLayout, useWorkspace } from '../api/queries';
+import { useFlow, useLayout, useWorkspace } from '../api/queries';
 import type { BoardLayout } from '../api/types';
 import { useUiStore } from '../store/uiStore';
 import { autoLayout } from './autoLayout';
 import { ComponentNode } from './ComponentNode';
 import { ConnectionEdge } from './ConnectionEdge';
 import { emphasizePath, focusEdges, HighlightContext, highlightFor, hopsOffBoard } from './highlight';
-import { useDebouncedSave } from './useDebouncedSave';
+import { useLayoutSave } from './useLayoutSave';
 import { toFlowElements, type ComponentNode as ComponentNodeType, type ConnectionEdgeType } from './toFlowElements';
 
 const BOARD = 'primary';
@@ -38,7 +38,6 @@ export function PrimaryBoard() {
 function Board() {
   const workspace = useWorkspace();
   const layoutQuery = useLayout(BOARD);
-  const saveLayout = useSaveLayout(BOARD);
   const flow = useReactFlow<ComponentNodeType, ConnectionEdgeType>();
   const selectComponent = useUiStore((s) => s.selectComponent);
   const selectConnection = useUiStore((s) => s.selectConnection);
@@ -72,7 +71,7 @@ function Board() {
   const layout = layoutQuery.data ?? null;
 
   // Saves are debounced; one still pending when the board unmounts (navigating away right after a drag) is flushed.
-  const scheduleSave = useDebouncedSave<BoardLayout>(saveLayout.mutate, SAVE_DELAY_MS);
+  const scheduleSave = useLayoutSave(BOARD, SAVE_DELAY_MS);
 
   // [fresh] is the first arrangement, saved before the canvas exists: it has no viewport yet, so the next visit fits the view.
   const persist = useCallback(

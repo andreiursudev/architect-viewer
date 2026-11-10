@@ -99,16 +99,19 @@ export function useLayout(board: string) {
   });
 }
 
+/**
+ * Saves a board's layout into the workspace named with it, not the one open when the save runs: a save captured in one
+ * workspace and sent after switching to another still goes to the first.
+ */
 export function useSaveLayout(board: string) {
-  const ws = useWorkspaceName();
   const client = useQueryClient();
   return useMutation({
     meta: { action: 'Saving the board layout' },
-    mutationFn: async (layout: BoardLayout) => {
+    mutationFn: async ({ ws, layout }: { ws: string; layout: BoardLayout }) => {
       await putJson(`${apiBase(ws)}/boards/${board}/layout`, layout);
       return layout;
     },
-    onSuccess: (layout) => client.setQueryData(keys.layout(ws, board), layout),
+    onSuccess: (layout, { ws }) => client.setQueryData(keys.layout(ws, board), layout),
   });
 }
 
