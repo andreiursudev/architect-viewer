@@ -14,3 +14,7 @@ export type MethodEvent = Extract<FlowStep['event'], { type: 'method' }>;
 export type RecordingManifest = ModelSchema['recordingManifest'];
 export type ComponentDefinition = ModelSchema['componentDefinition'];
 export type ConnectionDefinition = ModelSchema['connectionDefinition'];
+export type WorkspaceList = ModelSchema['workspaceList'];
+export type WorkspaceEntry = WorkspaceList['workspaces'][number];
+export type AddWorkspaceRequest = ModelSchema['addWorkspaceRequest'];
+export type RenameWorkspaceRequest = ModelSchema['renameWorkspaceRequest'];

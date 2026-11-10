@@ -542,6 +542,21 @@
   },
   "$schema" : "https://json-schema.org/draft/2020-12/schema",
   "properties" : {
+    "addWorkspaceRequest" : {
+      "properties" : {
+        "folder" : {
+          "type" : "string"
+        },
+        "name" : {
+          "type" : [ "string", "null" ]
+        },
+        "recordings" : {
+          "type" : [ "string", "null" ]
+        }
+      },
+      "required" : [ "folder" ],
+      "type" : "object"
+    },
     "boardLayout" : {
       "properties" : {
         "nodes" : {
@@ -770,6 +785,15 @@
       "required" : [ "componentsSeen", "kind", "reporterVersion", "runId", "schemaVersion", "startedAt" ],
       "type" : "object"
     },
+    "renameWorkspaceRequest" : {
+      "properties" : {
+        "name" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "name" ],
+      "type" : "object"
+    },
     "scenarioDefinition" : {
       "properties" : {
         "description" : {
@@ -817,6 +841,36 @@
         }
       },
       "required" : [ "aliases", "project" ],
+      "type" : "object"
+    },
+    "workspaceList" : {
+      "properties" : {
+        "lastOpened" : {
+          "type" : [ "string", "null" ]
+        },
+        "workspaces" : {
+          "items" : {
+            "properties" : {
+              "name" : {
+                "type" : "string"
+              },
+              "projectName" : {
+                "type" : "string"
+              },
+              "recordings" : {
+                "type" : "string"
+              },
+              "workspace" : {
+                "type" : "string"
+              }
+            },
+            "required" : [ "name", "projectName", "recordings", "workspace" ],
+            "type" : "object"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "workspaces" ],
       "type" : "object"
     },
     "workspaceView" : {
@@ -920,6 +974,6 @@
       "type" : "object"
     }
   },
-  "required" : [ "boardLayout", "componentDefinition", "connectionDefinition", "flow", "recordingEvent", "recordingManifest", "scenarioDefinition", "screenshotRecord", "workspaceConfig", "workspaceView" ],
+  "required" : [ "addWorkspaceRequest", "boardLayout", "componentDefinition", "connectionDefinition", "flow", "recordingEvent", "recordingManifest", "renameWorkspaceRequest", "scenarioDefinition", "screenshotRecord", "workspaceConfig", "workspaceList", "workspaceView" ],
   "type" : "object"
 }

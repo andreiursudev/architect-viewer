@@ -22,6 +22,11 @@ export type ConnectionKind = "http" | "db" | "ui" | "kafka";
 export type ConnectionState = "discovered" | "accepted" | "manual" | "hidden";
 
 export interface ModelSchema {
+  addWorkspaceRequest: {
+    folder: string;
+    name?: string | null;
+    recordings?: string | null;
+  };
   boardLayout: {
     nodes: {
       [k: string]: NodePosition;
@@ -96,6 +101,9 @@ export interface ModelSchema {
     startedAt: string;
     stoppedAt?: string | null;
   };
+  renameWorkspaceRequest: {
+    name: string;
+  };
   scenarioDefinition: {
     description?: string | null;
     id: string;
@@ -111,6 +119,15 @@ export interface ModelSchema {
       [k: string]: string;
     };
     project: ProjectInfo;
+  };
+  workspaceList: {
+    lastOpened?: string | null;
+    workspaces: {
+      name: string;
+      projectName: string;
+      recordings: string;
+      workspace: string;
+    }[];
   };
   workspaceView: {
     components: {
