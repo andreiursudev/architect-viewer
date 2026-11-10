@@ -24,6 +24,7 @@ class SpaFallbackTest {
             val root = Files.createTempDirectory("viewer-spa-test")
             registry.add("workspace") { root.resolve("stack").toString() }
             registry.add("recordings") { root.resolve("recordings").toString() }
+            registry.add("workspaces-file") { root.resolve("workspaces.yaml").toString() }
         }
     }
 
@@ -35,6 +36,16 @@ class SpaFallbackTest {
     @Test
     fun `a nested client route forwards to index html`() {
         mvc.get("/a/b/c").andExpect { forwardedUrl("/index.html") }
+    }
+
+    @Test
+    fun `a workspace route forwards to index html`() {
+        mvc.get("/w/sam/sequence/run-1").andExpect { forwardedUrl("/index.html") }
+    }
+
+    @Test
+    fun `an unknown api path under a workspace is still 404`() {
+        mvc.get("/api/w/sam/nope").andExpect { status { isNotFound() } }
     }
 
     @Test

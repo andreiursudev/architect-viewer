@@ -11,7 +11,10 @@ import org.springframework.http.MediaType
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.patch
+import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import java.nio.file.Files
 import java.nio.file.Path
@@ -30,8 +33,16 @@ class ApiTest {
         fun paths(registry: DynamicPropertyRegistry) {
             val recordings = root.resolve("recordings")
             Fixtures.copyAll(recordings)
+            writeWorkspaceConfig()
             registry.add("workspace") { root.resolve("stack").toString() }
             registry.add("recordings") { recordings.toString() }
+            registry.add("workspaces-file") { root.resolve("workspaces.yaml").toString() }
+        }
+
+        /** The startup workspace is listed as `api` (named after its project). */
+        private fun writeWorkspaceConfig() {
+            Files.createDirectories(root.resolve("stack"))
+            Files.writeString(root.resolve("stack/workspace.yaml"), "project: {name: api}\n")
         }
     }
 
@@ -39,11 +50,14 @@ class ApiTest {
     @BeforeEach
     fun cleanWorkspace() {
         root.resolve("stack").toFile().deleteRecursively()
+        writeWorkspaceConfig()
     }
+
+    private fun newFolder(name: String): Path = Files.createDirectories(root.resolve("folders").resolve(name))
 
     @Test
     fun `workspace view endpoint`() {
-        mvc.get("/api/workspace").andExpect {
+        mvc.get("/api/w/api/workspace").andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.components[*].id") { value(org.hamcrest.Matchers.hasItem("orders-service")) }
@@ -55,12 +69,12 @@ class ApiTest {
 
     @Test
     fun `accepting a connection persists it`() {
-        mvc.put("/api/connections/e2e-client--orders-service") {
+        mvc.put("/api/w/api/connections/e2e-client--orders-service") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"from":"e2e-client","to":"orders-service","kind":"http","label":"POST /orders","state":"accepted"}"""
         }.andExpect { status { isNoContent() } }
 
-        mvc.get("/api/workspace").andExpect {
+        mvc.get("/api/w/api/workspace").andExpect {
             jsonPath("$.connections[?(@.id=='e2e-client--orders-service')].state") { value("accepted") }
             jsonPath("$.connections[?(@.id=='e2e-client--orders-service')].unverified") { value(false) }
         }
@@ -68,12 +82,12 @@ class ApiTest {
 
     @Test
     fun `accepting a component persists it`() {
-        mvc.put("/api/components/billing-service") {
+        mvc.put("/api/w/api/components/billing-service") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"id":"billing-service","type":"service","displayName":"Billing","tags":["core"]}"""
         }.andExpect { status { isNoContent() } }
 
-        mvc.get("/api/workspace").andExpect {
+        mvc.get("/api/w/api/workspace").andExpect {
             jsonPath("$.components[?(@.id=='billing-service')].displayName") { value("Billing") }
             jsonPath("$.components[?(@.id=='billing-service')].discovered") { value(false) }
         }
@@ -81,7 +95,7 @@ class ApiTest {
 
     @Test
     fun `component id must match the path`() {
-        mvc.put("/api/components/billing-service") {
+        mvc.put("/api/w/api/components/billing-service") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"id":"other","type":"service","displayName":"Billing"}"""
         }.andExpect { status { isBadRequest() } }
@@ -89,7 +103,7 @@ class ApiTest {
 
     @Test
     fun `discovered state is rejected`() {
-        mvc.put("/api/connections/a--b") {
+        mvc.put("/api/w/api/connections/a--b") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"from":"a","to":"b","kind":"http","label":null,"state":"discovered"}"""
         }.andExpect { status { isBadRequest() } }
@@ -97,7 +111,7 @@ class ApiTest {
 
     @Test
     fun `connection id must be from--to`() {
-        mvc.put("/api/connections/a--c") {
+        mvc.put("/api/w/api/connections/a--c") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"from":"a","to":"b","kind":"http","label":null,"state":"manual"}"""
         }.andExpect { status { isBadRequest() } }
@@ -105,14 +119,14 @@ class ApiTest {
 
     @Test
     fun `notes round trip as markdown`() {
-        mvc.get("/api/notes/orders-service").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/notes/orders-service").andExpect { status { isNotFound() } }
 
-        mvc.put("/api/notes/orders-service") {
+        mvc.put("/api/w/api/notes/orders-service") {
             contentType = MediaType.valueOf("text/markdown")
             content = "# Orders\n\nowned by team a"
         }.andExpect { status { isNoContent() } }
 
-        mvc.get("/api/notes/orders-service").andExpect {
+        mvc.get("/api/w/api/notes/orders-service").andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith("text/markdown") }
             content { string("# Orders\n\nowned by team a") }
@@ -121,16 +135,16 @@ class ApiTest {
 
     @Test
     fun `a note can be cleared with an empty body`() {
-        mvc.put("/api/notes/orders-service") {
+        mvc.put("/api/w/api/notes/orders-service") {
             contentType = MediaType.valueOf("text/markdown")
             content = "to be removed"
         }.andExpect { status { isNoContent() } }
 
-        mvc.put("/api/notes/orders-service") {
+        mvc.put("/api/w/api/notes/orders-service") {
             contentType = MediaType.valueOf("text/markdown")
         }.andExpect { status { isNoContent() } }
 
-        mvc.get("/api/notes/orders-service").andExpect {
+        mvc.get("/api/w/api/notes/orders-service").andExpect {
             status { isOk() }
             content { string("") }
         }
@@ -138,25 +152,25 @@ class ApiTest {
 
     @Test
     fun `notes keep non-ascii text`() {
-        mvc.put("/api/notes/billing-service") {
+        mvc.put("/api/w/api/notes/billing-service") {
             contentType = MediaType.valueOf("text/markdown;charset=UTF-8")
             content = "caf\u00e9 \u2713".toByteArray(Charsets.UTF_8)
         }.andExpect { status { isNoContent() } }
 
-        val body = mvc.get("/api/notes/billing-service").andExpect { status { isOk() } }.andReturn().response
+        val body = mvc.get("/api/w/api/notes/billing-service").andExpect { status { isOk() } }.andReturn().response
         String(body.contentAsByteArray, Charsets.UTF_8) shouldBe "caf\u00e9 \u2713"
     }
 
     @Test
     fun `layout round trips and is 404 until saved`() {
-        mvc.get("/api/boards/main/layout").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/boards/main/layout").andExpect { status { isNotFound() } }
 
-        mvc.put("/api/boards/main/layout") {
+        mvc.put("/api/w/api/boards/main/layout") {
             contentType = MediaType.APPLICATION_JSON
             content = """{"nodes":{"orders-service":{"x":10.0,"y":20.0}},"viewport":{"x":1.0,"y":2.0,"zoom":1.5}}"""
         }.andExpect { status { isNoContent() } }
 
-        mvc.get("/api/boards/main/layout").andExpect {
+        mvc.get("/api/w/api/boards/main/layout").andExpect {
             status { isOk() }
             jsonPath("$.nodes.orders-service.x") { value(10.0) }
             jsonPath("$.viewport.zoom") { value(1.5) }
@@ -165,7 +179,7 @@ class ApiTest {
 
     @Test
     fun `invalid note target is a bad request`() {
-        mvc.put("/api/notes/Not_A_Slug") {
+        mvc.put("/api/w/api/notes/Not_A_Slug") {
             contentType = MediaType.valueOf("text/markdown")
             content = "x"
         }.andExpect { status { isBadRequest() } }
@@ -173,7 +187,7 @@ class ApiTest {
 
     @Test
     fun `runs of a scenario are listed newest first`() {
-        mvc.get("/api/scenarios/create-order/runs").andExpect {
+        mvc.get("/api/w/api/scenarios/create-order/runs").andExpect {
             status { isOk() }
             jsonPath("$.length()") { value(3) }
             jsonPath("$[0].runId") { value("run-5") }
@@ -181,7 +195,7 @@ class ApiTest {
             jsonPath("$[2].runId") { value("run-1") }
             jsonPath("$[0].kind") { value("e2e") }
         }
-        mvc.get("/api/scenarios/never-ran/runs").andExpect {
+        mvc.get("/api/w/api/scenarios/never-ran/runs").andExpect {
             status { isOk() }
             jsonPath("$.length()") { value(0) }
         }
@@ -189,7 +203,7 @@ class ApiTest {
 
     @Test
     fun `flow endpoint returns the steps of a run`() {
-        mvc.get("/api/runs/run-1/flow").andExpect {
+        mvc.get("/api/w/api/runs/run-1/flow").andExpect {
             status { isOk() }
             jsonPath("$.runId") { value("run-1") }
             jsonPath("$.steps.length()") { value(2) }
@@ -204,7 +218,7 @@ class ApiTest {
     fun `run with methods is served with handler and units`() {
         val orders = "io.stackvibed.sandbox.orders."
         val inventory = "io.stackvibed.sandbox.inventory."
-        mvc.get("/api/runs/run-5/flow").andExpect {
+        mvc.get("/api/w/api/runs/run-5/flow").andExpect {
             status { isOk() }
             jsonPath("$.steps.length()") { value(8) }
             jsonPath("$.steps[0].kind") { value("http") }
@@ -228,7 +242,7 @@ class ApiTest {
 
     @Test
     fun `browser run flow carries the screenshot of its ui steps`() {
-        mvc.get("/api/runs/run-6/flow").andExpect {
+        mvc.get("/api/w/api/runs/run-6/flow").andExpect {
             status { isOk() }
             jsonPath("$.steps[0].label") { value("load /") }
             jsonPath("$.steps[0].screenshot") { value("9a8b7c6d5e4f3021") }
@@ -238,7 +252,7 @@ class ApiTest {
     @Test
     fun `screenshot of a run is served as png`() {
         val png = Files.readAllBytes(root.resolve("recordings/${Fixtures.PLACE_ORDER_IN_BROWSER_6}/screenshots/9a8b7c6d5e4f3021.png"))
-        mvc.get("/api/runs/run-6/screenshots/9a8b7c6d5e4f3021").andExpect {
+        mvc.get("/api/w/api/runs/run-6/screenshots/9a8b7c6d5e4f3021").andExpect {
             status { isOk() }
             content { contentType(MediaType.IMAGE_PNG) }
             content { bytes(png) }
@@ -248,13 +262,101 @@ class ApiTest {
 
     @Test
     fun `unknown or unlisted screenshot is 404`() {
-        mvc.get("/api/runs/run-6/screenshots/..%2Fmanifest.json").andExpect { status { isNotFound() } }
-        mvc.get("/api/runs/run-6/screenshots/0123456789abcdef").andExpect { status { isNotFound() } }
-        mvc.get("/api/runs/nope/screenshots/9a8b7c6d5e4f3021").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/runs/run-6/screenshots/..%2Fmanifest.json").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/runs/run-6/screenshots/0123456789abcdef").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/runs/nope/screenshots/9a8b7c6d5e4f3021").andExpect { status { isNotFound() } }
     }
 
     @Test
     fun `flow endpoint returns 404 for unknown run`() {
-        mvc.get("/api/runs/nope/flow").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/api/runs/nope/flow").andExpect { status { isNotFound() } }
     }
+
+    @Test
+    fun `the workspace list shows the startup workspace as last opened`() {
+        mvc.get("/api/workspaces").andExpect {
+            status { isOk() }
+            jsonPath("$.workspaces[?(@.name=='api')].projectName") { value("api") }
+            jsonPath("$.workspaces[0].workspace") { value(org.hamcrest.Matchers.endsWith("stack")) }
+            jsonPath("$.lastOpened") { value("api") }
+        }
+    }
+
+    @Test
+    fun `adding a second workspace keeps boards notes layouts and runs apart`() {
+        val folder = newFolder("other")
+        mvc.post("/api/workspaces") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"folder":${jsonString(folder)}}"""
+        }.andExpect {
+            status { isCreated() }
+            jsonPath("$.name") { value("other") }
+        }
+        val layout = """{"nodes":{"a":{"x":1.0,"y":2.0}},"viewport":{"x":0.0,"y":0.0,"zoom":1.0}}"""
+        val otherLayout = """{"nodes":{"b":{"x":3.0,"y":4.0}},"viewport":{"x":0.0,"y":0.0,"zoom":2.0}}"""
+        for ((ws, note, json) in listOf(Triple("api", "note of api", layout), Triple("other", "note of other", otherLayout))) {
+            mvc.put("/api/w/$ws/notes/orders-service") {
+                contentType = MediaType.valueOf("text/markdown")
+                content = note
+            }.andExpect { status { isNoContent() } }
+            mvc.put("/api/w/$ws/boards/main/layout") {
+                contentType = MediaType.APPLICATION_JSON
+                content = json
+            }.andExpect { status { isNoContent() } }
+        }
+
+        mvc.get("/api/w/api/notes/orders-service").andExpect { content { string("note of api") } }
+        mvc.get("/api/w/other/notes/orders-service").andExpect { content { string("note of other") } }
+        mvc.get("/api/w/api/boards/main/layout").andExpect { jsonPath("$.viewport.zoom") { value(1.0) } }
+        mvc.get("/api/w/other/boards/main/layout").andExpect { jsonPath("$.viewport.zoom") { value(2.0) } }
+        mvc.get("/api/w/other/scenarios/create-order/runs").andExpect {
+            status { isOk() }
+            jsonPath("$.length()") { value(0) }
+        }
+        mvc.get("/api/w/api/scenarios/create-order/runs").andExpect { jsonPath("$.length()") { value(3) } }
+    }
+
+    @Test
+    fun `an unknown workspace is 404`() {
+        mvc.get("/api/w/nope/workspace").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/nope/notes/orders-service").andExpect { status { isNotFound() } }
+    }
+
+    @Test
+    fun `adding an unusable folder is 400 with the reason`() {
+        val file = root.resolve("a-file.txt")
+        Files.writeString(file, "not a folder")
+        mvc.post("/api/workspaces") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"folder":${jsonString(file)}}"""
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.error") { isNotEmpty() }
+        }
+    }
+
+    @Test
+    fun `renaming and removing through the api`() {
+        val folder = newFolder("to-rename")
+        mvc.post("/api/workspaces") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"folder":${jsonString(folder)}}"""
+        }.andExpect { status { isCreated() } }
+
+        mvc.patch("/api/workspaces/to-rename") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"name":"renamed"}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.name") { value("renamed") }
+        }
+        mvc.get("/api/w/to-rename/scenarios/x/runs").andExpect { status { isNotFound() } }
+        mvc.get("/api/w/renamed/scenarios/x/runs").andExpect { status { isOk() } }
+
+        mvc.delete("/api/workspaces/renamed").andExpect { status { isNoContent() } }
+        mvc.get("/api/w/renamed/scenarios/x/runs").andExpect { status { isNotFound() } }
+        mvc.delete("/api/workspaces/renamed").andExpect { status { isNotFound() } }
+    }
+
+    private fun jsonString(path: Path) = "\"" + path.toString().replace("\\", "/") + "\""
 }

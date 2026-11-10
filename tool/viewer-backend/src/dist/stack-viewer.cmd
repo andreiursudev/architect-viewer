@@ -1,6 +1,6 @@
 @echo off
 rem Stack viewer launcher (Windows cmd). Behaves like the `stack-viewer` sh launcher next to it.
-rem Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
+rem Usage: stack-viewer --workspace=<path> [--recordings=<path>] [--workspaces-file=<path>] [--server.port=<n>]   (default port 8090, on 127.0.0.1)
 rem Needs Java 25+: from %STACK_VIEWER_JAVA_HOME%\bin\java.exe when that is set (a Java for the viewer only, leaving
 rem JAVA_HOME and PATH to the machine's default Java), else from %JAVA_HOME%\bin\java.exe when that is set, otherwise
 rem `java` on PATH.

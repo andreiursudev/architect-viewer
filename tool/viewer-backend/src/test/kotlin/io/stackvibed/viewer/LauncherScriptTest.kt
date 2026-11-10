@@ -105,6 +105,7 @@ class LauncherScriptTest {
             // The JVM running this test is a Java 25+ one; the machine's default Java may be older.
             mapOf("JAVA_HOME" to System.getProperty("java.home")),
             "--workspace=$workspace",
+            "--workspaces-file=${createTempDirectory("lists").resolve("workspaces.yaml")}",
             "--server.port=0",
             "--stack.viewer.exit-after-startup=true",
         )
@@ -120,6 +121,7 @@ class LauncherScriptTest {
                 "JAVA_HOME" to createTempDirectory("java home without java").toString(),
             ),
             "--workspace=${createTempDirectory("ws")}",
+            "--workspaces-file=${createTempDirectory("lists").resolve("workspaces.yaml")}",
             "--server.port=0",
             "--stack.viewer.exit-after-startup=true",
         )

@@ -1,7 +1,7 @@
 package io.stackvibed.viewer.web
 
 import io.stackvibed.model.workspace.BoardLayout
-import io.stackvibed.viewer.workspace.WorkspaceStore
+import io.stackvibed.viewer.registry.WorkspaceRegistry
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -12,12 +12,13 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class LayoutController(private val workspace: WorkspaceStore) {
-    @GetMapping("/api/boards/{board}/layout")
-    fun get(@PathVariable board: String): ResponseEntity<BoardLayout> =
-        workspace.readLayout(board)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+class LayoutController(private val registry: WorkspaceRegistry) {
+    @GetMapping("/api/w/{ws}/boards/{board}/layout")
+    fun get(@PathVariable ws: String, @PathVariable board: String): ResponseEntity<BoardLayout> =
+        registry.open(ws).store.readLayout(board)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
-    @PutMapping("/api/boards/{board}/layout")
+    @PutMapping("/api/w/{ws}/boards/{board}/layout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun put(@PathVariable board: String, @RequestBody layout: BoardLayout) = workspace.writeLayout(board, layout)
+    fun put(@PathVariable ws: String, @PathVariable board: String, @RequestBody layout: BoardLayout) =
+        registry.open(ws).store.writeLayout(board, layout)
 }

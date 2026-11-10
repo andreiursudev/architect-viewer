@@ -18,8 +18,8 @@ import io.stackvibed.model.view.WorkspaceView
 import io.stackvibed.model.workspace.ConnectionKind
 import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.viewer.recordings.RecordingRepository
+import io.stackvibed.viewer.registry.OpenWorkspace
 import io.stackvibed.viewer.workspace.LoadedWorkspace
-import io.stackvibed.viewer.workspace.WorkspaceStore
 import org.springframework.stereotype.Service
 
 /**
@@ -29,19 +29,16 @@ import org.springframework.stereotype.Service
  * Every endpoint of a non-hidden curated connection is a component, so no curated connection dangles on the board.
  */
 @Service
-class TopologyService(
-    private val workspace: WorkspaceStore,
-    private val recordings: RecordingRepository,
-    private val flowBuilder: FlowBuilder,
-) {
-    fun workspaceView(): WorkspaceView {
-        val loaded = workspace.load()
+class TopologyService(private val flowBuilder: FlowBuilder) {
+    fun workspaceView(ws: OpenWorkspace): WorkspaceView {
+        val recordings = ws.recordings
+        val loaded = ws.store.load()
         val manifests = recordings.manifests()
         val aliases = loaded.config.aliases
 
         val evidence = Evidence.select(manifests, recordings.referenceManifests())
         val observed = Observed()
-        evidence.forEach { observe(it, aliases, observed) }
+        evidence.forEach { observe(it, aliases, recordings, observed) }
 
         return WorkspaceView(
             project = loaded.config.project,
@@ -53,10 +50,11 @@ class TopologyService(
     }
 
     /** @throws NoSuchElementException when no recording has this run id */
-    fun flow(runId: String): Flow {
+    fun flow(ws: OpenWorkspace, runId: String): Flow {
+        val recordings = ws.recordings
         val manifest = (recordings.manifests() + recordings.referenceManifests()).firstOrNull { it.runId == runId }
             ?: throw NoSuchElementException("No recording with run id '$runId'")
-        return flowBuilder.build(manifest, recordings.events(runId), workspace.load().config.aliases, recordings.screenshots(runId))
+        return flowBuilder.build(manifest, recordings.events(runId), ws.store.load().config.aliases, recordings.screenshots(runId))
     }
 
     /**
@@ -79,7 +77,7 @@ class TopologyService(
             get() = (if (kind == ConnectionKind.UI) labels.sorted() else labels.toList()).joinToString(", ").ifEmpty { null }
     }
 
-    private fun observe(manifest: RecordingManifest, aliases: Map<String, String>, into: Observed) {
+    private fun observe(manifest: RecordingManifest, aliases: Map<String, String>, recordings: RecordingRepository, into: Observed) {
         val flow = flowBuilder.build(manifest, recordings.events(manifest.runId), aliases)
         flow.steps.forEach { step -> observe(step, into) }
         manifest.componentsSeen.forEach { into.componentTypes.merge(aliases[it] ?: it, ComponentType.SERVICE, ::stronger) }

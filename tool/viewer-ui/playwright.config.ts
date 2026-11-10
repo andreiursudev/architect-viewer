@@ -19,6 +19,9 @@ const workspace = (process.env.E2E_WORKSPACE ??= (() => {
   return copy;
 })());
 
+// The list of workspaces is a throwaway too, so the developer's own list in the home folder stays untouched.
+const workspacesFile = (process.env.E2E_WORKSPACES_FILE ??= join(mkdtempSync(join(tmpdir(), 'stack-viewer-e2e-list-')), 'workspaces.yaml'));
+
 export default defineConfig({
   testDir: './e2e',
   outputDir: './build/playwright/test-results',
@@ -40,9 +43,10 @@ export default defineConfig({
       quote(resolve(import.meta.dirname, '../viewer-backend/build/libs/stack-viewer.jar')),
       `--workspace=${quote(workspace)}`,
       `--recordings=${quote(resolve(import.meta.dirname, 'e2e/fixtures/recordings'))}`,
+      `--workspaces-file=${quote(workspacesFile)}`,
       `--server.port=${PORT}`,
     ].join(' '),
-    url: `http://localhost:${PORT}/api/workspace`,
+    url: `http://localhost:${PORT}/api/workspaces`,
     reuseExistingServer: false,
     timeout: 60_000,
   },

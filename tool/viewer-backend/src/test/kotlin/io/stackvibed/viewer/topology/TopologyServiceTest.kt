@@ -14,6 +14,8 @@ import io.stackvibed.model.workspace.ConnectionKind
 import io.stackvibed.model.workspace.ConnectionState
 import io.stackvibed.viewer.Fixtures
 import io.stackvibed.viewer.recordings.internal.FileRecordingRepository
+import io.stackvibed.viewer.registry.OpenWorkspace
+import io.stackvibed.viewer.registry.WorkspaceEntry
 import io.stackvibed.viewer.workspace.internal.FileWorkspaceStore
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -30,7 +32,19 @@ class TopologyServiceTest {
     private val recordingsDir get() = tmp.resolve("recordings")
 
     private val store get() = FileWorkspaceStore(workspaceDir)
-    private fun service() = TopologyService(store, FileRecordingRepository(recordingsDir, workspaceDir), FlowBuilder())
+    private val topology = TopologyService(FlowBuilder())
+    private fun open(recordings: Path = recordingsDir) = OpenWorkspace(
+        WorkspaceEntry("test", workspaceDir, recordings),
+        store,
+        FileRecordingRepository(recordings, workspaceDir),
+    )
+    private fun service() = Bound(topology, open())
+
+    /** The service with its workspace, so the tests read as before. */
+    private class Bound(val service: TopologyService, val ws: OpenWorkspace) {
+        fun workspaceView() = service.workspaceView(ws)
+        fun flow(runId: String) = service.flow(ws, runId)
+    }
 
     private val dbConnection = "orders-service--postgresql-orders"
     private val httpConnection = "e2e-client--orders-service"
@@ -187,7 +201,7 @@ class TopologyServiceTest {
         val events = Fixtures.copyRun(Fixtures.CREATE_ORDER_METHODS_5, withoutMethodsDir).resolve("events.jsonl")
         val lines = events.readLines()
         events.writeText(lines.filterNot { "\"type\":\"method\"" in it }.joinToString("\n", postfix = "\n"))
-        val withoutMethods = TopologyService(store, FileRecordingRepository(withoutMethodsDir, workspaceDir), FlowBuilder())
+        val withoutMethods = Bound(topology, open(withoutMethodsDir))
 
         val with = service().workspaceView()
         val without = withoutMethods.workspaceView()

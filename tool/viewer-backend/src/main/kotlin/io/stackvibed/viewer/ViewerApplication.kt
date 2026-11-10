@@ -14,7 +14,7 @@ import kotlin.system.exitProcess
 
 /**
  * The stack viewer backend: a Spring Modulith application whose modules are the direct sub-packages
- * (`workspace`, `recordings`, `topology`, `web`). `internal` sub-packages are private to their module.
+ * (`workspace`, `recordings`, `registry`, `topology`, `web`). `internal` sub-packages are private to their module.
  */
 @SpringBootApplication
 @EnableConfigurationProperties(ViewerPaths::class)
