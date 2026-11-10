@@ -14,6 +14,6 @@ class ModularityTest {
 
     @Test
     fun `all modules are detected`() {
-        modules.stream().map<String> { it.identifier.toString() }.toList().toSet() shouldBe setOf("workspace", "recordings", "topology", "web")
+        modules.stream().map<String> { it.identifier.toString() }.toList().toSet() shouldBe setOf("workspace", "recordings", "registry", "topology", "web")
     }
 }
