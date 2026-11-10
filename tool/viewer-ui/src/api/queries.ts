@@ -45,20 +45,42 @@ export function useAddWorkspace() {
   });
 }
 
+/**
+ * Rename and remove write the new list into the cache and then run [afterUpdate] in the same tick, so the router and the
+ * list change in one render: a page of the current workspace never sees a list without its name.
+ */
 export function useRenameWorkspace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ws, name }: { ws: string; name: string }) =>
-      patchJson<WorkspaceEntry>(`/api/workspaces/${encodeURIComponent(ws)}`, { name }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
+    mutationFn: async ({ ws, name, afterUpdate }: { ws: string; name: string; afterUpdate?: () => void }) => {
+      const renamed = await patchJson<WorkspaceEntry>(`/api/workspaces/${encodeURIComponent(ws)}`, { name });
+      queryClient.setQueryData<WorkspaceList>(keys.workspaces, (list) =>
+        list && {
+          workspaces: list.workspaces.map((w) => (w.name === ws ? renamed : w)),
+          lastOpened: list.lastOpened === ws ? renamed.name : list.lastOpened,
+        },
+      );
+      afterUpdate?.();
+      return renamed;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
   });
 }
 
 export function useRemoveWorkspace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ws: string) => deleteRequest(`/api/workspaces/${encodeURIComponent(ws)}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
+    mutationFn: async ({ ws, afterUpdate }: { ws: string; afterUpdate?: () => void }) => {
+      await deleteRequest(`/api/workspaces/${encodeURIComponent(ws)}`);
+      queryClient.setQueryData<WorkspaceList>(keys.workspaces, (list) =>
+        list && {
+          workspaces: list.workspaces.filter((w) => w.name !== ws),
+          lastOpened: list.lastOpened === ws ? null : list.lastOpened,
+        },
+      );
+      afterUpdate?.();
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.workspaces }),
   });
 }
 

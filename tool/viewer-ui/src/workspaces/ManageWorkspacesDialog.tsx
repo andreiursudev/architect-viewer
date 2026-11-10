@@ -17,31 +17,32 @@ export function ManageWorkspacesDialog({ onClose }: { onClose: () => void }) {
 
   async function saveRename(ws: string, draft: string) {
     const name = draft.trim();
+    // the route moves in the same tick as the list, so the page never sees its old name missing
+    const afterUpdate = () => {
+      if (ws !== current) return;
+      const from = `/w/${encodeURIComponent(ws)}`;
+      const rest = location.pathname.startsWith(from) ? location.pathname.slice(from.length) : '/';
+      navigate({ pathname: `/w/${encodeURIComponent(name)}${rest}`, search: location.search, hash: location.hash });
+    };
     try {
-      await rename.mutateAsync({ ws, name });
+      await rename.mutateAsync({ ws, name, afterUpdate });
     } catch {
       return; // rename.error is shown
     }
     setRenaming(null);
-    if (ws === current) {
-      // the same page under the new name
-      const from = `/w/${encodeURIComponent(ws)}`;
-      const rest = location.pathname.startsWith(from) ? location.pathname.slice(from.length) : '/';
-      navigate({ pathname: `/w/${encodeURIComponent(name)}${rest}`, search: location.search, hash: location.hash });
-    }
   }
 
   async function confirmRemove(ws: string) {
+    const afterUpdate = () => {
+      if (ws === current) navigate('/');
+    };
     try {
-      await remove.mutateAsync(ws);
+      await remove.mutateAsync({ ws, afterUpdate });
     } catch {
       return; // remove.error is shown
     }
     setRemoving(null);
-    if (ws === current) {
-      navigate('/');
-      onClose();
-    }
+    if (ws === current) onClose();
   }
 
   const error = rename.isError ? rename.error : remove.isError ? remove.error : null;

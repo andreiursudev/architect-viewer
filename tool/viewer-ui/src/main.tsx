@@ -11,7 +11,8 @@ const queryClient = createQueryClient();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* no transitions: renaming or removing the open workspace changes the route and the list in one render */}
+      <BrowserRouter useTransitions={false}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>
