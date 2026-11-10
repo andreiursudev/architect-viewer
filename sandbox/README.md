@@ -89,7 +89,9 @@ it without touching `PATH` or `JAVA_HOME`. The Gradle builds need no particular 
    ```
 
    One viewer serves several workspaces. The project name in the header is a switcher: pick another workspace from
-   it, or choose `Add workspace…` and paste the folder of another project's workspace. The list is kept in
+   it, or choose `Add workspace…` and paste a folder: a project folder with `stack/workspace.yaml` in it, the `stack/` folder
+   itself, or an empty or new folder (the viewer creates `stack/workspace.yaml` there; recordings default to
+   `recordings/` next to `stack/`). The list is kept in
    `~/.stack-viewer/workspaces.yaml`.
 
 6. Stop the stack when done:
